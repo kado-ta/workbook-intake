@@ -13,6 +13,8 @@
 ; Nothing may be written, except the null device.
 (deny file-write*)
 (allow file-write* (literal "/dev/null"))
+; Hard links and clones are separate operations from file-write*.
+(deny file-link file-clone)
 
 ; Only python3 may run (the sandbox-exec target and what it launches under PYTHON_HOME).
 (deny process-exec*)

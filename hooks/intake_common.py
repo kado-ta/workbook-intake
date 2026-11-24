@@ -1,8 +1,10 @@
 """Shared helpers for the workbook-intake hooks (standard library only, Python 3.9)."""
 import json
 import os
+import selectors
 import subprocess
 import sys
+import time
 
 PLUGIN_ROOT = os.path.dirname(os.path.dirname(os.path.realpath(__file__)))
 CHECK_TIMEOUT_SECONDS = 20
@@ -54,7 +56,7 @@ def _parse_output(returncode, stdout):
         return _result("error")
     try:
         data = json.loads(stdout[:MAX_OUTPUT_BYTES].decode("utf-8"))
-    except (ValueError, UnicodeDecodeError):
+    except (ValueError, UnicodeDecodeError, RecursionError):
         return _result("error")
     if not isinstance(data, dict):
         return _result("error")
@@ -64,6 +66,9 @@ def _parse_output(returncode, stdout):
     failures = data.get("failures")
     warnings = data.get("warnings")
     if not isinstance(failures, list) or not isinstance(warnings, list):
+        return _result("error")
+    # A passing result has no failures; a failing one has at least one.
+    if bool(failures) != (returncode == 1):
         return _result("error")
     if not all(isinstance(f, str) and f in FAILURE_CODES for f in failures):
         return _result("error")
@@ -81,6 +86,12 @@ def run_checker(real_path, timeout=CHECK_TIMEOUT_SECONDS):
     if not os.path.exists(SANDBOX_EXEC):
         return _result("sandbox_missing")
     python_home = os.path.realpath(sys.base_prefix)
+    try:
+        # A user-writable python would let the profile's exec allowance be widened.
+        if os.stat(python_home).st_uid != 0:
+            return _result("error")
+    except OSError:
+        return _result("error")
     python_exe = os.path.realpath(os.path.join(sys.base_prefix, "bin", "python3"))
     script = os.path.realpath(os.path.join(PLUGIN_ROOT, "scripts", "check_workbook.py"))
     profile = os.path.realpath(os.path.join(PLUGIN_ROOT, "scripts", "check_workbook.sb"))
@@ -92,14 +103,60 @@ def run_checker(real_path, timeout=CHECK_TIMEOUT_SECONDS):
         python_exe, "-I", "-B", script, real_path,
     ]
     try:
-        proc = subprocess.run(
-            cmd, stdin=subprocess.DEVNULL, stdout=subprocess.PIPE,
-            stderr=subprocess.DEVNULL, env={}, timeout=timeout,
-        )
-    except subprocess.TimeoutExpired:
-        return _result("timeout")
+        outcome, returncode, stdout = _run_bounded(cmd, timeout)
     except FileNotFoundError:
         return _result("sandbox_missing")
     except OSError:
         return _result("error")
-    return _parse_output(proc.returncode, proc.stdout)
+    if outcome != "ok":
+        return _result(outcome)
+    return _parse_output(returncode, stdout)
+
+
+def _run_bounded(cmd, timeout):
+    """Run cmd, reading at most MAX_OUTPUT_BYTES of stdout before the deadline.
+
+    Returns (outcome, returncode, stdout) where outcome is "ok", "timeout" or "error"
+    (more output than the cap). The child is killed in the last two cases.
+    """
+    deadline = time.monotonic() + timeout
+    proc = subprocess.Popen(
+        cmd, stdin=subprocess.DEVNULL, stdout=subprocess.PIPE,
+        stderr=subprocess.DEVNULL, env={},
+    )
+    chunks = []
+    total = 0
+    outcome = "ok"
+    try:
+        with selectors.DefaultSelector() as sel:
+            sel.register(proc.stdout, selectors.EVENT_READ)
+            open_pipe = True
+            while open_pipe:
+                remaining = deadline - time.monotonic()
+                if remaining <= 0:
+                    outcome = "timeout"
+                    break
+                if not sel.select(remaining):
+                    continue
+                data = os.read(proc.stdout.fileno(), 65536)
+                if not data:
+                    open_pipe = False
+                    break
+                total += len(data)
+                if total > MAX_OUTPUT_BYTES:
+                    outcome = "error"
+                    break
+                chunks.append(data)
+        if outcome == "ok":
+            try:
+                proc.wait(timeout=max(deadline - time.monotonic(), 0.001))
+            except subprocess.TimeoutExpired:
+                outcome = "timeout"
+    finally:
+        if outcome != "ok" or proc.poll() is None:
+            proc.kill()
+        proc.wait()
+        proc.stdout.close()
+    if outcome != "ok":
+        return outcome, None, b""
+    return "ok", proc.returncode, b"".join(chunks)
