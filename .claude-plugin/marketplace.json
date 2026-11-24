@@ -1,0 +1,14 @@
+{
+  "name": "workbook-intake",
+  "description": "Marketplace for the workbook-intake plugin.",
+  "owner": {
+    "name": "kado-ta"
+  },
+  "plugins": [
+    {
+      "name": "workbook-intake",
+      "source": "./",
+      "description": "Checks Excel workbooks for safety before xlide-mcp analyzes them, and runs the analysis through a read-only agent."
+    }
+  ]
+}

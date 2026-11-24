@@ -1,0 +1,13 @@
+{
+  "name": "workbook-intake",
+  "version": "0.1.0",
+  "description": "Checks Excel workbooks for safety before xlide-mcp analyzes them, and runs the analysis through a read-only agent.",
+  "author": {
+    "name": "kado-ta"
+  },
+  "license": "MIT",
+  "repository": "https://github.com/kado-ta/workbook-intake",
+  "engines": {
+    "claude-code": ">=2.1.295"
+  }
+}
