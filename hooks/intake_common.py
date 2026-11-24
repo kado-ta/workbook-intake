@@ -212,7 +212,8 @@ def resolve_in_intake(path):
         return None, "path_not_absolute"
     folder = intake_dir()
     if not os.path.isabs(folder) or folder == "/" \
-            or os.path.islink(folder) or not os.path.isdir(folder):
+            or os.path.islink(folder) or not os.path.isdir(folder) \
+            or os.path.realpath(folder) == "/":
         return None, "intake_dir_invalid"
     try:
         real = os.path.realpath(path)

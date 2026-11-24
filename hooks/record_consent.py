@@ -106,6 +106,8 @@ def _handle_warnings(hook_input, question):
     if index < 0:
         return _ack_not_recorded("question_mismatch")
     path = rest[:index]
+    if selected_answer(hook_input, question) != ic.CONTINUE_LABEL:
+        return _ack_not_recorded("not_confirmed")
     session_id = hook_input.get("session_id")
     if not isinstance(session_id, str) or not session_id:
         return _ack_not_recorded("bad_input")
@@ -127,8 +129,6 @@ def _handle_warnings(hook_input, question):
     expected = ic.expected_warnings_questions(path, warnings)
     if not ic.strictly_equal(hook_input["tool_input"]["questions"], expected):
         return _ack_not_recorded("question_mismatch")
-    if selected_answer(hook_input, question) != ic.CONTINUE_LABEL:
-        return _ack_not_recorded("not_confirmed")
     if not ic.record_warnings_ack(session_id, key, digest, warnings):
         return _ack_not_recorded("consent_store_unavailable")
     return "workbook-intake: warnings_ack=recorded"
@@ -166,7 +166,13 @@ def main():
                 "hookEventName": "PostToolUse", "additionalContext": text}}))
             sys.stdout.flush()
         except OSError:
-            pass
+            # Unwritten data stays buffered; point stdout at /dev/null so the final
+            # flush at interpreter exit cannot fail and change the exit code.
+            try:
+                null = os.open(os.devnull, os.O_WRONLY)
+                os.dup2(null, sys.stdout.fileno())
+            except (OSError, ValueError, AttributeError):
+                pass
     return 0
 
 

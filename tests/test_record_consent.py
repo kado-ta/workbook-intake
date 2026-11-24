@@ -380,13 +380,34 @@ class RecordConsentTest(unittest.TestCase):
         f = os.path.join(consents, os.listdir(consents)[0])
         self.assertEqual(os.stat(f).st_mode & 0o777, 0o600)
 
-    def test_stdout_error_keeps_exit_code(self):
+    def test_closed_stdout_keeps_exit_code(self):
         path = self.book()
-        bad = mock.Mock()
-        bad.write.side_effect = BrokenPipeError()
-        with mock.patch.object(sys, "stdin", io.StringIO(json.dumps(consent_input(path)))), \
-                mock.patch.object(sys, "stdout", bad):
-            self.assertEqual(rc.main(), 0)
+        env = {"HOME": self.home, "CLAUDE_PLUGIN_DATA": self.data, "PATH": "/usr/bin:/bin"}
+        for cmd in ([sys.executable, "-I", "-B", str(ROOT / "hooks" / "record_consent.py")],
+                    ["/bin/bash", str(ROOT / "hooks" / "record-consent.sh")]):
+            proc = subprocess.Popen(cmd, stdin=subprocess.PIPE, stdout=subprocess.PIPE,
+                                    stderr=subprocess.DEVNULL, env=env)
+            proc.stdout.close()
+            data = consent_input(path, answer=ic.CANCEL_LABEL)
+            proc.stdin.write(json.dumps(data).encode())
+            proc.stdin.close()
+            self.assertEqual(proc.wait(timeout=60), 0)
+
+    def test_control_characters_in_real_file_names_not_recorded(self):
+        for i, ch in enumerate(("\r", "\x1b", "\u202e")):
+            path = self.book(name="a%sb%d.xlsx" % (ch, i))
+            self.assertEqual(os.path.realpath(path), path)
+            self.assertEqual(
+                rc.handle(consent_input(path)),
+                "workbook-intake: consent=not_recorded; reason=path_not_canonical")
+            self.assertEqual(
+                rc.handle(warnings_input(path, ["vba_project"])),
+                "workbook-intake: warnings_ack=not_recorded; reason=path_not_canonical")
+
+    def test_stop_answer_reveals_nothing_about_file(self):
+        out = rc.handle(warnings_input(os.path.join(self.home, "nowhere.xlsx"),
+                                       ["vba_project"], answer=ic.STOP_LABEL))
+        self.assertEqual(out, "workbook-intake: warnings_ack=not_recorded; reason=not_confirmed")
 
 
 @unittest.skipUnless(sys.platform == "darwin", "hook tests are macOS-only")
@@ -438,7 +459,7 @@ class ResolveInIntakeTest(unittest.TestCase):
         self.assertEqual(self.reason(self.intake + "/b.xlsx"), "intake_dir_invalid")
 
     def test_relative_or_root_intake_dir(self):
-        for value in ("relative/dir", "/"):
+        for value in ("relative/dir", "/", "//", "/."):
             with mock.patch.dict(os.environ, {"WORKBOOK_INTAKE_DIR": value}):
                 self.assertEqual(self.reason("/etc/hosts"), "intake_dir_invalid")
 
