@@ -1,4 +1,6 @@
 import os
+import shutil
+import socket
 import subprocess
 import sys
 import tempfile
@@ -108,9 +110,12 @@ class ProfileTest(unittest.TestCase):
              "-D", "TARGET=" + self.target, exe, "-I", "-B", script],
             stdin=subprocess.DEVNULL, capture_output=True, text=True, env={}, timeout=30)
 
-    def assertDenied(self, body):
+    def assertDenied(self, body, catch="PermissionError", reject=()):
+        # reject: exception names meaning the probe never reached the rule under test.
+        guard = "".join("    if isinstance(e, %s):\n        sys.exit(1)\n" % n for n in reject)
         r = self.attempt("try:\n" + "".join("    " + l + "\n" for l in body.splitlines()) +
-                         "except PermissionError:\n    print('DENIED')\n    sys.exit(0)\n")
+                         "except %s as e:\n" % catch + guard +
+                         "    print('DENIED')\n    sys.exit(0)\n")
         self.assertIn("DENIED", r.stdout, r.stderr)
         self.assertNotIn("ALLOWED", r.stdout)
 
@@ -138,8 +143,17 @@ class ProfileTest(unittest.TestCase):
         self.assertDenied("import socket\nsocket.create_connection(('127.0.0.1', 9))")
 
     def test_profile_denies_unix_socket(self):
+        # A live listener, so an allowed connect would succeed. Kept under /tmp for sun_path.
+        d = tempfile.mkdtemp(dir="/tmp")
+        self.addCleanup(lambda: shutil.rmtree(d, ignore_errors=True))
+        path = os.path.join(d, "s")
+        server = socket.socket(socket.AF_UNIX)
+        self.addCleanup(server.close)
+        server.bind(path)
+        server.listen(1)
         self.assertDenied(
-            "import socket\ns = socket.socket(socket.AF_UNIX)\ns.connect('/var/run/syslog')")
+            "import socket\ns = socket.socket(socket.AF_UNIX)\ns.connect(%r)" % path,
+            catch="OSError", reject=("FileNotFoundError", "ConnectionRefusedError"))
 
     def test_profile_denies_reading_other_files(self):
         self.assertDenied("open(%r).read()" % self.other)
@@ -153,7 +167,7 @@ class ProfileTest(unittest.TestCase):
         self.assertDenied("import os\nos.execv('/bin/echo', ['/bin/echo', 'x'])")
 
     def test_profile_denies_fork(self):
-        self.assertDenied("import os\nos.fork()")
+        self.assertDenied("import os\nos.fork()", catch="OSError")
 
 
 ERROR = {"status": "error", "failures": [], "warnings": []}
@@ -162,6 +176,7 @@ ERROR = {"status": "error", "failures": [], "warnings": []}
 class VocabularyTest(unittest.TestCase):
     def run_with(self, returncode, stdout, outcome="ok"):
         with mock.patch.object(intake_common.os.path, "exists", return_value=True), \
+                mock.patch.object(intake_common.os, "stat", return_value=mock.Mock(st_uid=0)), \
                 mock.patch.object(intake_common, "_run_bounded",
                                   return_value=(outcome, returncode, stdout)) as m:
             result = intake_common.run_checker("/tmp/book.xlsx")
@@ -218,13 +233,22 @@ class VocabularyTest(unittest.TestCase):
         with mock.patch.object(intake_common.os.path, "exists", return_value=False):
             self.assertEqual(intake_common.run_checker("/tmp/b.xlsx")["status"], "sandbox_missing")
         with mock.patch.object(intake_common.os.path, "exists", return_value=True), \
+                mock.patch.object(intake_common.os, "stat", return_value=mock.Mock(st_uid=0)), \
                 mock.patch.object(intake_common, "_run_bounded", side_effect=FileNotFoundError):
             self.assertEqual(intake_common.run_checker("/tmp/b.xlsx")["status"], "sandbox_missing")
 
     def test_oserror_is_error(self):
+        for exc in (PermissionError, ValueError):
+            with mock.patch.object(intake_common.os.path, "exists", return_value=True), \
+                    mock.patch.object(intake_common.os, "stat",
+                                      return_value=mock.Mock(st_uid=0)), \
+                    mock.patch.object(intake_common, "_run_bounded", side_effect=exc):
+                self.assertEqual(intake_common.run_checker("/tmp/b.xlsx"), ERROR)
+
+    def test_nul_in_path_is_error(self):
         with mock.patch.object(intake_common.os.path, "exists", return_value=True), \
-                mock.patch.object(intake_common, "_run_bounded", side_effect=PermissionError):
-            self.assertEqual(intake_common.run_checker("/tmp/b.xlsx"), ERROR)
+                mock.patch.object(intake_common.os, "stat", return_value=mock.Mock(st_uid=0)):
+            self.assertEqual(intake_common.run_checker("/tmp/b\0.xlsx"), ERROR)
 
     def test_user_owned_python_is_error(self):
         fake = mock.Mock(st_uid=501)

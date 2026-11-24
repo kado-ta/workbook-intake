@@ -106,7 +106,7 @@ def run_checker(real_path, timeout=CHECK_TIMEOUT_SECONDS):
         outcome, returncode, stdout = _run_bounded(cmd, timeout)
     except FileNotFoundError:
         return _result("sandbox_missing")
-    except OSError:
+    except (OSError, ValueError):
         return _result("error")
     if outcome != "ok":
         return _result(outcome)
