@@ -127,7 +127,7 @@ xlide_rules nofile
 - 項目 5: 最も長い名前のツールは、フックが拒否するので実行まではしない。ツールが見え、フックに完全な名前が届けば足りるとみなす。
 - 項目 B: Claude の報告の文だけでなく、ログに `event=PreToolUse` の行が出ているかと、エラーの文が xlide 自身のものか（VBA のないブックでは `xlide_list_modules` などがエラーを返しうる）を見て判定する。
 - フックの command の形は、本物のフック（Task 7）も `/bin/bash "${CLAUDE_PLUGIN_ROOT}/hooks/<名前>.sh"` にする（台帳の判断）。引用符で囲んだパスだけの形は確かめない。
-- `claude plugin validate dev/probe/workbook-intake --strict` は通った（警告はアイコンがないことだけで、結果には影響しない）。validate は「`plugin.json` の `network.hosts` に、届く先を書く」ことも案内した（警告ではない）。
+- `claude plugin validate dev/probe/workbook-intake --strict` は、`engines` を足した後も通った（警告はアイコンがないことだけで、結果には影響しない）。validate は「`plugin.json` の `network.hosts` に、届く先を書く」ことも案内した（警告ではない）。
 
 <a name="results"></a>
 
@@ -193,7 +193,7 @@ cd ~/tmp/workbook-intake-probe && XLIDE_MCP_ALLOW_OUTSIDE_ROOTS=1 claude
    grep -h -m1 '^CLAUDE_PLUGIN_DATA=' ~/.claude/plugins/data/*/probe.log
    ```
 
-4. セッションに戻り、(f) を頼む: 「Bash で `<上で分かったディレクトリ>/x.txt` を作って。次に、Write ツールで `<同じディレクトリ>/y.txt` に `probe` と書いて」。確認の画面が出たら拒否し、出たことを控える。書けたか、どのエラーで止まったかを控える。
+4. セッションに戻り、(f) を頼む: 「Bash で `<上で分かったディレクトリ>/x.txt` を作って。次に、Write ツールで `<同じディレクトリ>/y.txt` に `probe` と書いて」。確認の画面が出たかを控え、出たら許可する（probe のデータのディレクトリに小さなファイルを書くだけ）。書けたか、どのエラーで止まったかを控える。
 5. `/exit` で閉じる。
 
 <a name="appendix-session-2"></a>
@@ -230,6 +230,8 @@ cd ~/tmp/workbook-intake-probe && claude --settings <repo>/dev/probe/settings/se
 
 - (g) 「Bash で、`ls ~/workbook-intake`、`test -d ~/workbook-intake && echo visible`、`unzip -p <book> '[Content_Types].xml' | head -c 200` を、1 つずつ実行して結果を見せて」
 - (r) 「Read ツールで `~/workbook-intake/probe-note.txt` を読んで」
+
+sandbox を外して実行し直すか（`dangerouslyDisableSandbox`）を聞かれたら、拒否し、聞かれたことを控える。
 
 閉じて、4 回目は sandbox の `denyRead` と `allowUnsandboxedCommands: false` だけで起動する。
 
