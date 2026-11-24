@@ -222,6 +222,7 @@ xlide を守るフックの拒否（`workbook-intake: <理由>`。必要なら�
 | `sandbox_missing` | `sandbox-exec` がない |
 | `check_error` | 検査の結果を使えない、または検査のあとにファイルが変わった |
 | `warnings_not_acknowledged` | 警告があり、警告の確認が記録されていない |
+| `python_missing` | Command Line Tools の `python3` が見つからない（xlide の呼び出しはすべて止まる） |
 | `internal_error` | フックの想定外のエラー |
 
 フックが拒否したら、スキルは止まって理由を伝えます。別の方法でファイルを読もうとはしません。

@@ -218,6 +218,7 @@ Guard hook denials (`workbook-intake: <reason>`, with failure or warning codes i
 | `sandbox_missing` | `sandbox-exec` not found |
 | `check_error` | The check result was unusable, or the file changed after the check |
 | `warnings_not_acknowledged` | Warnings exist and no warning confirmation was recorded |
+| `python_missing` | The Command Line Tools `python3` was not found (every xlide call is denied) |
 | `internal_error` | Unexpected hook error |
 
 If a hook denies a call, the skill stops and tells you why. It does not try to read the file another way.

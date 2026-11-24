@@ -8,7 +8,7 @@
     {
       "name": "workbook-intake",
       "source": "./",
-      "description": "Checks Excel workbooks for safety before xlide-mcp analyzes them, and runs the analysis through a read-only agent."
+      "description": "Checks Excel workbooks received from outside before xlide-mcp reads them, and runs the analysis through a read-only agent."
     }
   ]
 }

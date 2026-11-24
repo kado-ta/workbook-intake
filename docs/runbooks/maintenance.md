@@ -42,6 +42,7 @@ xlide-mcp か、固定した依存（pyopenvba・pyofficeeditor・pyvbaanalysis�
   3. `file_path` を省いたときに、既定のファイルやセッションの状態からファイルを読むか。
 
   ソースは、wheel を実行せずに展開して読む（取り出したものは信頼しないデータとして扱い、import も実行もしない）。前回の結果は、[research-plugin-behavior.md の許可リストの節](../work/20261124_workbook-intake/research-plugin-behavior.md#allowlist)にある。
+- [ ] MCP のリソースとプロンプト（`server.py` の `@server.resource`・`@server.prompt` など）も確かめる。フックが止めるのはツールの呼び出しだけで、Claude Code の `ReadMcpResourceTool` は止めない。1.2.4 のリソースは固定の 2 つ（`xlide://instructions`・`xlide://workspace`）だけで、ブックの中身は返さない。ファイルの中身を返すもの（リソースのテンプレートを含む）が増えたら、人に求める。
 - [ ] 許可リストを足す・外す判断は、人に求める。
 - [ ] `hooks/allowed-tools.txt` の `reviewed-for:` を新しい版にする。
 - [ ] 全体のテストを、**通常のターミナル**で動かす（sandbox の中では Seatbelt が入れ子で動かない）。
