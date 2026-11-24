@@ -63,4 +63,32 @@ created: 2026-11-25
 
 ## レビュー
 
-（Task 12 で書く: `/review`、`/security-review`、Codex のレビューの結果と、採否）
+<a name="review-1"></a>
+
+### /review（1 回目、`53c4d7d`）
+
+gstack の `/review` で、専門のレビュアー 6 つ（Testing、Maintainability、Security、Performance、Simplification、State Machines）、Red Team、Claude の敵対的な確認を出した。Codex のパスは、人が通常のターミナルで実行するため、ここでは飛ばした。
+
+検査と xlide（pyofficeeditor 0.4.1）の読み方の違いで、検査を外せることが分かった。どれも、無害な中身のファイルで、検査の結果と xlide 1.2.4 の読み込みの結果を比べて再現した。
+
+| 重さ | 場所 | 内容 | 採否 |
+| --- | --- | --- | --- |
+| 重大 | `scripts/check_workbook.py` | 中央ディレクトリが 2 つある zip で、検査（標準ライブラリの `zipfile`）と xlide が別の部品の組を読む。検査は合格・警告なしで、xlide は非表示のシートを読んだ。zip bomb の不合格も外れる | 直す |
+| 重大 | `scripts/check_workbook.py` | 先頭に `<` 以外がある部品（1 バイトでも、4 KB を超える空白でも）を、XML と見なさずに読み飛ばし、`strings_not_checked` も付けない。xlide は最初の `<` の前を飛ばして読む | 直す |
+| 重大 | `scripts/check_workbook.py` | 関係の Target の `\` を解決できず、シートの状態を数えない。xlide は `/` に直して読む | 直す |
+| 重大 | `scripts/check_workbook.py` | `customXml/` の下の部品を、名前だけで文字列の検査から外す。関係でブックの本体をそこに置ける | 直す |
+| 重大 | `hooks/guard_xlide.py` | 正規形でない `file_path` を通す。xlide は前後の空白を取ってから開くので、末尾に空白のあるリンクで、検査したものと別のファイルを読ませられる | 直す |
+| 軽微 | `scripts/check_workbook.py` | NFKC を文字列全体に掛ける。32 MB の文字列 1 つで、ピーク 1.9 GB、5.9 秒（測った） | 直す |
+| 軽微 | `tests/test_record_consent.py` | 警告の確認の質問に一覧の部分がない場合（`question_mismatch`）のテストがない | 直す |
+| 軽微 | `scripts/doctor.sh` | doctor は python3 があれば `ok` と出すが、検査は python が root の持ち物でないと `error` にする | 直す |
+| 軽微 | マニフェスト、スキル、README、runbook | 説明文が保証に読める。拒否の理由の一覧の誤り（`file_changed` があり、`python_missing` がない）。xlide の MCP のリソースを確かめる手順がない（1.2.4 は固定の 2 つだけで、ブックの中身は返さない） | 直した（`be03451`） |
+| 軽微 | フック、承認の記録、マニフェスト | `DEVELOPER_DIR`、承認を取り消せないこと、古い Claude Code、エージェントの名前 | 直さない。設計の[受け入れるリスク](design.md#risks)に足した |
+| 提案 | `hooks/guard_xlide.py`、`hooks/intake_common.py` | `decide()` と `consent_question()` の薄い包みを消す | 直さない（plan でテストの入口に決めている） |
+
+直さないと判断したもの（主担当の判断）:
+
+- 大きなブックで 20 秒を超える（部品ごとの読み込みの上限、二度の展開）: 時間切れは拒否する設計なので、安全の側に倒れる。
+- 下の依存を固定していない: 設計の[更新と保守](design.md#maintenance)で決めている。
+- 検査の後の差し替え（TOCTOU）: 設計の[受け入れるリスク](design.md#risks)にある。
+
+直すものの方針は、[plan.md の Task 13](plan.md#task-13) に書く。

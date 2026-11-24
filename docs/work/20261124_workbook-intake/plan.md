@@ -71,7 +71,7 @@ created: 2026-11-25
 設計で「実装者が決めてよい」とされた範囲で、この計画が決めたこと。設計の目標を変えるものはない。
 
 - フックの判定は Python（`hooks/guard_xlide.py`・`hooks/record_consent.py`）で書き、`hooks/guard-xlide.sh`・`hooks/record-consent.sh` は python3 を探して起動する入口にする。JSON・`realpath`・SHA-256・時間の上限付きの子プロセスを、bash 3.2 と macOS の標準のコマンドだけで書くと誤りやすいため。フックのテストも、bash ではなく Python の `unittest` から入口のスクリプトを動かす形にする（設計の「フックのテスト（bash）」から変える）。
-- 文字列の検査は、設計が挙げた部品に限らず、`customXml/` を除くすべての XML の部品で行う。部品の名前は関係（`.rels`）で変えられるので、決まった名前だけを見ると、名前を変えるだけで検査を外せるため。シートの状態は、`_rels/.rels` の `officeDocument` の先の部品から読む。
+- 文字列の検査は、設計が挙げた部品に限らず、`customXml/` を除くすべての XML の部品で行う。部品の名前は関係（`.rels`）で変えられるので、決まった名前だけを見ると、名前を変えるだけで検査を外せるため。シートの状態は、`_rels/.rels` の `officeDocument` の先の部品から読む。（2026-11-25: この行の決め方は、xlide の読み方と食い違うと分かったので、[Task 14](#task-14) で、部品を中身で選び、シートの状態をすべての部品で数える形に変える。）
 - 圧縮率の判定は、展開した量が 100 KiB を超えた部品だけに行う（Apache POI の既定と同じ考え方）。XML は小さな部品でも 100 倍を超えることがあり、誤検知になるため。
 - `<!DOCTYPE`・`<!ENTITY` は、UTF-8 に加えて UTF-16（LE・BE）の符号でも探す。UTF-16 の XML で、ASCII の検索を外されるため。
 - 受け取り用フォルダ自身がシンボリックリンクのときは、フックも拒否する（doctor.sh だけでなく）。
@@ -90,6 +90,7 @@ created: 2026-11-25
 | `README.md` | 最小の README（`main` の Initial commit）。Task 10 で書き足す | 1・10 |
 | `AGENTS.md`・`CLAUDE.md` | このリポジトリの規則（コミットと PR は英語）。`CLAUDE.md` は `@AGENTS.md` の取り込みだけ。plan の承認の前に追加済み | — |
 | `docs/work/20261124_workbook-intake/research-plugin-behavior.md` | 実装の最初に確かめた結果と、xlide のツールの一覧 | 1 |
+| `docs/work/20261124_workbook-intake/research-xlide-parsing.md` | xlide 1.2.4 と pyofficeeditor 0.4.1 の、zip・XML・関係・パスの読み方（1 回目の `/review` の後に調べた） | 13〜15 |
 | `dev/probe/` | 確かめるための probe のプラグイン。Claude Code の更新の後にも使う | 1 |
 | `.claude-plugin/plugin.json`・`.claude-plugin/marketplace.json` | プラグインとマーケットプレイス | 2 |
 | `.mcp.json` | xlide の定義 | 2 |
@@ -956,9 +957,249 @@ git commit -m "docs: record manual verification of workbook-intake"
 
 ### Task 12: レビューと PR の準備
 
-- [ ] **Step 1: `/review` を実行し、指摘への対応を決める。直したら、全体のテストを実行し直す。**
+- [x] **Step 1: `/review` を実行し、指摘への対応を決める。直したら、全体のテストを実行し直す。** 1 回目の結果と採否は [test-report のレビュー](test-report.md#review-1)。小さな指摘は `be03451` で直した。検査と xlide の読み方の違いなどは、[Task 13](#task-13)〜[Task 15](#task-15) で直す（ユーザーの判断、2026-11-25）。Task 15 の後に、`/review` をもう一度実行してから Step 2 に進む。
 - [ ] **Step 2: `/security-review` を実行する（外部からの入力と権限の境界に触れるため）。**
 - [ ] **Step 3: Codex のレビューを行う（必須。ユーザーの指定）。** 人が通常のターミナルで `codex review` と、challenge（変更前と比べた後退と、壊れる入力を挙げてもらう。プロンプトは Claude が書く）を実行する。結果は、CLAUDE.md の Skill routing の手順で読み、test-report に記録してから採否を整理する。直したら、全体のテストを実行し直す。上限は 5 回。
 - [ ] **Step 4: 作業文書を締める。** design.md・plan.md・research・test-report の `status` を `done` にしてコミットする。
 - [ ] **Step 5: `/crit-review` でブランチの差分を開き、`approved: true` を待つ。** その後に `cc-safe-push` と `cc-safe-pr create` を使う（許可リストにないリポジトリなら、人にコマンドを示す）。PR を作ったら `gh pr checks` で CI の結果を確かめる。
 - [ ] **Step 6: 公開のときの人の作業を伝える。** GitHub の説明文とトピック（`claude-code`・`claude-code-plugin` など）の設定、Dependabot alerts を有効にすること（リポジトリの Settings の Code security）、dotfiles の settings.json の作業（設計の[人の作業](design.md#human-steps)。dotfiles で別に行う）。
+
+---
+
+<a name="review-fixes"></a>
+
+## 1 回目の `/review` の指摘の修正（Task 13〜15）
+
+1 回目の `/review` で、検査と xlide の読み方が食い違い、検査を外せると分かった（[test-report](test-report.md#review-1)）。xlide 1.2.4 の読み方は [research-xlide-parsing.md](research-xlide-parsing.md) に調べた。設計は 2026-11-25 の改訂で直した（[design.md の改訂](design.md#revisions)）。
+
+考え方: 個々の食い違いを塞ぐのではなく、食い違いが起きない範囲だけを通す。
+
+- zip は、4 通りの読み手（pyofficeeditor の `ZipArchive`、pyopenvba の `OpcFile`、Python 3.15 の `zipfile`、検査の Python 3.9 の `zipfile`）が必ず同じエントリを同じバイトで読む形だけを通し、ほかは不合格にする（Task 13）。zip bomb と DTD の不合格は、この前提の上でしか効かない。
+- XML の部品は、名前や関係ではなく中身で選ぶ。名前空間を外したローカル名で見る。数えるもの（非表示のシート、外部リンク）は、関係の先を解決して本体を見分けることに頼らず、読んだすべての部品の要素で数える。食い違いうる部品は `strings_not_checked` にする（Task 14）。
+- パスは、xlide が開くものと同じ正規形だけを通す（Task 15）。
+
+調査の「[検査に求められること](research-xlide-parsing.md#requirements)」のうち、採らないものと理由（主担当の判断）:
+
+| 求められること | 判断 | 理由 |
+| --- | --- | --- |
+| expat で読めない部品を不合格にする | 採らない。`strings_not_checked` の警告のまま | 設計では、確かめきれないことを警告で示し、人が決める（`.xlsb` と同じ）。Excel が書く XML は読めるので、まれ。README の警告の説明を「その部品のシートの状態や関係も分からない」に直す |
+| XML 宣言が先頭以外にある、ルート要素の後ろに何かある、最初の `<` の前に文字がある部品を拒否する | 採らない。expat が読めないので `strings_not_checked` になる | 上と同じ |
+| ルートの officeDocument がちょうど 1 つで、`xl/workbook.xml` に解決される | 採らない | 非表示のシートをすべての部品で数えるので、本体を見分けなくてよい |
+| 内部の Target の `\`・`%`・`#`・`//` などを拒否する | 採らない | 関係で部品を選ばなくなるので、Target の解決が食い違っても、読む部品は変わらない |
+| シートの状態を、本体の `sheets` の直下の `sheet` だけで数える | 採らない。すべての `sheet` 要素で数える | 多めに数える側に倒す |
+| M と VBA のソースも文字列を確かめる | 採らない | `power_query` と `vba_project` の警告が知らせる。範囲が広がりすぎる |
+
+---
+
+<a name="task-13"></a>
+
+### Task 13: 検査（zip の形）
+
+**Files:**
+- Modify: `scripts/check_workbook.py`、`tests/test_check_workbook.py`、`tests/workbook_factory.py`（生のバイト列を組み替える補助）
+
+**Interfaces:**
+- Consumes: Task 3 の `check`・`FAILURE_CODES`（語彙は増やさない）
+- Produces: `_check_layout(path: str, size: int) -> str | None`。`"not_zip"`・`"unsafe_part_name"`・`None` を返す。`check()` の OLE の判定の後、`zipfile.ZipFile` で開く前に呼び、`None` でなければその語彙で不合格にする。
+
+判定はファイルのバイト列から直接読む（`zipfile` に任せない。Python の版で振る舞いが違うため）。値は [research-xlide-parsing.md の ZIP](research-xlide-parsing.md#zip) による。
+
+| 確かめること | 違えば |
+| --- | --- |
+| ファイルの最後の 22 バイトが EOCD（`PK\x05\x06`）で、注釈の長さが 0 | `not_zip` |
+| EOCD のディスク番号 2 つが 0、このディスクのエントリ数と総エントリ数が等しい | `not_zip` |
+| ZIP64 の印がない: 最後の 42 バイト目からの 4 バイトが `PK\x06\x07` でない。EOCD と中央のエントリの大きさ・オフセットに `0xFFFFFFFF`（件数は `0xFFFF`）がない。extra に 0x0001 がない | `not_zip` |
+| 中央ディレクトリのオフセット + 大きさ = ファイルの大きさ − 22（前置きのデータがない） | `not_zip` |
+| 中央ディレクトリを総エントリ数の分だけ読むと、大きさをちょうど使い切る。各エントリが `PK\x01\x02` で始まり、extra が (id, 長さ) の並びでちょうど埋まる | `not_zip` |
+| 中央とローカルの extra に Unicode Path（0x7075）がない | `not_zip` |
+| ローカルヘッダーが `PK\x03\x04` で始まり、名前のバイト列・フラグ・圧縮方式が中央と同じ。bit 3 がなければ、CRC と 2 つの大きさも中央と同じ | `not_zip` |
+| エントリの範囲（ローカルヘッダー + 名前 + extra + 中央の圧縮後の大きさ + bit 3 ならデータ記述子。記述子は `PK\x07\x08` で始まれば 16 バイト、そうでなければ 12 バイト）を、オフセットの順に並べると、0 から中央ディレクトリのオフセットまで、隙間も重なりもなく並ぶ | `not_zip` |
+| 名前: bit 11 があれば UTF-8 として正しく、なければ ASCII だけ。NUL を含まない。空のセグメント（`//`）と `.` のセグメントがない。`/` で終わるなら、2 つの大きさが 0 | `unsafe_part_name` |
+
+今の判定（圧縮方式、`\`・`..`・先頭の `/`・ドライブ名、大文字小文字を無視した重複、暗号化の bit、宣言の大きさの和）は残す。暗号化の bit は今の `encrypted` のままにする（`_check_layout` では見ない）。中身のない `/` で終わるエントリは、警告の走査で今のとおり飛ばす。
+
+- [ ] **Step 1: 失敗するテストを書く**
+
+```python
+def test_two_central_directories_fail(self):           # Red Team の作り（検査の向きと xlide の向きで別の部品の組）→ "not_zip"
+def test_prefixed_data_fails(self):                    # 正しい zip の前に 1 バイト → "not_zip"
+def test_archive_comment_fails(self):                  # 注釈 b"x"（EOCD の長さも合わせる）→ "not_zip"
+def test_trailing_bytes_after_eocd_fail(self):         # EOCD の後ろに 1 バイト → "not_zip"
+def test_gap_between_entries_fails(self):              # 2 つ目のエントリの前に 1 バイト挟み、中央のオフセットを合わせる → "not_zip"
+def test_entry_count_mismatch_fails(self):             # EOCD の 2 つのエントリ数を 1 減らす → "not_zip"
+def test_local_name_mismatch_fails(self):              # ローカルヘッダーの名前だけを同じ長さの別名にする → "not_zip"
+def test_unicode_path_extra_fails(self):               # 中央の extra に 0x7075 → "not_zip"
+def test_zip64_records_fail(self):                     # zipfile の force_zip64=True で書いた部品 → "not_zip"
+def test_data_descriptor_layout_passes(self):          # シークできない出力に zipfile で書いた（bit 3 と記述子がある）ブック → "pass"
+def test_empty_segment_name_fails(self):               # "xl//workbook.xml" → "unsafe_part_name"
+def test_dot_segment_name_fails(self):                 # "xl/./a.xml" → "unsafe_part_name"
+def test_nul_in_name_fails(self):                      # 名前のバイト列に NUL（生のバイト列で作る）→ "unsafe_part_name"
+def test_directory_entry_with_content_fails(self):     # "xl/book.xml/" に中身 → "unsafe_part_name"
+def test_empty_directory_entry_passes(self):           # "xl/" で大きさ 0 → "pass"
+def test_non_ascii_name_without_utf8_flag_fails(self): # bit 11 を落とした "xl/表.xml" → "unsafe_part_name"
+```
+
+- [ ] **Step 2: テストが失敗することを確かめる**
+
+Run: `"$PY" -B -m unittest tests.test_check_workbook -v`
+Expected: 新しいテストのうち、`test_data_descriptor_layout_passes`・`test_empty_directory_entry_passes` 以外が失敗する。既存のテストは通る。
+
+- [ ] **Step 3: `_check_layout` を書き、`check()` から呼ぶ**
+
+- [ ] **Step 4: テストが通ることを確かめる**
+
+Run: `"$PY" -B -m unittest discover -s tests -t . -v`
+Expected: すべて PASS（`sandbox-exec` のテストは skip）。
+
+- [ ] **Step 5: コミットする**
+
+```bash
+git add scripts/check_workbook.py tests/test_check_workbook.py tests/workbook_factory.py
+git commit -m "fix: reject ZIP layouts that xlide's readers can interpret differently"
+```
+
+---
+
+<a name="task-14"></a>
+
+### Task 14: 検査（XML の部品の選び方と読み方）
+
+**Files:**
+- Modify: `scripts/check_workbook.py`、`tests/test_check_workbook.py`
+
+**Interfaces:**
+- Consumes: Task 13 の `_check_layout`（zip の形が素直なことを前提にする）、Task 4 の `WARNING_CODES`（語彙は増やさない）
+- Produces: なし（`check()` の結果の形は変えない）
+
+読み方（値は [research-xlide-parsing.md の XML](research-xlide-parsing.md#xml) による）:
+
+1. 部品の選び方: `.xlsb` 以外では、すべての部品（中身のない `/` で終わるエントリを除く）について、文字コードを pyofficeeditor と同じ規則で決める。BOM（UTF-8・UTF-16LE・UTF-16BE）があればそれ、なければ先頭 2 バイトが `<\0` なら UTF-16LE、`\0<` なら UTF-16BE、ほかは UTF-8。部品の全体を、その文字コードで厳密に（`codecs.getincrementaldecoder(enc)("strict")` で）復号できて、`<` を含む部品を XML の部品とする。ほかの部品（画像、`vbaProject.bin` など）は読まない。名前（`.xml` など）、関係、`customXml/` かどうかでは選ばない。
+2. XML の部品は、`xml.parsers.expat.ParserCreate(encoding=<1 で決めた文字コード>)` で、名前空間の処理なしに読む（宣言の `encoding` に従わない）。`ordered_attributes = True`、`buffer_text = True`。DTD は Task 3 の判定で先に止めている。
+3. 部品ごとの件数は、部品ごとの入れ物に数え、1 の判定が済んでから全体に足す（復号に失敗した部品の件数は捨てる）。XML の部品で、expat が読めなければ `strings_not_checked` を 1 つ足す（読めた所までの件数は足す）。`MAX_PARSE_BYTES` を超える XML の部品は、読まずに `strings_not_checked`（今のまま）。
+4. 名前は、`:` の後ろのローカル名で見る（`xmlns:Target` のローカル名は `Target`）。同じ要素に、同じローカル名の属性が 2 つ以上あれば、その部品に `strings_not_checked` を 1 つ足す（部品ごとに 1 回）。
+5. 数え方:
+   - ローカル名 `sheet` の要素の、ローカル名 `state` の最初の属性が `hidden` なら `hidden_sheet`、`veryHidden` なら `very_hidden_sheet`。どの部品でも数える（本体かどうかを見分けない）。
+   - ローカル名 `Relationship` の要素は、どの部品でも、ローカル名 `TargetMode` が大文字小文字を無視して `external` なら `external_relationship`、ローカル名 `Type` の末尾で `_REL_TYPE_WARNINGS` を数える。
+   - ローカル名 `externalReference` の要素で `external_link` を数える（関係の種類と部品の名前は問わない）。
+   - 文字列は、属性の値（`xmlns` の宣言の値を含む）と文字のノード（CDATA の中身を含む。xlide は返さないが、多めに見る）を、今の `_count_string` で調べる。
+6. `_count_string` は、値そのものと、`_xHHHH_`（16 進 4 桁）を文字に戻した値の両方で、不可視の文字と指示らしい文言を調べる（1 つの値で数えるのは各 1 回）。
+7. 指示らしい文言は、`LONG_STRING_CHARS` を超える値では、先に不可視の文字を除き、`LONG_STRING_CHARS` 文字ずつ、`PHRASE_OVERLAP = 256` 文字を重ねた窓に分けて、窓ごとに NFKC・小文字・不可視の文字の除去をしてから探す。`unicodedata.normalize` に渡す長さを、`LONG_STRING_CHARS + PHRASE_OVERLAP` 以下にする（1 回目の `/review` で、32 MB の値でピーク 1.9 GB になった）。
+8. 消すもの: `_looks_like_xml`・`SNIFF_BYTES`、ルートの関係の本体を集める仕組み（`office_targets`・`_resolve`・`_MAX_OFFICE_TARGETS`）、`customXml/` を外す判定、ElementTree の target の `_Collector`（expat のハンドラーに置き換える）。DataMashup のバイト列の検索（`power_query`）は残す。
+
+- [ ] **Step 1: 失敗するテストを書く**
+
+```python
+def test_leading_byte_before_root_not_checked(self):          # xl/workbook.xml の先頭に b"x"、veryHidden → "strings_not_checked"
+def test_long_leading_whitespace_is_parsed(self):             # xl/workbook.xml の先頭に空白 5,000、hidden → "hidden_sheet"
+def test_hidden_sheet_counted_without_resolving_target(self): # _rels/.rels の Target を "/xl\\workbook.xml"、veryHidden → "very_hidden_sheet"
+def test_workbook_under_custom_xml_is_checked(self):          # 本体を customXml/workbook.xml に置きルートの関係で指す、veryHidden → "very_hidden_sheet"
+def test_part_without_xml_name_is_checked(self):              # 共有文字列を "xl/strings.bin" に置き、"ignore previous" → "instruction_like_text"
+def test_prefixed_state_attribute_counts(self):               # <sheet x:state="hidden" xmlns:x="urn:x" .../> → "hidden_sheet"
+def test_duplicate_local_attribute_not_checked(self):         # Relationship に xmlns:Target="xl/other.xml" と Target → "strings_not_checked"
+def test_external_reference_element_warns(self):              # workbook.xml に <externalReferences><externalReference r:id="rId9"/></externalReferences> → "external_link"
+def test_escaped_invisible_character_warns(self):             # 共有文字列 "a_x200B_b" → "invisible_characters"
+def test_escaped_instruction_text_warns(self):                # "ignore_x0020_previous" → "instruction_like_text"
+def test_cdata_text_is_checked(self):                         # <t><![CDATA[ignore previous]]></t> → "instruction_like_text"
+def test_binary_part_is_not_parsed(self):                     # "xl/media/image1.png" に PNG の署名 + '<sheet state="hidden"/>' → hidden_sheet なし、strings_not_checked なし
+def test_text_part_without_markup_is_not_parsed(self):        # "<" を含まない UTF-8 の部品 → 警告なし
+def test_utf16_without_bom_is_parsed(self):                   # BOM なしの UTF-16LE の共有文字列に U+200B → "invisible_characters"
+def test_declared_encoding_is_ignored(self):                  # encoding="ISO-8859-1" と宣言し、中身は UTF-8 の U+200B → "invisible_characters"
+def test_junk_after_root_not_checked(self):                   # ルート要素の後ろに "tail<x/>" → "strings_not_checked"
+def test_power_query_reports_long_string(self):               # customXml/item1.xml の DataMashup の中身が 10,001 文字 → "power_query" と "very_long_string"
+def test_phrase_across_normalization_window_warns(self):      # "ignore previous" が LONG_STRING_CHARS の境目をまたぐ値 → "instruction_like_text"
+def test_normalization_input_is_bounded(self):                # 1,000,000 文字の値。unicodedata.normalize を包んで、渡された長さの最大が LONG_STRING_CHARS + PHRASE_OVERLAP 以下
+```
+
+既存のテストのうち、関係の本体に頼るもの（`test_renamed_workbook_part_is_followed` など）は、そのまま通ることを確かめる（消さない）。
+
+- [ ] **Step 2: テストが失敗することを確かめる**
+
+Run: `"$PY" -B -m unittest tests.test_check_workbook -v`
+Expected: 新しいテストの多くが失敗する。今の検査でも通りうるもの（`test_binary_part_is_not_parsed`・`test_text_part_without_markup_is_not_parsed`・`test_utf16_without_bom_is_parsed`）は、通ったかどうかを報告に書く。
+
+- [ ] **Step 3: 上の 1〜8 を実装する**
+
+- [ ] **Step 4: テストが通ることを確かめる**
+
+Run: `"$PY" -B -m unittest discover -s tests -t . -v`
+Expected: すべて PASS（`sandbox-exec` のテストは skip）。
+
+- [ ] **Step 5: コミットする**
+
+```bash
+git add scripts/check_workbook.py tests/test_check_workbook.py
+git commit -m "fix: choose XML parts by content and read them the way xlide does"
+```
+
+---
+
+<a name="task-15"></a>
+
+### Task 15: パスの正規形、前提の確認、テストの穴、文書
+
+**Files:**
+- Modify: `hooks/intake_common.py`、`hooks/guard_xlide.py`、`hooks/record_consent.py`、`scripts/doctor.sh`、`tests/test_guard_xlide.py`、`tests/test_record_consent.py`、`tests/test_doctor.py`、`README.md`、`README.ja.md`、`skills/analyze/SKILL.md`、`docs/work/20261124_workbook-intake/test-report.md`
+
+**Interfaces:**
+- Produces: `intake_common.canonical_path(path: str) -> bool`。`path == path.strip()`、`Cc`・`Cf`・`Zl`・`Zp` の文字がない、`NFC(os.path.realpath(path)) == NFC(path)` のすべてを満たすとき True。
+- `guard_xlide._decide_file`: `resolve_in_intake` が通った後に `canonical_path(file_path)` でなければ `("deny", "path_not_canonical", [])`。
+- `record_consent`: `_canonical` を `ic.canonical_path` に置き換える（入力の確認と警告の確認の両方）。NFC で比べるので、今より緩くなるのは正規化の違いだけ。
+- `scripts/doctor.sh`: `python3` の項目は、今の確かめに加えて、`"$clt/usr/bin/python3" -I -c 'import os,sys; sys.exit(os.stat(os.path.realpath(sys.base_prefix)).st_uid != 0)'` が 0 で終わること（`run_checker` と同じ規則）。
+
+- [ ] **Step 1: 失敗するテストを書く**
+
+```python
+# tests/test_guard_xlide.py
+def test_symlink_alias_denied(self):          # 受け取り用フォルダに a.xlsx と b.xlsm、"b.xlsm "（末尾に空白）→ a.xlsx のリンク。a.xlsx に承認と合格の検査 → "path_not_canonical"
+def test_trailing_space_file_denied(self):    # 名前の末尾に空白のある通常のファイル（承認あり）→ "path_not_canonical"
+# tests/test_record_consent.py
+def test_trailing_space_path_not_recorded(self):          # 末尾に空白のある通常のファイル → "consent=not_recorded; reason=path_not_canonical"
+def test_warnings_question_without_list_not_acked(self):  # 一覧の部分を除いた警告の質問に CONTINUE_LABEL → "warnings_ack=not_recorded; reason=question_mismatch"、has_warnings_ack は False
+# tests/test_doctor.py
+def test_python_not_owned_by_root_is_missing(self):  # DEVELOPER_DIR を一時ディレクトリにし、usr/bin/python3 を「exit 1 する bash のスクリプト」にする → "missing python3"
+```
+
+既存の `test_consent_matches_across_unicode_normalization`（NFD と NFC）は、そのまま通ることを確かめる。
+
+- [ ] **Step 2: テストが失敗することを確かめる**
+
+Run: `"$PY" -B -m unittest tests.test_guard_xlide tests.test_record_consent tests.test_doctor -v`
+Expected: `test_warnings_question_without_list_not_acked` 以外の新しいテストが失敗する（このテストは今のコードでも通る見込みで、テストの穴を埋めるもの）。
+
+- [ ] **Step 3: `canonical_path` を書き、フック 2 つと doctor.sh を直す**
+
+- [ ] **Step 4: 文書を直す**
+
+- `README.md`・`README.ja.md`:
+  - 検査の不合格の表: `not_zip` に「読み手によって読み方が変わりうる zip の形（注釈、前置きのデータ、エントリの隙間、ZIP64、名前を付け替える extra）」、`unsafe_part_name` に「NUL・空のセグメント・`.` のセグメント・中身のあるディレクトリ名・文字コードの印と合わない名前」を足す。
+  - 警告の表: `strings_not_checked` を「確かめきれなかった部品がある（`.xlsb`、大きすぎるか読めない XML、属性の重なり）。その部品の文字列・シートの状態・関係は分からない」にする。`very_long_string` に「Power Query のブックでも出る」を足す。
+  - フックの拒否の表: `path_not_canonical` を足す（入力の確認の表の行と同じ意味）。
+  - `doctor.sh` の項目: `python3` に「root の持ち物でない」を足す。
+- `skills/analyze/SKILL.md`: フックの拒否の理由の一覧に `path_not_canonical` を足す。
+
+- [ ] **Step 5: テストが通ることを確かめる**
+
+Run: `"$PY" -B -m unittest discover -s tests -t . -v && shellcheck hooks/*.sh scripts/*.sh dev/probe/workbook-intake/hooks/*.sh && claude plugin validate . --strict`
+Expected: すべて PASS、指摘なし、通過。
+
+- [ ] **Step 6: xlide の読み手と読み比べる（メインの会話で行う）**
+
+1 回目の `/review` と調査で xlide と食い違った形（中央ディレクトリが 2 つ、先頭の 1 バイト、`\` の Target、`customXml/` の本体、`xmlns:Target`、`x:state`、`_xHHHH_`）のブックを `tmp/` に作る。検査の結果と、xlide 1.2.4 の uv の環境の python で pyofficeeditor に読ませた結果を並べる。読み比べのスクリプトは `tmp/` に置き、コミットしない。結果を test-report に書く。期待: どの形も、検査で不合格になるか、xlide が読むものと同じ警告か `strings_not_checked` が出る。
+
+- [ ] **Step 7: 全体のテストを、人が通常のターミナルで実行する**
+
+Run（人）: `WORKBOOK_INTAKE_REQUIRE_SANDBOX=1 "$(xcode-select -p)/usr/bin/python3" -B -m unittest discover -s tests -t . -v`
+Expected: すべて PASS、skip なし。結果を test-report に書く。
+
+- [ ] **Step 8: コミットする**
+
+```bash
+git add hooks/intake_common.py hooks/guard_xlide.py hooks/record_consent.py scripts/doctor.sh tests/test_guard_xlide.py tests/test_record_consent.py tests/test_doctor.py
+git commit -m "fix: require canonical paths in the hooks and a root-owned python in doctor"
+git add README.md README.ja.md skills/analyze/SKILL.md
+git commit -m "docs: describe the stricter ZIP and XML checks and path_not_canonical"
+git add docs/work/20261124_workbook-intake/test-report.md
+git commit -m "docs: record the parity check against xlide's readers"
+```
+
+その後、[Task 12](#task-12) の Step 1 の続き（2 回目の `/review`）に戻る。CI の macOS のジョブで、`xcode-select -p` の先の python が root の持ち物でなく失敗したら、`.github/workflows/ci.yml` の macOS のジョブに `DEVELOPER_DIR: /Library/Developer/CommandLineTools` を足すことを検討する（PR の後に分かる）。
