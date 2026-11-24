@@ -232,6 +232,39 @@ class GuardXlideTest(unittest.TestCase):
         self.assertIn("(vba_project)", json.loads(gx._output(*detail))["hookSpecificOutput"]
                       ["permissionDecisionReason"])
 
+    def test_malformed_pass_result_denied(self):
+        path = self.consented()
+        for check in ({"status": "pass", "failures": [], "warnings": ["not-a-code"]},
+                      {"status": "pass", "failures": [], "warnings": "vba_project"},
+                      {"status": "pass", "failures": [], "warnings": [5]},
+                      {"status": "pass", "failures": ["xml_dtd"], "warnings": []},
+                      {"status": "pass", "warnings": []},
+                      {"status": "pass", "failures": []}):
+            self.checker.return_value = check
+            self.assertDenied(call(path), "check_error")
+
+    def test_file_changed_during_check_denied(self):
+        path = self.consented()
+
+        def change(real, *args, **kwargs):
+            write_workbook(real, dict(minimal_parts(), **{"xl/extra.xml": b"<a/>"}))
+            return dict(PASS)
+
+        self.checker.side_effect = change
+        self.assertDenied(call(path), "check_error")
+
+    def test_type_confusion_denied(self):
+        path = self.consented()
+        self.assertDenied(call(path, agent=[gx.ANALYST_AGENT_TYPE]), "wrong_caller")
+        for session in (None, 5, ["s"], ""):
+            data = call(path, session=session)
+            self.assertEqual(gx.decide(data)[0], "deny")
+        data = call(path)
+        del data["session_id"]
+        self.assertEqual(gx.decide(data)[0], "deny")
+        for key in ("filePath", "FILE_PATH"):
+            self.assertDenied(call(path, extra={key: path}), "unexpected_path_argument")
+
     def test_ack_for_other_warnings_denied(self):
         path = self.consented()
         self.ack(path, ["external_link"])
@@ -346,6 +379,25 @@ class GuardXlideTest(unittest.TestCase):
         self.assertEqual(body["permissionDecision"], "deny")
         self.assertIn("workbook-intake: internal_error", body["permissionDecisionReason"])
 
+    def test_wrapper_denies_when_python_prints_nothing(self):
+        env = {"HOME": self.home, "PATH": "/usr/bin:/bin"}
+        with tempfile.TemporaryDirectory() as tmp:
+            here = os.path.join(tmp, "hooks")
+            os.mkdir(here)
+            with open(ROOT / "hooks" / "guard-xlide.sh", "rb") as f:
+                script = f.read()
+            with open(os.path.join(here, "guard-xlide.sh"), "wb") as f:
+                f.write(script)
+            with open(os.path.join(here, "guard_xlide.py"), "w") as f:
+                f.write("pass\n")
+            r = subprocess.run(["/bin/bash", os.path.join(here, "guard-xlide.sh")],
+                               input=b"{}", env=env, stdout=subprocess.PIPE,
+                               stderr=subprocess.PIPE, timeout=60)
+        self.assertEqual(r.returncode, 0, r.stderr)
+        body = json.loads(r.stdout.decode())["hookSpecificOutput"]
+        self.assertEqual(body["permissionDecision"], "deny")
+        self.assertIn("workbook-intake: internal_error", body["permissionDecisionReason"])
+
     def test_reason_has_no_file_derived_strings(self):
         name = "%s.xlsx" % MARKER
         path = self.book(name)
@@ -384,10 +436,13 @@ class ManifestTest(unittest.TestCase):
 
     def test_allowlist_format(self):
         tools = gx.load_allowlist()
-        self.assertEqual(len(tools), 20)
-        self.assertEqual(tools["xlide_doctor"], "nofile")
-        self.assertEqual(tools["xlide_read_cells"], "file")
-        self.assertEqual(sorted(set(tools.values())), ["file", "nofile"])
+        expected = dict.fromkeys((
+            "project_info", "validate_project", "list_modules", "read_module",
+            "list_procedures", "search_modules", "analyze", "list_references", "list_forms",
+            "read_form", "list_queries", "read_query", "list_sheets", "read_cells",
+            "evaluate_formula", "list_shapes", "check_cells", "page_setup"), "file")
+        expected.update({"doctor": "nofile", "rules": "nofile"})
+        self.assertEqual(tools, {"xlide_" + k: v for k, v in expected.items()})
 
     def test_allowlist_reviewed_for_pinned_version(self):
         first = (ROOT / "hooks" / "allowed-tools.txt").read_text().splitlines()[0]

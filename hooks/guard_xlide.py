@@ -35,6 +35,10 @@ def _check_reason(check):
     """Map a checker result to a (reason, detail codes) pair, or None if it passed."""
     status = check.get("status") if isinstance(check, dict) else None
     if status == "pass":
+        warnings = check.get("warnings")
+        if check.get("failures") != [] or not isinstance(warnings, list) \
+                or not all(isinstance(w, str) and w in ic.WARNING_CODES for w in warnings):
+            return "check_error", []
         return None
     if status == "fail":
         codes = [c for c in check.get("failures", []) if c in ic.FAILURE_CODES]
@@ -60,7 +64,9 @@ def _decide_file(session_id, file_path):
     bad = _check_reason(check)
     if bad is not None:
         return "deny", bad[0], bad[1]
-    warnings = [w for w in check["warnings"] if w in ic.WARNING_CODES]
+    if ic.file_sha256(real) != digest:
+        return "deny", "check_error", []
+    warnings = check["warnings"]
     if warnings and not ic.has_warnings_ack(session_id, key, digest, warnings):
         return "deny", "warnings_not_acknowledged", warnings
     return "allow", "ok", []
