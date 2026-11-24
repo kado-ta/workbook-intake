@@ -1,10 +1,12 @@
 """Shared helpers for the workbook-intake hooks (standard library only, Python 3.9)."""
+import hashlib
 import json
 import os
 import selectors
 import subprocess
 import sys
 import time
+import unicodedata
 
 PLUGIN_ROOT = os.path.dirname(os.path.dirname(os.path.realpath(__file__)))
 CHECK_TIMEOUT_SECONDS = 20
@@ -160,3 +162,186 @@ def _run_bounded(cmd, timeout):
     if outcome != "ok":
         return outcome, None, b""
     return "ok", proc.returncode, b"".join(chunks)
+
+
+# Fixed texts. The skill repeats them verbatim; tests keep the two in step.
+CONSENT_HEADER = "Input check"
+CONSENT_QUESTION_PREFIX = (
+    "workbook-intake: Before analysis, confirm that this file contains no personal or "
+    "confidential information. You use the results at your own risk.\n"
+    "解析の前に、このファイルに個人情報や機密情報が含まれていないことを確認してください。"
+    "結果は自己責任で使ってください。\n"
+    "File / ファイル: "
+)
+CONFIRM_LABEL = "Confirmed / 確認した"
+CONFIRM_DESCRIPTION = (
+    "I confirmed the input contains no personal or confidential information. "
+    "/ 入力に個人情報や機密情報が含まれていないことを確認した。"
+)
+CANCEL_LABEL = "Cancel / やめる"
+CANCEL_DESCRIPTION = "Do not analyze this file. / このファイルは解析しない。"
+
+WARNINGS_HEADER = "Warnings"
+WARNINGS_QUESTION_PREFIX = (
+    "workbook-intake: The check reported warnings for this file. Continue the analysis?\n"
+    "このファイルの検査で警告が出ました。解析を続けますか。\n"
+    "File / ファイル: "
+)
+WARNINGS_LIST_PREFIX = "\nWarnings / 警告: "
+CONTINUE_LABEL = "Continue / 続ける"
+CONTINUE_DESCRIPTION = "I reviewed the warnings and continue. / 警告を確かめたうえで続ける。"
+STOP_LABEL = "Stop / やめる"
+STOP_DESCRIPTION = "Do not analyze this file. / このファイルは解析しない。"
+
+
+def intake_dir():
+    """The intake folder, with "~" expanded (not resolved)."""
+    configured = os.environ.get("WORKBOOK_INTAKE_DIR")
+    if not configured:
+        configured = "~/workbook-intake"
+    return os.path.expanduser(configured)
+
+
+def resolve_in_intake(path):
+    """Return (realpath, "ok") for a usable file inside the intake folder, else (None, reason)."""
+    if not isinstance(path, str) or not path or "\0" in path:
+        return None, "bad_input"
+    if not os.path.isabs(path):
+        return None, "path_not_absolute"
+    folder = intake_dir()
+    if os.path.islink(folder) or not os.path.isdir(folder):
+        return None, "intake_dir_invalid"
+    try:
+        real = os.path.realpath(path)
+        root = os.path.realpath(folder)
+        if not real.startswith(root.rstrip(os.sep) + os.sep):
+            return None, "outside_intake"
+        if not os.path.isfile(real):
+            return None, "not_regular_file"
+        if not real.lower().endswith(SUPPORTED_EXTENSIONS):
+            return None, "unsupported_extension"
+        if os.path.getsize(real) > MAX_FILE_BYTES:
+            return None, "file_too_large"
+    except (OSError, ValueError):
+        return None, "not_regular_file"
+    return real, "ok"
+
+
+def file_key(real_path):
+    return unicodedata.normalize("NFC", real_path)
+
+
+def file_sha256(real_path):
+    digest = hashlib.sha256()
+    with open(real_path, "rb") as f:
+        for chunk in iter(lambda: f.read(1024 * 1024), b""):
+            digest.update(chunk)
+    return digest.hexdigest()
+
+
+def consent_question(path):
+    return CONSENT_QUESTION_PREFIX + path
+
+
+def _question(question, header, options):
+    return {
+        "question": question,
+        "header": header,
+        "options": [{"label": label, "description": desc} for label, desc in options],
+        "multiSelect": False,
+    }
+
+
+def expected_questions(path):
+    return [_question(consent_question(path), CONSENT_HEADER, (
+        (CONFIRM_LABEL, CONFIRM_DESCRIPTION), (CANCEL_LABEL, CANCEL_DESCRIPTION)))]
+
+
+def warnings_question(path, warnings):
+    return WARNINGS_QUESTION_PREFIX + path + WARNINGS_LIST_PREFIX + ", ".join(warnings)
+
+
+def expected_warnings_questions(path, warnings):
+    return [_question(warnings_question(path, warnings), WARNINGS_HEADER, (
+        (CONTINUE_LABEL, CONTINUE_DESCRIPTION), (STOP_LABEL, STOP_DESCRIPTION)))]
+
+
+def _store_file(session_id, create):
+    """Path of the session's record file, or None if the store is unavailable."""
+    data = os.environ.get("CLAUDE_PLUGIN_DATA")
+    if not data or not isinstance(session_id, str) or not session_id:
+        return None
+    directory = os.path.join(data, "consents")
+    if create:
+        try:
+            os.makedirs(directory, mode=0o700, exist_ok=True)
+        except OSError:
+            return None
+    name = hashlib.sha256(session_id.encode("utf-8", "surrogatepass")).hexdigest() + ".jsonl"
+    return os.path.join(directory, name)
+
+
+def _append(session_id, record):
+    path = _store_file(session_id, True)
+    if path is None:
+        return False
+    line = (json.dumps(record, ensure_ascii=True) + "\n").encode("ascii")
+    try:
+        fd = os.open(path, os.O_APPEND | os.O_CREAT | os.O_WRONLY, 0o600)
+        try:
+            os.write(fd, line)
+        finally:
+            os.close(fd)
+    except OSError:
+        return False
+    return True
+
+
+def _records(session_id):
+    path = _store_file(session_id, False)
+    if path is None:
+        return []
+    try:
+        with open(path, "rb") as f:
+            raw = f.read()
+    except OSError:
+        return []
+    records = []
+    for line in raw.split(b"\n"):
+        try:
+            rec = json.loads(line.decode("utf-8"))
+        except (ValueError, UnicodeDecodeError, RecursionError):
+            continue
+        if isinstance(rec, dict):
+            records.append(rec)
+    return records
+
+
+def record_consent(session_id, key, sha256, check):
+    return _append(session_id, {
+        "kind": "consent", "path": key, "sha256": sha256, "status": check["status"],
+        "failures": list(check["failures"]), "warnings": list(check["warnings"]),
+    })
+
+
+def find_consent(session_id, key, sha256):
+    found = None
+    for rec in _records(session_id):
+        if rec.get("kind") == "consent" and rec.get("path") == key \
+                and rec.get("sha256") == sha256:
+            found = rec
+    return found
+
+
+def record_warnings_ack(session_id, key, sha256, warnings):
+    return _append(session_id, {
+        "kind": "warnings_ack", "path": key, "sha256": sha256, "warnings": list(warnings),
+    })
+
+
+def has_warnings_ack(session_id, key, sha256, warnings):
+    for rec in _records(session_id):
+        if rec.get("kind") == "warnings_ack" and rec.get("path") == key \
+                and rec.get("sha256") == sha256 and rec.get("warnings") == list(warnings):
+            return True
+    return False
