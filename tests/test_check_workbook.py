@@ -8,6 +8,7 @@ import struct
 import tempfile
 import zipfile
 import unittest
+import warnings
 from pathlib import Path
 from unittest import mock
 
@@ -305,7 +306,7 @@ class CheckWorkbookTest(unittest.TestCase):
         self.assertIn("external_relationship", self.warn(parts)["warnings"])
 
     def test_power_query_warns(self):
-        data = "﻿<DataMashup xmlns='x'>AAAA</DataMashup>".encode("utf-16-le")
+        data = "\ufeff<DataMashup xmlns='x'>AAAA</DataMashup>".encode("utf-16-le")
         r = self.warn(self.parts_with(**{"customXml__item1.xml": data}))
         self.assertIn("power_query", r["warnings"])
 
@@ -313,6 +314,69 @@ class CheckWorkbookTest(unittest.TestCase):
         r = self.warn(self.parts_with(**{"xl__embeddings__x.bin": b"\x00", "xl__activeX__activeX1.xml": b"<ocx/>"}))
         self.assertIn("embedded_object", r["warnings"])
         self.assertIn("activex", r["warnings"])
+
+    def test_case_only_duplicate_part_names_fail(self):
+        parts = minimal_parts()
+        parts["xl/workbook.xml"] = self.sheets_xml("veryHidden")
+        parts["xl/Workbook.xml"] = self.sheets_xml("visible")
+        self.assertEqual(self.failures(self.build(parts)), ["unsafe_part_name"])
+
+    def test_exact_duplicate_part_names_fail(self):
+        p = self.path()
+        with warnings.catch_warnings():
+            warnings.simplefilter("ignore")
+            with zipfile.ZipFile(p, "w") as z:
+                for name, data in minimal_parts().items():
+                    z.writestr(name, data)
+                z.writestr("xl/workbook.xml", self.sheets_xml("visible"))
+        self.assertEqual(self.failures(p), ["unsafe_part_name"])
+
+    def test_renamed_vba_project_with_relationship_warns(self):
+        parts = minimal_parts()
+        parts["xl/foo.bin"] = b"\x00"
+        parts["xl/_rels/workbook.xml.rels"] = parts["xl/_rels/workbook.xml.rels"].replace(
+            b"</Relationships>",
+            b'<Relationship Id="rId8" Type="http://schemas.microsoft.com/office/2006/relationships/vbaProject" Target="foo.bin"/></Relationships>',
+        )
+        self.assertIn("vba_project", self.warn(parts)["warnings"])
+
+    def test_renamed_external_link_with_relationship_warns(self):
+        parts = minimal_parts()
+        parts["xl/other.xml"] = b"<externalLink/>"
+        parts["xl/_rels/workbook.xml.rels"] = parts["xl/_rels/workbook.xml.rels"].replace(
+            b"</Relationships>",
+            b'<Relationship Id="rId8" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/externalLink" Target="other.xml"/></Relationships>',
+        )
+        self.assertIn("external_link", self.warn(parts)["warnings"])
+
+    def test_relationship_types_map_to_warnings(self):
+        base = "http://schemas.openxmlformats.org/officeDocument/2006/relationships/"
+        for suffix, code in (("oleObject", "embedded_object"), ("package", "embedded_object"),
+                             ("control", "activex"), ("connections", "data_connection")):
+            with self.subTest(suffix=suffix):
+                parts = minimal_parts()
+                parts["xl/_rels/workbook.xml.rels"] = parts["xl/_rels/workbook.xml.rels"].replace(
+                    b"</Relationships>",
+                    ('<Relationship Id="rId8" Type="%s%s" Target="x.bin"/></Relationships>' % (base, suffix)).encode(),
+                )
+                self.assertIn(code, self.warn(parts)["warnings"])
+
+    def test_data_mashup_outside_custom_xml_warns(self):
+        r = self.warn(self.parts_with(**{"xl__misc__blob.bin": b"\x00DataMashup\x00"}))
+        self.assertIn("power_query", r["warnings"])
+
+    def test_whitespace_only_part_is_not_xml(self):
+        r = self.warn(self.parts_with(**{"xl__blank.bin": b" \n" * 100}))
+        self.assertEqual(r["warnings"], [])
+
+    def test_second_office_document_relationship_is_considered(self):
+        parts = minimal_parts()
+        parts["xl/book.xml"] = self.sheets_xml("veryHidden")
+        parts["_rels/.rels"] = parts["_rels/.rels"].replace(
+            b"</Relationships>",
+            b'<Relationship Id="rId2" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="xl/book.xml"/></Relationships>',
+        ).replace(b'Target="xl/workbook.xml"', b'Target="xl/gone.xml"')
+        self.assertIn("very_hidden_sheet", self.warn(parts)["warnings"])
 
     def test_hidden_and_very_hidden_sheets_warn(self):
         r = self.warn(self.parts_with(**{"xl__workbook.xml": self.sheets_xml("hidden", "veryHidden", "visible")}))
@@ -350,7 +414,7 @@ class CheckWorkbookTest(unittest.TestCase):
                 self.assertNotIn("very_hidden_sheet", r["warnings"])
 
     def test_invisible_characters_warn(self):
-        r = self.warn(self.sst_parts("a​b", "c‮d", "e\U000e0041f"))
+        r = self.warn(self.sst_parts("a\u200bb", "c\u202ed", "e\U000e0041f"))
         self.assertIn("invisible_characters", r["warnings"])
         self.assertEqual(r["counts"]["invisible_characters"], 3)
 
@@ -360,7 +424,7 @@ class CheckWorkbookTest(unittest.TestCase):
         self.assertEqual(r["counts"]["instruction_like_text"], 2)
 
     def test_instruction_text_split_by_invisible_characters_warns(self):
-        r = self.warn(self.sst_parts("ig​nore prev​ious"))
+        r = self.warn(self.sst_parts("ig\u200bnore prev\u200bious"))
         self.assertIn("instruction_like_text", r["warnings"])
 
     def test_instruction_text_in_renamed_part_warns(self):

@@ -128,36 +128,92 @@ def _local(tag):
     return tag.rsplit("}", 1)[-1] if isinstance(tag, str) else ""
 
 
+_WS_BYTES = b" \t\r\n\x00\xef\xbb\xbf\xff\xfe"
+_MASHUP_NEEDLES = tuple(
+    "DataMashup".encode(enc) for enc in ("utf-8", "utf-16-le", "utf-16-be")
+)
+_MASHUP_TAIL = max(len(n) for n in _MASHUP_NEEDLES) - 1
+# Relationship Type suffix -> warning code. Renaming a part does not change this.
+_REL_TYPE_WARNINGS = (
+    ("/vbaProject", "vba_project"),
+    ("/externalLink", "external_link"),
+    ("/oleObject", "embedded_object"),
+    ("/package", "embedded_object"),
+    ("/control", "activex"),
+    ("/connections", "data_connection"),
+)
+_MAX_OFFICE_TARGETS = 100
+
+
 def _looks_like_xml(head):
-    """True when, after an optional BOM and whitespace, the first character is "<"."""
+    """True/False once decidable; None while the bytes are only BOM and whitespace.
+
+    XML means: after an optional BOM and whitespace, the first character is "<"
+    in UTF-8, UTF-16LE or UTF-16BE.
+    """
+    if not head.strip(_WS_BYTES):
+        return None
     candidates = [(head, enc) for enc in ("utf-8", "utf-16-le", "utf-16-be")]
     for bom, enc in _BOMS:
         if head.startswith(bom):
             candidates.append((head[len(bom):], enc))
-    for body, enc in candidates:
-        text = body.decode(enc, "ignore").lstrip()
-        if text.startswith("<"):
-            return True
-        if not text and body:
-            return True  # nothing but whitespace in the first chunk
-    return False
+    return any(
+        body.decode(enc, "ignore").lstrip(" \t\r\n﻿").startswith("<")
+        for body, enc in candidates
+    )
 
 
-def _load(zf, info):
-    """Parse one part. Returns (status, root); status is skip, unchecked or ok."""
-    if info.filename.endswith("/") or info.file_size == 0:
-        return "skip", None
-    try:
-        with zf.open(info) as f:
-            head = f.read(READ_CHUNK)
-            if not _looks_like_xml(head):
-                return "skip", None
-            data = head + f.read(MAX_PARSE_BYTES + 1 - len(head))
-        if len(data) > MAX_PARSE_BYTES:
-            return "unchecked", None
-        return "ok", ET.fromstring(data)
-    except Exception:
-        return "unchecked", None
+class _Collector(object):
+    """Event target for the XML parser: keeps counters, never a tree."""
+
+    def __init__(self, counts, is_rels, is_root_rels):
+        self.counts = counts
+        self.is_rels = is_rels
+        self.is_root_rels = is_root_rels
+        self.office_targets = []
+        self.hidden = 0
+        self.very_hidden = 0
+        self._text = []
+
+    def _flush(self):
+        if self._text:
+            _count_string("".join(self._text), self.counts)
+            self._text = []
+
+    def start(self, tag, attrib):
+        self._flush()
+        for v in attrib.values():
+            _count_string(v, self.counts)
+        name = _local(tag)
+        if name == "sheet":
+            state = attrib.get("state")
+            if state == "hidden":
+                self.hidden += 1
+            elif state == "veryHidden":
+                self.very_hidden += 1
+        elif name == "Relationship" and self.is_rels:
+            rtype = attrib.get("Type", "")
+            external = attrib.get("TargetMode", "").lower() == "external"
+            if external:
+                self.counts["external_relationship"] += 1
+            for suffix, code in _REL_TYPE_WARNINGS:
+                if rtype.endswith(suffix):
+                    self.counts[code] += 1
+            if (
+                self.is_root_rels and not external
+                and rtype.endswith(_REL_OFFICE_DOCUMENT)
+                and len(self.office_targets) < _MAX_OFFICE_TARGETS
+            ):
+                self.office_targets.append(attrib.get("Target", ""))
+
+    def end(self, tag):
+        self._flush()
+
+    def data(self, text):
+        self._text.append(text)
+
+    def close(self):
+        self._flush()
 
 
 def _count_string(value, counts):
@@ -172,92 +228,116 @@ def _count_string(value, counts):
         counts["instruction_like_text"] += 1
 
 
-def _count_strings(root, counts):
-    for el in root.iter():
-        _count_string(el.text, counts)
-        _count_string(el.tail, counts)
-        for v in el.attrib.values():
-            _count_string(v, counts)
+def _scan_part(zf, info, counts, parse_xml, is_rels, is_root_rels):
+    """Stream one part once: DataMashup marker scan plus, when asked, an XML pass.
+
+    Returns the collector (or None when the part was not parsed as XML).
+    """
+    collector = None
+    parser = None
+    pending = b""
+    deciding = parse_xml
+    total = 0
+    mashup = False
+    unchecked = False
+    tail = b""
+    try:
+        with zf.open(info) as f:
+            while True:
+                chunk = f.read(READ_CHUNK)
+                if not chunk:
+                    break
+                total += len(chunk)
+                window = tail + chunk
+                if not mashup and any(n in window for n in _MASHUP_NEEDLES):
+                    mashup = True
+                tail = window[-_MASHUP_TAIL:]
+                if parser is None and not deciding:
+                    continue
+                if total > MAX_PARSE_BYTES:
+                    if parser is not None or (deciding and _looks_like_xml(pending + chunk)):
+                        unchecked = True
+                    parser = None
+                    deciding = False
+                    pending = b""
+                    continue
+                if deciding:
+                    pending += chunk
+                    verdict = _looks_like_xml(pending)
+                    if verdict is None:
+                        continue
+                    deciding = False
+                    if not verdict:
+                        pending = b""
+                        continue
+                    collector = _Collector(counts, is_rels, is_root_rels)
+                    parser = ET.XMLParser(target=collector)
+                    chunk, pending = pending, b""
+                if parser is not None:
+                    parser.feed(chunk)
+            if parser is not None:
+                parser.close()
+    except Exception:
+        unchecked = True
+    if mashup:
+        counts["power_query"] += 1
+    if unchecked:
+        counts["strings_not_checked"] += 1
+    return collector
 
 
-def _workbook_part(zf, by_lower, root_rels):
-    """Resolve the officeDocument target from _rels/.rels, inside the archive only."""
-    if root_rels is None:
+def _resolve(by_lower, target):
+    """Resolve a root-relationship target inside the archive ("/" = package root)."""
+    target = posixpath.normpath(target.lstrip("/"))
+    if target in ("", ".", "..") or target.startswith("../"):
         return None
-    for rel in root_rels.iter():
-        if _local(rel.tag) != "Relationship":
-            continue
-        if not rel.get("Type", "").endswith(_REL_OFFICE_DOCUMENT):
-            continue
-        if rel.get("TargetMode", "").lower() == "external":
-            continue
-        target = rel.get("Target", "")
-        target = posixpath.normpath(target.lstrip("/"))
-        if target in ("", ".") or target == ".." or target.startswith("../"):
-            continue
-        return by_lower.get(target.lower())
-    return None
+    return by_lower.get(target.lower())
 
 
 def _scan_warnings(zf, infos, is_xlsb):
+    # Count units: file-name and relationship warnings count parts/relationships
+    # (one object found through both a name and a relationship counts twice);
+    # string warnings count values (text runs and attribute values); the sheet
+    # warnings count <sheet> elements; strings_not_checked counts parts.
     counts = dict.fromkeys(WARNING_CODES, 0)
     by_lower = {i.filename.lower(): i for i in infos}
-    root_rels = None
+    sheets = {}
+    office_targets = []
     for info in infos:
         name = info.filename.lower()
-        base = name.rsplit("/", 1)[-1]
+        if name.endswith("/"):
+            continue
         if name.endswith("vbaproject.bin"):
             counts["vba_project"] += 1
         if "externallinks/" in name:
             counts["external_link"] += 1
-        if base == "connections.xml":
+        if name.rsplit("/", 1)[-1] == "connections.xml":
             counts["data_connection"] += 1
         if "embeddings/" in name:
             counts["embedded_object"] += 1
         if "activex/" in name:
             counts["activex"] += 1
-        if name.startswith("customxml/"):
-            # Power Query keeps its mashup in customXml; the marker may be UTF-16.
-            try:
-                with zf.open(info) as f:
-                    data = f.read(MAX_PARSE_BYTES + 1)
-            except ZIP_ERRORS + (RuntimeError,):
-                data = b""
-            if len(data) > MAX_PARSE_BYTES:
-                counts["strings_not_checked"] += 1
-            elif any(m in data for m in (b"DataMashup", "DataMashup".encode("utf-16-le"), "DataMashup".encode("utf-16-be"))):
-                counts["power_query"] += 1
-            continue
-        status, root = _load(zf, info)
-        if status == "unchecked":
-            counts["strings_not_checked"] += 1
-            continue
-        if status == "skip":
-            continue
-        if info.filename == "_rels/.rels":
-            root_rels = root
-        if name.endswith(".rels") and any(
-            _local(e.tag) == "Relationship" and e.get("TargetMode", "").lower() == "external"
-            for e in root.iter()
-        ):
-            counts["external_relationship"] += 1
-        if not is_xlsb:
-            _count_strings(root, counts)
+        # customXml/ is never parsed: it holds data, not workbook strings.
+        parse_xml = not is_xlsb and not name.startswith("customxml/")
+        collector = _scan_part(
+            zf, info, counts, parse_xml, name.endswith(".rels"), info.filename == "_rels/.rels"
+        )
+        if collector is not None:
+            sheets[name] = (collector.hidden, collector.very_hidden)
+            office_targets.extend(collector.office_targets)
     if is_xlsb:
         # Binary parts are not read, so neither strings nor sheet states are known.
         counts["strings_not_checked"] += 1
     else:
-        info = _workbook_part(zf, by_lower, root_rels)
-        if info is not None:
-            status, root = _load(zf, info)
-            if status == "ok":
-                for el in root.iter():
-                    if _local(el.tag) == "sheet":
-                        state = el.get("state")
-                        if state == "hidden":
-                            counts["hidden_sheet"] += 1
-                        elif state == "veryHidden":
-                            counts["very_hidden_sheet"] += 1
+        seen = set()
+        for target in office_targets:
+            info = _resolve(by_lower, target)
+            if info is None or info.filename in seen or info.filename.lower() not in sheets:
+                continue
+            seen.add(info.filename)
+            hidden, very_hidden = sheets[info.filename.lower()]
+            counts["hidden_sheet"] += hidden
+            counts["very_hidden_sheet"] += very_hidden
     warnings = [c for c in WARNING_CODES if counts[c]]
     return warnings, {c: counts[c] for c in warnings}
 
@@ -283,6 +363,9 @@ def check(path):
         if any(i.compress_type not in ALLOWED_METHODS for i in infos):
             return _result(["not_zip"])
         if any(_unsafe_name(i.filename) for i in infos):
+            return _result(["unsafe_part_name"])
+        # OPC part names are unique when compared case-insensitively.
+        if len({i.filename.lower() for i in infos}) != len(infos):
             return _result(["unsafe_part_name"])
         if any(i.flag_bits & 0x1 for i in infos):
             return _result(["encrypted"])
