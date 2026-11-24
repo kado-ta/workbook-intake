@@ -1,8 +1,12 @@
+import contextlib
+import io
 import json
 import os
 import subprocess
 import sys
+import struct
 import tempfile
+import zipfile
 import unittest
 from pathlib import Path
 from unittest import mock
@@ -157,13 +161,98 @@ class CheckWorkbookTest(unittest.TestCase):
         parts = minimal_parts()
         parts["xl/workbook.xml"] = parts["xl/workbook.xml"].replace(b"Sheet1", marker.encode() + b"sheet")
         parts["xl/worksheets/" + marker + "part.xml"] = b"<!DOCTYPE x><x/>"
-        parts["../" + marker + "evil.xml"] = b"<x/>"
         p = write_workbook(self.path(marker + "file.xlsx"), parts)
         proc = subprocess.run([sys.executable, "-B", SCRIPT, p], capture_output=True, text=True)
         self.assertEqual(proc.returncode, 1)
+        self.assertEqual(json.loads(proc.stdout)["failures"], ["xml_dtd"])
         self.assertNotIn(marker, proc.stdout + proc.stderr)
         self.assertEqual(proc.stdout.count("\n"), 1)
 
+    def patch_zip(self, path, edit):
+        with open(path, "rb") as f:
+            data = bytearray(f.read())
+        edit(data)
+        with open(path, "wb") as f:
+            f.write(data)
+
+    def each_entry(self, data, sig, fn):
+        i = data.find(sig)
+        while i != -1:
+            fn(data, i)
+            i = data.find(sig, i + 4)
+
+    def test_corrupt_deflate_data_is_not_zip(self):
+        p = self.build()
+        with zipfile.ZipFile(p) as z:
+            info = z.getinfo("xl/worksheets/sheet1.xml")
+        def edit(data):
+            start = info.header_offset + 30 + len(info.filename) + 0
+            data[start:start + 8] = b"\xff" * 8
+        self.patch_zip(p, edit)
+        self.assertEqual(self.failures(p), ["not_zip"])
+
+    def test_unsupported_compression_methods_are_not_zip(self):
+        for method in (12, 14):
+            with self.subTest(method=method):
+                p = self.build()
+                def edit(data, method=method):
+                    self.each_entry(data, b"PK\x01\x02", lambda d, i: d.__setitem__(i + 10, method))
+                self.patch_zip(p, edit)
+                self.assertEqual(self.failures(p), ["not_zip"])
+
+    def test_invalid_utf8_name_is_not_zip(self):
+        p = self.with_part("xl/worksheets/a\u00e9.xml", b"<a/>")
+        self.patch_zip(p, lambda d: d.__setitem__(slice(0, len(d)), bytes(d).replace(b"\xc3\xa9", b"\xc3\xff")))
+        self.assertEqual(self.failures(p), ["not_zip"])
+
+    def test_inflated_declared_compress_size_is_not_zip(self):
+        p = self.build()
+        def edit(data):
+            self.each_entry(data, b"PK\x01\x02", lambda d, i: d.__setitem__(slice(i + 20, i + 24), struct.pack("<I", 0x7FFFFFFF)))
+        self.patch_zip(p, edit)
+        self.assertEqual(self.failures(p), ["not_zip"])
+
+    def test_doctype_in_utf16be_part_fails(self):
+        p = self.with_part("xl/worksheets/sheet1.xml", "\ufeff<!DOCTYPE x><x/>".encode("utf-16-be"))
+        self.assertEqual(self.failures(p), ["xml_dtd"])
+
+    def test_entity_in_utf16_part_fails(self):
+        for enc in ("utf-16-le", "utf-16-be"):
+            with self.subTest(enc=enc):
+                p = self.with_part("xl/worksheets/sheet1.xml", "<x><!ENTITY a 'b'></x>".encode(enc))
+                self.assertEqual(self.failures(p), ["xml_dtd"])
+
+    def test_doctype_in_part_with_non_xml_name_fails(self):
+        p = self.with_part("xl/worksheets/sheet1.bin", b"<!DOCTYPE x><x/>")
+        self.assertEqual(self.failures(p), ["xml_dtd"])
+
+    def run_main(self, path):
+        buf = io.StringIO()
+        with contextlib.redirect_stdout(buf):
+            rc = check_workbook.main([path])
+        return rc, buf.getvalue()
+
+    def test_non_regular_target_is_unreadable(self):
+        d = self.path("dir.xlsx")
+        os.mkdir(d)
+        fifo = self.path("fifo.xlsx")
+        os.mkfifo(fifo)
+        for target in (d, fifo):
+            with self.subTest(target=os.path.basename(target)):
+                rc, out = self.run_main(target)
+                self.assertEqual(rc, 2)
+                self.assertEqual(json.loads(out)["failures"], ["unreadable"])
+
+    def test_main_last_resort_hides_exception_text(self):
+        p = self.build()
+        with mock.patch.object(check_workbook, "check", side_effect=RuntimeError("SECRETTEXT")):
+            rc, out = self.run_main(p)
+        self.assertEqual(rc, 2)
+        self.assertEqual(
+            json.loads(out),
+            {"result": "error", "failures": ["unreadable"], "warnings": [], "counts": {}},
+        )
+        self.assertNotIn("SECRETTEXT", out)
 
 if __name__ == "__main__":
     unittest.main()
