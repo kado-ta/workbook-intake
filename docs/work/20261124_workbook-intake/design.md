@@ -96,7 +96,7 @@ Claude Code のプラグイン（公式ドキュメント）:
 - プラグインのサブエージェントは、`hooks`・`mcpServers`・`permissionMode` を使えない。`tools` は使えるツールの許可リスト。matcher で見るサブエージェントの名前は、`<プラグイン名>:<エージェント名>` の形。
 - プラグインの MCP サーバーのツール名は、`mcp__plugin_<プラグイン名>_<サーバー名>__<ツール名>` になる。サーバーの名前だけを書いた matcher（`mcp__xlide__.*`）は、プラグインのサーバーには当たらない。
 - 同じ MCP サーバーが複数の場所で定義されているとき、使われるのは 1 つだけ。優先順位は local → project → user → プラグイン → claude.ai のコネクタ。プラグインは、上位の有効なサーバーと同じ URL か同じコマンドを指すと、重複として扱われる。
-- マーケットプレイスは `claude plugin marketplace add <owner>/<repo>` で足す。settings の `extraKnownMarketplaces` では、github のソースを `ref` と `sha` で固定できる。自分で作ったマーケットプレイスは、既定で自動更新されない。
+- マーケットプレイスは `claude plugin marketplace add <owner>/<repo>` で足す。settings の `extraKnownMarketplaces` では、github のソースを、`ref` に完全なコミットの SHA を書いて固定できる（2026-11-25 訂正: `sha` という項目はない。`ref` に SHA を書く形は Claude Code 2.1.324 以降。公式ドキュメントで確かめた）。自分で作ったマーケットプレイスは、既定で自動更新されない。
 - 入れたプラグインは `~/.claude/plugins/cache/<marketplace>/<plugin>/<version>/` にコピーされる。dotfiles の環境では、この場所は sandbox から書けない。
 
 Claude Code でのファイルの読み込み（2026-11-25 に dotfiles の環境で確かめた）:
