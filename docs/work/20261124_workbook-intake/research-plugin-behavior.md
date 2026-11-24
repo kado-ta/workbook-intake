@@ -1,5 +1,5 @@
 ---
-status: in-progress
+status: done
 created: 2026-11-25
 ---
 
@@ -17,7 +17,15 @@ created: 2026-11-25
 
 ## 要約
 
-（Step 7 で書く）
+設計の「実装の最初に確かめること」と、計画で足した項目（A〜D）を、probe で確かめた（2026-11-25、Claude Code 2.1.331、macOS）。止める判断の対象の項目（1・3・4・8・9・10・11・13・15・A・B）は、すべて設計の想定どおりだった。設計を変えずに、Task 2 以降に進む。
+
+後の Task の書き方に効く事実:
+
+- サブエージェントからの呼び出しの `agent_type` は `workbook-intake:excel-analyst`。メインの会話からの呼び出しには `agent_type` がない。
+- AskUserQuestion の答えは、PostToolUse の `tool_response.answers` に入る。モデルが入力の `answers` に値を入れても、確認の画面が出て、人が選んだ答えに置き換わった。
+- `.mcp.json` の `${WORKBOOK_INTAKE_DIR:-~/workbook-intake}` は展開される。受け取り用フォルダを環境変数で変えられる。
+- 受け取り用フォルダを Bash から読めなくするには、`sandbox.filesystem.denyRead` と `permissions.deny` の `Read(...)` の両方が要る（`denyRead` だけでは Read ツールが読めた）。どちらの設定でも、xlide は読めた。
+- ローカルのディレクトリをマーケットプレイスにすると、プラグインはその場所から動く（キャッシュに写されない）。
 
 <a name="inventory"></a>
 
@@ -133,13 +141,54 @@ xlide_rules nofile
 
 ## 結果
 
-（Step 7 で書く）
+証拠は、probe のログ（`tmp/probe/`。コミットしない）と、probe のセッションの記録（`~/.claude/projects/` の下。コミットしない）。1 回目のログは、やり直しの写しで上書きされたので、1 回目の結果は記録から読んだ。人が使ったブックの場所は、1 回目と、3 回目・4 回目のはじめは受け取り用フォルダの外だった。その結果は項目 12・13 には使わず、最後のやり直し（受け取り用フォルダの中のブック）で確かめた。
+
+| # | 確かめること | 設計の想定 | 結果 | 判定 |
+| --- | --- | --- | --- | --- |
+| 1 | サブエージェントから呼んだときの `agent_type` | `workbook-intake:excel-analyst` | `workbook-intake:excel-analyst`。`agent_id` も入る。メインの会話からの呼び出しには、どちらもない | 想定どおり |
+| 2 | プロジェクトの `.mcp.json` に同じコマンドの xlide があるとき | 外されうる。`disabledMcpjsonServers` で戻る | `/mcp` にはプロジェクトの `xlide` だけが出て、プラグインの xlide は外された。`disabledMcpjsonServers: ["xlide"]` を `--settings` で足すと、`plugin:workbook-intake:xlide`（65 ツール）に戻った | 想定どおり |
+| 3 | `tool_input` に `file_path` がそのまま入るか | 入る | `{"file_path": "<絶対パス>"}` がそのまま入った | 想定どおり |
+| 4 | allow で確認が出ないか。deny で止まり、理由が出るか | そのとおり | allow のツールは実行された（セッションは auto mode なので、確認が出ないことの確かめにはならない）。deny は `PreToolUse:<ツール名> hook error: <理由>` としてサブエージェントに返り、実行されなかった | 想定どおり（確認の有無は未確認） |
+| 5 | 最も長いツール名で呼べるか | 呼べる | 66 文字の `mcp__plugin_workbook-intake_xlide__xlide_manage_conditional_format` が見え、フックに完全な名前で届いた（probe が拒否したので、実行はしていない） | 想定どおり |
+| 6 | `${WORKBOOK_INTAKE_DIR:-~/workbook-intake}` と `~` の展開 | 未定 | `xlide_doctor` の `workspace_roots` がホームの下の `workbook-intake`。`${VAR:-default}` は Claude Code が展開し、`~` は xlide が展開した | 展開される |
+| 7 | マーケットプレイスの `source: "./"` | 入れられる | `--scope local` で入れられた。`CLAUDE_PLUGIN_ROOT` は、キャッシュではなく、マーケットプレイスのディレクトリそのもの（`<repo>/dev/probe/workbook-intake`） | 想定どおり（ローカルのディレクトリでは写されない） |
+| 8 | フックから `sandbox-exec` を使えるか | 使える | すべての呼び出しで終了コード 0 | 想定どおり |
+| 9 | PostToolUse に質問の文と答えが入るか | 入る | `tool_input` と `tool_response` の両方に `questions` と `answers`（`{質問の文: 選んだラベル}`）が入る | 想定どおり |
+| 10 | サブエージェントとメインの会話の `session_id` | 同じ | 同じ | 想定どおり |
+| 11 | `${CLAUDE_PLUGIN_DATA}` に書けないか | 書けない | 場所は `~/.claude/plugins/data/workbook-intake-workbook-intake-probe`。Bash は `Operation not permitted`、Write ツールは `blockWritesOutsideWorkingDirectories` で止まった（dotfiles の環境） | 想定どおり |
+| 12 | 読み込みを拒否する settings の書き方 | 未定 | `Read(~/workbook-intake/**)` だけ: Bash の `ls ~/workbook-intake` は権限の判定で拒否され、Read ツールも拒否された。`denyRead: ["~/workbook-intake"]` だけ: Bash の `ls` は sandbox で `Operation not permitted` になり、Read ツールは読めた | 両方が要る |
+| 13 | その設定のもとでの Bash・メタデータ・xlide | `ls`・`unzip` は失敗、xlide は読める | `denyRead` のもとで、`ls -l <book>` は `Operation not permitted`、`unzip -p <book>` は終了コード 9。`test -d` は、どちらの設定でも見えた（メタデータは見える）。xlide の `xlide_list_sheets` は成功した | 想定どおり |
+| 14 | `dangerouslyDisableSandbox` を使えなくする書き方 | 未定 | `allowUnsandboxedCommands: false` のもとで、`dangerouslyDisableSandbox` 付きの `ls` も sandbox の中で `Operation not permitted` になった。ただし、使った人の環境では、ふだんの設定でも既に無効だったので、この設定の効果とは言い切れない | ドキュメントのとおり扱う |
+| 15 | PostToolUse の `additionalContext` が届くか | 届く | `PostToolUse:AskUserQuestion hook additional context: probe-additional-context 192413-8276` と、ログと同じ値で引用された | 想定どおり |
+| A | モデルが `answers` を入れて呼んだとき | 確認が出る。偽れない | モデルは `{"テスト": "はい"}` を入れたが、確認の画面が出て、人が選んだ「いいえ」が `tool_response.answers` に入った | 想定どおり |
+| B | 時間切れと終了コード 1 が `onFailure: "block"` で止まるか | 止まる | 時間切れは `…: timed out; blocking because onFailure is "block"`、終了コード 1 は `…: failed; blocking because onFailure is "block"`。どちらも実行されなかった | 想定どおり |
+| C | SKILL.md の `${CLAUDE_PLUGIN_ROOT}` | 置き換わる | 本文の `${CLAUDE_PLUGIN_ROOT}` は、プラグインの場所に置き換わった。Bash の環境に `CLAUDE_PLUGIN_ROOT` はない | 想定どおり |
+| D | `engines` を宣言できるか | 未定 | `{"claude-code": ">=2.1.295"}` を書いても validate は通り、プラグインは読み込まれた | 宣言できる |
+
+ほかに分かったこと:
+
+- PreToolUse の入力には、`mcp_server: {"name": "plugin:workbook-intake:xlide", "source": "plugin"}` も入る。
+- `XLIDE_MCP_ALLOW_OUTSIDE_ROOTS=1` を付けて起動しても、`.mcp.json` の `env` で `0` にしたので、`paths_outside_roots_allowed` は `false` だった（値を引き継いだかは区別できないが、どちらでも閉じる側になる）。
+- uvx は、xlide のために Python 3.15.2 を自分で用意した（初回は時間がかかり、通信が要る）。
+- 最後のセッションの Claude は、`unzip` が何も出さなかったとき、頼まれていない診断のコマンドを自分から続けて試した。拒否されたときに別の経路を探す動きは、実際にある。
 
 <a name="decisions"></a>
 
 ## 後の Task への決定
 
-（Step 8 で書く）
+- Task 2: `.mcp.json` のルートは `${WORKBOOK_INTAKE_DIR:-~/workbook-intake}`（項目 6）。`env` で `XLIDE_MCP_ALLOW_OUTSIDE_ROOTS` を `"0"` にする（台帳の判断）。`plugin.json` に `"engines": {"claude-code": ">=2.1.295"}` を書く（項目 D）。マーケットプレイスの `source` は `"./"`（項目 7）。
+- Task 6: `intake_dir()` は `WORKBOOK_INTAKE_DIR` を読み、なければ `~/workbook-intake`（項目 6）。`selected_answer` は `tool_response.answers[質問の文]` を読む（項目 9・A）。会話に返す文は `{"hookSpecificOutput": {"hookEventName": "PostToolUse", "additionalContext": "..."}}` で返す（項目 15）。
+- Task 7: `ANALYST_AGENT_TYPE = "workbook-intake:excel-analyst"`（項目 1）。許可リストは[許可リストの案](#allowlist)の 20。フックの command は `/bin/bash "${CLAUDE_PLUGIN_ROOT}/hooks/<名前>.sh"`、`onFailure: "block"`（項目 B）。追加の判定として、入力に `mcp_server` があれば、`name` が `plugin:workbook-intake:xlide` で `source` が `plugin` であることも求める（ツール名の接頭辞に加えた、念のための判定。台帳の判断）。
+- Task 8: スキルは `${CLAUDE_PLUGIN_ROOT}/scripts/doctor.sh` を本文に書いて動かす（項目 C）。サブエージェントは `xlide_doctor` で、`read_only: true`、ルートが受け取り用フォルダだけ、`paths_outside_roots_allowed: false` を確かめる。`doctor.sh` は `ls -A` の失敗で設定を見分けられる（項目 13。`test -d` は見えるので、見分けには使えない）。
+- Task 10（README）:
+  - 必須の設定は、`sandbox.filesystem.denyRead: ["~/workbook-intake"]` と `permissions.deny: ["Read(~/workbook-intake/**)"]` の両方（項目 12）。
+  - 推奨は、`sandbox.allowUnsandboxedCommands: false`、`sandbox.failIfUnavailable: true`、受け取り用フォルダの書き込みの拒否。
+  - プロジェクトに同じコマンドの xlide があるときは、`disabledMcpjsonServers: ["xlide"]`（項目 2）。
+  - 必要なものに、Claude Code 2.1.295 以上（`onFailure`）。
+  - ローカルの作業用のコピーをマーケットプレイスにして入れないこと。プラグインがその場所から動き、sandbox から書き換えられうる（項目 7）。
+  - 初回は、uvx が Python とパッケージを取得すること。
+  - 受け取り用フォルダを変えるときは、`WORKBOOK_INTAKE_DIR` と、拒否の設定の両方を変えること。
+- 設計の背景の「`--read-only` でも、書き込み用は呼ばれたときに拒否される」は、Windows 専用の 3 つ（`xlide_run_tests`・`xlide_open_in_app`・`xlide_close_in_app`）には当てはまらない。許可リストから除くので、守りには影響しない（[事実](#inventory-facts)）。
 
 <a name="appendix-steps"></a>
 
