@@ -1,0 +1,8 @@
+{
+  "name": "workbook-intake",
+  "version": "0.0.0-probe",
+  "description": "Verification probe for the workbook-intake plugin. Not for normal use.",
+  "author": {
+    "name": "kado-ta"
+  }
+}

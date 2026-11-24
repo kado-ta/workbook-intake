@@ -1,0 +1,14 @@
+{
+  "name": "workbook-intake-probe",
+  "description": "Verification probe for the workbook-intake plugin. Not for normal use.",
+  "owner": {
+    "name": "kado-ta"
+  },
+  "plugins": [
+    {
+      "name": "workbook-intake",
+      "source": "./",
+      "description": "Verification probe for the workbook-intake plugin. Not for normal use."
+    }
+  ]
+}
