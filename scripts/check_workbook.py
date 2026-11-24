@@ -128,7 +128,7 @@ def _local(tag):
     return tag.rsplit("}", 1)[-1] if isinstance(tag, str) else ""
 
 
-_WS_BYTES = b" \t\r\n\x00\xef\xbb\xbf\xff\xfe"
+SNIFF_BYTES = 4096
 _MASHUP_NEEDLES = tuple(
     "DataMashup".encode(enc) for enc in ("utf-8", "utf-16-le", "utf-16-be")
 )
@@ -146,19 +146,18 @@ _MAX_OFFICE_TARGETS = 100
 
 
 def _looks_like_xml(head):
-    """True/False once decidable; None while the bytes are only BOM and whitespace.
+    """True when, after an optional BOM and whitespace, the first character is "<".
 
-    XML means: after an optional BOM and whitespace, the first character is "<"
-    in UTF-8, UTF-16LE or UTF-16BE.
+    Only the first SNIFF_BYTES are looked at, so the decision is linear; a part
+    with more leading whitespace than that is treated as not XML.
     """
-    if not head.strip(_WS_BYTES):
-        return None
+    head = head[:SNIFF_BYTES]
     candidates = [(head, enc) for enc in ("utf-8", "utf-16-le", "utf-16-be")]
     for bom, enc in _BOMS:
         if head.startswith(bom):
             candidates.append((head[len(bom):], enc))
     return any(
-        body.decode(enc, "ignore").lstrip(" \t\r\n﻿").startswith("<")
+        body.decode(enc, "ignore").lstrip(" \t\r\n\ufeff").startswith("<")
         for body, enc in candidates
     )
 
@@ -235,8 +234,7 @@ def _scan_part(zf, info, counts, parse_xml, is_rels, is_root_rels):
     """
     collector = None
     parser = None
-    pending = b""
-    deciding = parse_xml
+    first = True
     total = 0
     mashup = False
     unchecked = False
@@ -252,29 +250,18 @@ def _scan_part(zf, info, counts, parse_xml, is_rels, is_root_rels):
                 if not mashup and any(n in window for n in _MASHUP_NEEDLES):
                     mashup = True
                 tail = window[-_MASHUP_TAIL:]
-                if parser is None and not deciding:
+                if first:
+                    first = False
+                    if parse_xml and _looks_like_xml(chunk):
+                        collector = _Collector(counts, is_rels, is_root_rels)
+                        parser = ET.XMLParser(target=collector)
+                if parser is None:
                     continue
                 if total > MAX_PARSE_BYTES:
-                    if parser is not None or (deciding and _looks_like_xml(pending + chunk)):
-                        unchecked = True
                     parser = None
-                    deciding = False
-                    pending = b""
+                    unchecked = True
                     continue
-                if deciding:
-                    pending += chunk
-                    verdict = _looks_like_xml(pending)
-                    if verdict is None:
-                        continue
-                    deciding = False
-                    if not verdict:
-                        pending = b""
-                        continue
-                    collector = _Collector(counts, is_rels, is_root_rels)
-                    parser = ET.XMLParser(target=collector)
-                    chunk, pending = pending, b""
-                if parser is not None:
-                    parser.feed(chunk)
+                parser.feed(chunk)
             if parser is not None:
                 parser.close()
     except Exception:
