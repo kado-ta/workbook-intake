@@ -10,7 +10,7 @@ created: 2026-11-25
 
 **Goal:** 受け取り用フォルダの Excel を、検査と入力の確認を通したものだけ xlide-mcp で解析させる Claude Code プラグインを作る。
 
-**Architecture:** プラグイン 1 つに、xlide の MCP サーバーの定義、解析用のサブエージェント、手順のスキル、2 つのフック（xlide の呼び出しを判定する PreToolUse と、入力の確認の承認を記録する PostToolUse）、検査のスクリプトとその Seatbelt を入れる。フックの判定は Python で書き、bash の入口から Command Line Tools の python3 で動かす。検査はフックの中で `sandbox-exec` の下で動かし、終了コードだけを使う。
+**Architecture:** プラグイン 1 つに、xlide の MCP サーバーの定義、解析用のサブエージェント、手順のスキル、2 つのフック（xlide の呼び出しを判定する PreToolUse と、入力の確認・警告の確認の承認と検査の結果を記録する PostToolUse）、検査のスクリプトとその Seatbelt を入れる。フックの判定は Python で書き、bash の入口から Command Line Tools の python3 で動かす。検査は 2 つのフックの中で `sandbox-exec` の下で動かし、終了コードと、出力のうち固定の語彙に一致する値だけを使う。受け取り用フォルダは Claude Code の sandbox から読めなくし（推奨設定）、`doctor.sh` が設定漏れで止まる。
 
 **Tech Stack:** bash 3.2（macOS の `/bin/bash`）、Python 3.9（Command Line Tools の python3、標準ライブラリだけ）、Seatbelt（`sandbox-exec`）、uv（`uvx`）、GitHub Actions、shellcheck。
 
@@ -43,7 +43,8 @@ created: 2026-11-25
 - 受け取り用フォルダの既定は `~/workbook-intake`。
 - 時間: フックの timeout は 30 秒、検査の上限は 20 秒（フックの中で決める）。
 - 検査の閾値: ファイル 100 MB、部品 10,000、展開の合計 1 GB、1 部品の圧縮率 100 倍。
-- 検査とフックの出力（標準出力、拒否の理由、JSON）には、固定の語彙・件数・真偽だけを入れる。ファイル由来の文字列（シート名、セルの文字列、部品の名前、ファイル名、パス）を入れない。
+- 検査とフックの出力（標準出力、拒否の理由、会話に返す文、JSON）には、固定の語彙・件数・真偽だけを入れる。ファイル由来の文字列（シート名、セルの文字列、部品の名前、ファイル名、パス）を入れない。フックは、検査の出力のうち、固定の語彙に一致する値だけを使う（知らない値があれば、検査できないとみなす）。
+- 検査は、2 つのフックが sandbox の外から Seatbelt の中で動かす。スキル（Claude Code の Bash）からは動かさない。推奨設定では、Bash から受け取り用フォルダを読めない（設計の[直接の読み込みを止める](design.md#direct-read)）。
 - 公開するファイル（SKILL.md、エージェントの指示、コードのコメント）は英語。README は英語の `README.md` を主とし、日本語版の `README.ja.md` を用意して、`README.md` からリンクする（ユーザーの指定、2026-11-25。設計の「公開するファイルは英語」から変える）。作業文書（`docs/work/`）と保守の runbook（`docs/runbooks/`）は日本語。
 - xlide などのコードや長い文章（README、ツールの説明、エージェント向けの指示）をコピーしない。xlide の公式の物、NVIDIA SkillSpector の関連物に見せない。
 - リポジトリに、業務の名前と中身、勤務先の情報、ユーザー名を含むパス（ホームディレクトリの絶対パス）を入れない。パスは `~` で書く。
@@ -132,6 +133,8 @@ created: 2026-11-25
   - 許可リストの案（`hooks/allowed-tools.txt` の形。[Task 7](#task-7)）。
   - AskUserQuestion の、人が選んだ答えが入る項目の場所（[Task 6](#task-6) の `selected_answer` が読む場所）。
   - 受け取り用フォルダを環境変数で変えられるか（[Task 6](#task-6) の `intake_dir`）。
+  - 受け取り用フォルダを sandbox から読めなくする settings と、`dangerouslyDisableSandbox` を使えなくする settings の書き方（[Task 10](#task-10) の README）。
+  - PostToolUse のフックが会話に文を返す JSON の形（[Task 6](#task-6) の `main`）。
 
 - [ ] **Step 1: `main` の Initial commit を作る（ユーザーの指定）**
 
@@ -174,7 +177,7 @@ Expected: `tmp/xlide-src/` にソースが展開される。取り出したも�
 - `.claude-plugin/marketplace.json`: `name` は `workbook-intake-probe`、プラグインの `source` は `"./"`
 - `.mcp.json`: [Task 2](#task-2) と同じ uvx の引数で、ルートだけ `"${WORKBOOK_INTAKE_DIR:-~/workbook-intake}"` にする。
 - `hooks/hooks.json`: PreToolUse（matcher `mcp__.*__xlide_.*`、timeout 5、`onFailure: "block"`）と PostToolUse（matcher `AskUserQuestion`）。command は `"\"${CLAUDE_PLUGIN_ROOT}/hooks/probe.sh\""` の形（引用符付き）で書き、この形が動くことも確かめる。
-- `hooks/probe.sh`: 標準入力の JSON と、`CLAUDE_PLUGIN_ROOT`・`CLAUDE_PLUGIN_DATA`・`WORKBOOK_INTAKE_DIR` の値と、`/usr/bin/sandbox-exec -n no-network /usr/bin/true` の終了コードを、`${CLAUDE_PLUGIN_DATA}/probe.log` に追記する。PreToolUse では、ツール名で次のように振る舞う: `xlide_doctor` → allow を返す。一覧から選んだ `file_path` を取る読み取り用のツール 1 つ（以下 T_read）→ allow。別のツール 1 つ（T_deny）→ deny。もう 1 つ（T_slow）→ 10 秒待つ（timeout 5 を超える）。もう 1 つ（T_fail）→ 何も出さずに終了コード 1。
+- `hooks/probe.sh`: 標準入力の JSON と、`CLAUDE_PLUGIN_ROOT`・`CLAUDE_PLUGIN_DATA`・`WORKBOOK_INTAKE_DIR` の値と、`/usr/bin/sandbox-exec -n no-network /usr/bin/true` の終了コードを、`${CLAUDE_PLUGIN_DATA}/probe.log` に追記する。PreToolUse では、ツール名で次のように振る舞う: `xlide_doctor` → allow を返す。一覧から選んだ `file_path` を取る読み取り用のツール 1 つ（以下 T_read）→ allow。別のツール 1 つ（T_deny）→ deny。もう 1 つ（T_slow）→ 10 秒待つ（timeout 5 を超える）。もう 1 つ（T_fail）→ 何も出さずに終了コード 1。PostToolUse では、`hookSpecificOutput.additionalContext` に目印の文（`probe-additional-context`）を返す（確かめること 15）。
 - `agents/excel-analyst.md`: `tools` に、上の 5 つのツールの完全な名前を書く。
 - `skills/probe/SKILL.md`: 本文に `${CLAUDE_PLUGIN_ROOT}` を書き、Bash で `echo` させる（確かめること C）。
 
@@ -183,18 +186,23 @@ Expected: `tmp/xlide-src/` にソースが展開される。取り出したも�
 Run: `claude plugin validate dev/probe/workbook-intake --strict`
 Expected: 終了コード 0。
 
+- [ ] **Step 5b: 受け取り用フォルダを sandbox から読めなくする settings の書き方を確かめる**
+
+公式ドキュメント（settings と sandboxing）で、次を確かめて research に書く（確かめること 12・14）: 受け取り用フォルダの読み込みを拒否する書き方（`sandbox.filesystem` の読み込みの拒否か、`permissions.deny` の `Read(...)` か）、Read の deny の規則が sandbox の Bash にも効くか、`dangerouslyDisableSandbox` を使えなくする書き方（`allowUnsandboxedCommands` など）。書き方が複数あれば、Step 6 で両方を試す。
+
 - [ ] **Step 6: 人が probe のセッションを動かす**
 
 人に、通常のターミナルで次を行うよう頼む。手順は research の付録に、そのまま貼れる形で書いておく。
 1. `~/workbook-intake` を作り、個人情報も機密情報もないブックを 1 つ置く。
 2. 空の作業用のディレクトリで、`claude plugin marketplace add <リポジトリの絶対パス>/dev/probe/workbook-intake` と `claude plugin install workbook-intake@workbook-intake-probe` を実行し、`claude` を起動する。
-3. セッションで、Claude に次を順に頼む: (a) メインの会話から `xlide_doctor` を呼ぶ。(b) excel-analyst に、`xlide_doctor`・T_read（置いたブックの絶対パス）・T_deny・T_slow・T_fail を呼ばせる。(c) AskUserQuestion で質問を 1 つ出させ、人が答える。(d) AskUserQuestion を、`answers` に答えを入れた形で呼ばせる（確かめること A）。(e) probe スキルを起動する。(f) Bash と Write ツールで、`probe.log` のあるディレクトリにファイルを書かせる。
+3. セッションで、Claude に次を順に頼む: (a) メインの会話から `xlide_doctor` を呼ぶ。(b) excel-analyst に、`xlide_doctor`・T_read（置いたブックの絶対パス）・T_deny・T_slow・T_fail を呼ばせる。(c) AskUserQuestion で質問を 1 つ出させ、人が答える。その直後に、Claude に目印の文（`probe-additional-context`）が見えるかを聞く（確かめること 15）。(d) AskUserQuestion を、`answers` に答えを入れた形で呼ばせる（確かめること A）。(e) probe スキルを起動する。(f) Bash と Write ツールで、`probe.log` のあるディレクトリにファイルを書かせる。
 4. その作業用のディレクトリに、同じ uvx のコマンドの xlide を定義した `.mcp.json` を置いて起動し直し、プラグインの xlide のツールが見えるかを確かめる。見えなければ、`.claude/settings.local.json` の `disabledMcpjsonServers` に `xlide` を足して、もう一度確かめる。
-5. `probe.log` を `tmp/probe/probe.log` に写す（アンインストールで消えるため。ログにはブックのパスが入るので、コミットしない）。
+5. Step 5b の書き方で、受け取り用フォルダの読み込みの拒否と、`dangerouslyDisableSandbox` を使えなくする設定を `.claude/settings.local.json` に足して起動し直す。Claude に次を順に頼む（確かめること 13・14）: (g) Bash で `ls ~/workbook-intake`、`test -d ~/workbook-intake && echo visible`、`unzip -p <ブックの絶対パス> '[Content_Types].xml'` を実行する。(h) excel-analyst に T_read を呼ばせる。(i) Bash の `ls ~/workbook-intake` を、`dangerouslyDisableSandbox` を付けて実行する。
+6. `probe.log` を `tmp/probe/probe.log` に写す（アンインストールで消えるため。ログにはブックのパスが入るので、コミットしない）。
 
 - [ ] **Step 7: 結果を research に書く**
 
-`tmp/probe/probe.log` を読み、次の表を埋める。設計の項目（1〜11）を先に、足した項目（A〜D）を後に書く。
+`tmp/probe/probe.log` と、Step 6 のセッションで Claude が返したものを読み、次の表を埋める。設計の項目（1〜15）を先に、足した項目（A〜D）を後に書く。
 
 | # | 確かめること | 設計の想定 |
 | --- | --- | --- |
@@ -209,6 +217,10 @@ Expected: 終了コード 0。
 | 9 | PostToolUse の入力に、AskUserQuestion の質問の文と、人が選んだ答えが入るか。どの項目か | 入る |
 | 10 | サブエージェントの呼び出しの `session_id` が、メインの会話の AskUserQuestion のものと同じか | 同じ |
 | 11 | `${CLAUDE_PLUGIN_DATA}` に、Bash（sandbox）と Write ツールから書けないか | 書けない |
+| 12 | 受け取り用フォルダを sandbox から読めなくする settings の書き方。Read の deny の規則が sandbox の Bash にも効くか | 未定 |
+| 13 | その設定のもとで、(g) の `ls`・`unzip` が失敗するか。`test -d` は見えるか。(h) で xlide とフックは読めるか | `ls`・`unzip` は失敗する。xlide とフックは読める |
+| 14 | `dangerouslyDisableSandbox` を使えなくする書き方と、(i) が止まるか | 未定 |
+| 15 | PostToolUse の `additionalContext` がメインの会話に届くか | 届く |
 | A | モデルが `answers` を入れて AskUserQuestion を呼んだとき、人への確認が出るか。PostToolUse に何が入るか | 確認が出る。モデルの値で答えを偽れない |
 | B | T_slow（時間切れ）と T_fail（終了コード 1）が、`onFailure: "block"` で止まるか | 止まる |
 | C | SKILL.md の `${CLAUDE_PLUGIN_ROOT}` が、プラグインの場所に置き換わるか | 置き換わる |
@@ -216,7 +228,7 @@ Expected: 終了コード 0。
 
 - [ ] **Step 8: 判定する**
 
-1・3・4・8・9・10・11・A・B のどれかが想定と違えば、ここで止まり、ユーザーに結果と、設計のどこが成り立たないかを伝える。特に A で答えを偽れる場合は、[入力の確認](design.md#consent)の強制の方法を考え直す必要がある。2・5・6・7・C・D は、結果に合わせて後の Task の書き方を選ぶ（research に、どれを選んだかを書く）。
+1・3・4・8・9・10・11・13・15・A・B のどれかが想定と違えば、ここで止まり、ユーザーに結果と、設計のどこが成り立たないかを伝える。特に A で答えを偽れる場合は、[入力の確認](design.md#consent)の強制の方法を、13 で Bash から読める場合は、[直接の読み込みを止める](design.md#direct-read)方法を考え直す必要がある。2・5・6・7・12・14・C・D は、結果に合わせて後の Task の書き方を選ぶ（research に、どれを選んだかを書く）。
 
 - [ ] **Step 9: 人に probe を片付けてもらう**
 
@@ -321,7 +333,7 @@ git commit -m "feat: add plugin manifests and pinned xlide server"
   - 定数: `SUPPORTED_EXTENSIONS = (".xlsx", ".xlsm", ".xltx", ".xltm", ".xlam", ".xlsb")`、`MAX_FILE_BYTES = 100 * 1024 * 1024`、`MAX_PARTS = 10_000`、`MAX_TOTAL_UNCOMPRESSED = 1024 ** 3`、`MAX_RATIO = 100`、`RATIO_GRACE_BYTES = 100 * 1024`
   - `check(path: str) -> dict`: `{"result": "pass" | "fail", "failures": [str], "warnings": [str], "counts": {str: int}}`。`failures`・`warnings` は下の語彙の重複のない並び。
   - `main(argv: list[str]) -> int`: 引数が絶対パス 1 つでなければ `{"result": "error", "failures": ["usage"], ...}` で 2。読めなければ `"unreadable"` で 2。それ以外は `check` の JSON を 1 行で出し、合格 0・不合格 1。
-  - 不合格の語彙: `unsupported_extension`、`file_too_large`、`encrypted`、`not_zip`、`too_many_parts`、`unsafe_part_name`、`uncompressed_too_large`、`compression_ratio_too_high`、`xml_dtd`
+  - `FAILURE_CODES`（不合格の語彙のタプル）: `unsupported_extension`、`file_too_large`、`encrypted`、`not_zip`、`too_many_parts`、`unsafe_part_name`、`uncompressed_too_large`、`compression_ratio_too_high`、`xml_dtd`
 
 - [ ] **Step 1: 失敗するテストを書く**
 
@@ -392,7 +404,7 @@ git commit -m "feat: reject malformed and oversized workbooks in the checker"
 
 **Interfaces:**
 - Consumes: Task 3 の `check`・`write_workbook`・`minimal_parts`
-- Produces: 警告の語彙と `counts`（警告ごとの件数）。`vba_project`、`external_link`、`data_connection`、`external_relationship`、`power_query`、`embedded_object`、`activex`、`hidden_sheet`、`very_hidden_sheet`、`invisible_characters`、`instruction_like_text`、`very_long_string`、`strings_not_checked`
+- Produces: `WARNING_CODES`（警告の語彙のタプル）と `counts`（警告ごとの件数）。`vba_project`、`external_link`、`data_connection`、`external_relationship`、`power_query`、`embedded_object`、`activex`、`hidden_sheet`、`very_hidden_sheet`、`invisible_characters`、`instruction_like_text`、`very_long_string`、`strings_not_checked`
 - 定数: `MAX_PARSE_BYTES = 32 * 1024 * 1024`、`LONG_STRING_CHARS = 10_000`、`INVISIBLE_CODEPOINTS`、`INSTRUCTION_PHRASES`（下の Step 3）
 
 - [ ] **Step 1: 失敗するテストを書く**
@@ -464,42 +476,46 @@ git commit -m "feat: report macros, external links, hidden sheets and suspicious
 - Create: `scripts/check_workbook.sb`、`hooks/intake_common.py`、`tests/test_sandbox_profile.py`
 
 **Interfaces:**
-- Consumes: Task 3 の `main` の終了コード（0・1・2）
+- Consumes: Task 3 の `main` の終了コード（0・1・2）と 1 行の JSON、`FAILURE_CODES`・`WARNING_CODES`
 - Produces（`hooks/intake_common.py`）:
   - `PLUGIN_ROOT: str`（このファイルの `realpath` の 2 つ上）
-  - `CHECK_TIMEOUT_SECONDS = 20`
-  - `run_checker(real_path: str, timeout: float = CHECK_TIMEOUT_SECONDS) -> str`: `"pass"`・`"fail"`・`"error"`・`"timeout"`・`"sandbox_missing"` のどれか
+  - `CHECK_TIMEOUT_SECONDS = 20`、`FAILURE_CODES`・`WARNING_CODES`（検査と同じ値）
+  - `run_checker(real_path: str, timeout: float = CHECK_TIMEOUT_SECONDS) -> dict`: `{"status": "pass" | "fail" | "error" | "timeout" | "sandbox_missing", "failures": [str], "warnings": [str]}`。`failures`・`warnings` は固定の語彙だけ（設計の[検査の Seatbelt](design.md#sandbox-profile)）。
 
 - [ ] **Step 1: 失敗するテストを書く**
 
 すべて macOS だけ。`sandbox-exec -n no-network /usr/bin/true` が失敗する環境では、`WORKBOOK_INTAKE_REQUIRE_SANDBOX=1` なら失敗、なければ skip（理由: Claude の Bash では入れ子にできない）。プロファイルを直接試すテストは、`SELF` に一時的なスクリプトを渡して、そのスクリプトに操作をさせる。
 
 ```python
-def test_checker_passes_in_sandbox(self):        # run_checker(最小のブック) == "pass"
-def test_checker_fail_maps_to_fail(self):        # DOCTYPE のブック → "fail"
-def test_timeout_maps_to_timeout(self):          # run_checker(path, timeout=0.001) == "timeout"
+def test_checker_passes_in_sandbox(self):        # run_checker(最小のブック)["status"] == "pass"、warnings == []
+def test_checker_fail_maps_to_fail(self):        # DOCTYPE のブック → status "fail"、failures == ["xml_dtd"]
+def test_warnings_are_returned(self):            # 非表示のシートのブック → status "pass"、warnings == ["hidden_sheet"]
+def test_timeout_maps_to_timeout(self):          # run_checker(path, timeout=0.001)["status"] == "timeout"
 def test_profile_denies_write(self):             # 一時ディレクトリへの open(..., "w") が PermissionError
 def test_profile_denies_network(self):           # socket.create_connection(("127.0.0.1", 9)) が PermissionError
 def test_profile_denies_reading_other_files(self): # TARGET 以外の一時ファイルの読み込みが PermissionError
 def test_profile_denies_exec(self):              # subprocess.run(["/bin/echo"]) が PermissionError
-def test_extensions_and_size_match_checker(self): # intake_common の SUPPORTED_EXTENSIONS・MAX_FILE_BYTES が check_workbook と同じ
+# 次の 3 つは sandbox なしで動く（subprocess.run を mock にする・定数を比べる）
+def test_unknown_code_is_error(self):            # 出力に語彙にない値 → status "error"、failures・warnings は空
+def test_unparsable_output_is_error(self):       # 出力が JSON でない・終了コードと result が食い違う → "error"
+def test_constants_match_checker(self):          # SUPPORTED_EXTENSIONS・MAX_FILE_BYTES・FAILURE_CODES・WARNING_CODES が check_workbook と同じ
 ```
 
 - [ ] **Step 2: テストが失敗するか skip されることを確かめる**
 
 Run（Claude の Bash）: `"$PY" -B -m unittest tests.test_sandbox_profile -v`
-Expected: `test_extensions_and_size_match_checker` が import で失敗し、ほかは skip。
+Expected: sandbox なしで動く 3 つが import で失敗し、ほかは skip。
 
 - [ ] **Step 3: プロファイルと `run_checker` を書く**
 
 - `check_workbook.sb`: dotfiles の `claude/hooks/check-vault-note.sb` と同じ形。値は `PYTHON_HOME`・`SELF`（`check_workbook.py`）・`TARGET`（検査するファイル）。`(allow default)` の上で、`network*`・`file-write*`（`/dev/null` を除く）・`process-exec*`（`PYTHON_HOME` の下を除く）・`process-fork`・`mach-lookup`・`appleevent-send`・`signal`（同じ sandbox を除く）を拒否。`file-read-data` は既定で拒否し、`/`（literal）・`/System`・`/usr/lib`・`/usr/share`・`/private/var/db/timezone`・`PYTHON_HOME`・`/dev/urandom`・`/dev/null`・`SELF`・`TARGET` だけを許す。
-- `intake_common.py` に `SUPPORTED_EXTENSIONS`・`MAX_FILE_BYTES` を、検査と同じ値で置く（検査は Seatbelt の中で自分しか読めないので、共有せずに 2 か所に書き、テストで一致を守る）。
-- `run_checker`: Python の場所は、フックを動かしている python3 から決める。`python_home = realpath(sys.base_prefix)`、`python_exe = realpath(join(sys.base_prefix, "bin", "python3"))`。コマンドは `/usr/bin/sandbox-exec -f <sb> -D PYTHON_HOME=… -D SELF=… -D TARGET=<real_path> <python_exe> -I -B <SELF> <real_path>`。`stdin`・`stdout`・`stderr` は `DEVNULL`、`env={}`、`timeout` 付き。終了コード 0 → `pass`、1 → `fail`、ほか → `error`。`TimeoutExpired` → `timeout`、`/usr/bin/sandbox-exec` がない → `sandbox_missing`。
+- `intake_common.py` に `SUPPORTED_EXTENSIONS`・`MAX_FILE_BYTES`・`FAILURE_CODES`・`WARNING_CODES` を、検査と同じ値で置く（検査は Seatbelt の中で自分しか読めないので、共有せずに 2 か所に書き、テストで一致を守る）。
+- `run_checker`: Python の場所は、フックを動かしている python3 から決める。`python_home = realpath(sys.base_prefix)`、`python_exe = realpath(join(sys.base_prefix, "bin", "python3"))`。コマンドは `/usr/bin/sandbox-exec -f <sb> -D PYTHON_HOME=… -D SELF=… -D TARGET=<real_path> <python_exe> -I -B <SELF> <real_path>`。`stdin`・`stderr` は `DEVNULL`、`stdout` は受け取る（64 KiB で打ち切る）、`env={}`、`timeout` 付き。終了コードが 0 か 1 で、出力が 1 つの JSON で、`result` が終了コードと合い（0 は `pass`、1 は `fail`）、`failures`・`warnings` がすべて語彙の中にあるときだけ、その値を返す。それ以外は `error`（`failures`・`warnings` は空）。`TimeoutExpired` → `timeout`、`/usr/bin/sandbox-exec` がない → `sandbox_missing`。
 
 - [ ] **Step 4: 人が通常のターミナルでテストを動かす**
 
 Run: `cd <リポジトリ> && WORKBOOK_INTAKE_REQUIRE_SANDBOX=1 "$(xcode-select -p)/usr/bin/python3" -B -m unittest tests.test_sandbox_profile -v`
-Expected: すべて PASS（skip なし）。Claude の Bash では `test_extensions_and_size_match_checker` だけ PASS で、ほかは skip。
+Expected: すべて PASS（skip なし）。Claude の Bash では sandbox なしで動く 3 つだけ PASS で、ほかは skip。
 
 - [ ] **Step 5: コミットする**
 
@@ -512,48 +528,74 @@ git commit -m "feat: run the checker under a no-network, no-write Seatbelt profi
 
 <a name="task-6"></a>
 
-### Task 6: 入力の確認の記録
+### Task 6: 入力の確認と警告の確認の記録
+
+設計の[入力の確認](design.md#consent)のとおり、承認を記録したら同じフックが検査を動かし、結果を承認と一緒に記録して、固定の語彙で会話に返す。警告があれば、2 つ目の固定の質問（警告の確認）の承認も記録する。
 
 **Files:**
 - Modify: `hooks/intake_common.py`
 - Create: `hooks/record_consent.py`、`hooks/record-consent.sh`、`tests/test_record_consent.py`
 
 **Interfaces:**
-- Consumes: research の 9・10・A（答えの場所）と 6（環境変数）
+- Consumes: Task 5 の `run_checker`、research の 9・10・A（答えの場所）・15（`additionalContext`）と 6（環境変数）
 - Produces（`hooks/intake_common.py`）:
   - `intake_dir() -> str`: 展開したパス（`realpath` ではない）。research の 6 で環境変数が使えると分かれば `WORKBOOK_INTAKE_DIR` を読み、なければ `~/workbook-intake`。
   - `resolve_in_intake(path: object) -> tuple[str | None, str]`: 合格なら（`realpath`、`"ok"`）、不合格なら（`None`、理由）。理由の語彙と判定の順: `bad_input`（文字列でない）→ `path_not_absolute` → `intake_dir_invalid`（ない、ディレクトリでない、シンボリックリンク）→ `outside_intake`（`realpath` が受け取り用フォルダの `realpath` の真下でない。フォルダ自身も外とみなす）→ `not_regular_file` → `unsupported_extension`（小文字にして比べる）→ `file_too_large`（`MAX_FILE_BYTES` を超える）
   - `file_key(real_path: str) -> str`: `unicodedata.normalize("NFC", real_path)`
   - `file_sha256(real_path: str) -> str`
-  - 固定の文: `CONSENT_HEADER`・`CONSENT_QUESTION_PREFIX`・`CONFIRM_LABEL`・`CONFIRM_DESCRIPTION`・`CANCEL_LABEL`・`CANCEL_DESCRIPTION`（下の Step 3）
+  - 固定の文: `CONSENT_HEADER`・`CONSENT_QUESTION_PREFIX`・`CONFIRM_LABEL`・`CONFIRM_DESCRIPTION`・`CANCEL_LABEL`・`CANCEL_DESCRIPTION`、`WARNINGS_HEADER`・`WARNINGS_QUESTION_PREFIX`・`WARNINGS_LIST_PREFIX`・`CONTINUE_LABEL`・`CONTINUE_DESCRIPTION`・`STOP_LABEL`・`STOP_DESCRIPTION`（下の Step 3）
   - `consent_question(path: str) -> str`: `CONSENT_QUESTION_PREFIX + path`
-  - `expected_questions(path: str) -> list[dict]`: AskUserQuestion の `questions` として期待する値
-  - `record_consent(session_id: str, key: str, sha256: str) -> bool`、`has_consent(session_id: str, key: str, sha256: str) -> bool`: 記録は `${CLAUDE_PLUGIN_DATA}/consents/<session_id の SHA-256>.jsonl` に 1 行 1 件（`{"path": key, "sha256": …}`）。ディレクトリは 0700。`CLAUDE_PLUGIN_DATA` がなければ、記録しない・承認なしとする。壊れた行は読み飛ばす。
-- Produces（`hooks/record_consent.py`）: `selected_answer(hook_input: dict, question: str) -> str | None`、`main() -> int`（常に 0、何も出力しない）
+  - `expected_questions(path: str) -> list[dict]`: 入力の確認として、AskUserQuestion の `questions` に期待する値
+  - `warnings_question(path: str, warnings: list[str]) -> str`: `WARNINGS_QUESTION_PREFIX + path + WARNINGS_LIST_PREFIX + ", ".join(warnings)`
+  - `expected_warnings_questions(path: str, warnings: list[str]) -> list[dict]`: 警告の確認として期待する値
+  - 記録: `${CLAUDE_PLUGIN_DATA}/consents/<session_id の SHA-256>.jsonl` に 1 行 1 件。ディレクトリは 0700。`CLAUDE_PLUGIN_DATA` がなければ、記録しない・承認なしとする。壊れた行は読み飛ばす。
+    - `record_consent(session_id: str, key: str, sha256: str, check: dict) -> bool`: `{"kind": "consent", "path": key, "sha256": …, "status": …, "failures": […], "warnings": […]}`（`check` は `run_checker` の戻り値）
+    - `find_consent(session_id: str, key: str, sha256: str) -> dict | None`: 最後に記録した入力の確認
+    - `record_warnings_ack(session_id: str, key: str, sha256: str, warnings: list[str]) -> bool`: `{"kind": "warnings_ack", "path": key, "sha256": …, "warnings": […]}`
+    - `has_warnings_ack(session_id: str, key: str, sha256: str, warnings: list[str]) -> bool`
+- Produces（`hooks/record_consent.py`）:
+  - `selected_answer(hook_input: dict, question: str) -> str | None`
+  - `handle(hook_input: dict) -> str | None`: 会話に返す文（下の語彙）。質問がこのプラグインのもの（2 つの接頭辞のどちらかで始まる）でなければ `None`。
+  - `main() -> int`: 常に 0。`handle` が文を返したときだけ、PostToolUse の JSON（`hookSpecificOutput.additionalContext`。形は research の 15）を 1 つ出す。
+  - 会話に返す文（固定の語彙だけ）:
+    - `workbook-intake: consent=recorded; check=<status>; failures=<語彙をカンマで>; warnings=<語彙をカンマで>`（空なら `none`）
+    - `workbook-intake: consent=not_recorded; reason=<理由>`
+    - `workbook-intake: warnings_ack=recorded`、`workbook-intake: warnings_ack=not_recorded; reason=<理由>`
+    - 理由の語彙: `bad_input`、`question_mismatch`、`not_confirmed`（答えが `CONFIRM_LABEL`・`CONTINUE_LABEL` でない）、`resolve_in_intake` の理由、`consent_store_unavailable`、`no_consent`（警告の確認で、同じファイル・中身の入力の確認がない）、`internal_error`
 
 - [ ] **Step 1: 失敗するテストを書く**
 
-`HOME` と `CLAUDE_PLUGIN_DATA` を一時ディレクトリにして、`hooks/record-consent.sh` に JSON を渡して動かし、記録の有無を `has_consent` で見る。
+`HOME` と `CLAUDE_PLUGIN_DATA` を一時ディレクトリにする。記録と文の判定のテストは、`record_consent.handle` をプロセスの中で呼び、`intake_common.run_checker` を mock にする（sandbox なしで動く）。入口のスクリプトを通すテストは `test_wrapper_end_to_end` だけにし、Task 5 と同じ条件で skip する。
 
 ```python
-def test_records_confirmed_answer(self):             # 固定の文・選択肢そのまま、答え CONFIRM_LABEL → 記録される
-def test_cancel_not_recorded(self):                  # 答え CANCEL_LABEL → 記録されない
-def test_altered_question_not_recorded(self):        # 固定の文の 1 文字違い → 記録されない
+def test_records_confirmed_answer(self):             # 固定の文・選択肢そのまま、答え CONFIRM_LABEL → find_consent が記録を返す
+def test_returns_check_result(self):                 # run_checker が pass・warnings [vba_project] → 文は "workbook-intake: consent=recorded; check=pass; failures=none; warnings=vba_project"
+def test_failed_check_is_recorded_and_reported(self): # run_checker が fail・failures [xml_dtd] → 記録され、文に "check=fail; failures=xml_dtd"
+def test_cancel_not_recorded(self):                  # 答え CANCEL_LABEL → 記録されない、reason=not_confirmed
+def test_altered_question_not_recorded(self):        # 固定の文の 1 文字違い → 記録されない、reason=question_mismatch
 def test_altered_options_not_recorded(self):         # 説明の書き換え・選択肢の追加・multiSelect true・質問 2 つ → どれも記録されない（レビューの重点 4）
-def test_path_outside_intake_not_recorded(self):     # 受け取り用フォルダの外 → 記録されない
-def test_relative_path_not_recorded(self):
-def test_other_tool_not_recorded(self):              # tool_name が AskUserQuestion でない
-def test_malformed_input_not_recorded(self):         # JSON でない・項目の欠け → 記録されず、終了コード 0、出力なし
-def test_missing_plugin_data_not_recorded(self):     # CLAUDE_PLUGIN_DATA なし
-def test_nfd_and_nfc_paths_are_same_file(self):      # NFD の名前のファイルを NFC のパスで承認 → NFD のパスの file_key で承認あり（レビューの重点 1）
-def test_consent_is_per_session(self):               # 別の session_id では承認なし
-def test_consent_is_per_content(self):               # 記録の後に中身を変える → 承認なし
+def test_path_outside_intake_not_recorded(self):     # 受け取り用フォルダの外 → reason=outside_intake
+def test_relative_path_not_recorded(self):           # reason=path_not_absolute
+def test_missing_file_reported(self):                # ファイルがない → reason=not_regular_file
+def test_other_tool_not_recorded(self):              # tool_name が AskUserQuestion でない → None
+def test_other_question_produces_no_output(self):    # このプラグインのものでない質問 → None（ほかのスキルの質問に口を出さない）
+def test_malformed_input_not_recorded(self):         # JSON でない・項目の欠け → 記録されず、終了コード 0
+def test_missing_plugin_data_not_recorded(self):     # CLAUDE_PLUGIN_DATA なし → reason=consent_store_unavailable
+def test_nfd_and_nfc_paths_are_same_file(self):      # macOS だけ。NFD の名前のファイルを NFC のパスで承認 → NFD のパスの file_key で記録あり（レビューの重点 1）
+def test_consent_is_per_session(self):               # 別の session_id では記録なし
+def test_consent_is_per_content(self):               # 記録の後に中身を変える → 記録なし
+def test_warnings_ack_recorded(self):                # 警告 [vba_project] で承認済み → 警告の確認、答え CONTINUE_LABEL → has_warnings_ack が真、文は "workbook-intake: warnings_ack=recorded"
+def test_warnings_ack_with_other_warnings_not_recorded(self): # 記録と違う警告の並び → reason=question_mismatch
+def test_warnings_ack_without_consent_not_recorded(self): # 入力の確認がない → reason=no_consent
+def test_warnings_ack_stop_not_recorded(self):       # 答え STOP_LABEL → reason=not_confirmed
+def test_context_has_no_file_derived_strings(self):  # パスとファイル名に目印の文字列を入れ、返す文に含まれないこと
+def test_wrapper_end_to_end(self):                   # 入口のスクリプトに JSON を渡し、本物の run_checker で記録と JSON の出力まで通る
 ```
 
 - [ ] **Step 2: テストが失敗することを確かめる**
 
 Run: `"$PY" -B -m unittest tests.test_record_consent -v`
-Expected: 入口のスクリプトがなく失敗する。
+Expected: `record_consent` を import できずに失敗する。
 
 - [ ] **Step 3: 固定の文と、記録を書く**
 
@@ -575,20 +617,37 @@ CONFIRM_DESCRIPTION = (
 )
 CANCEL_LABEL = "Cancel / やめる"
 CANCEL_DESCRIPTION = "Do not analyze this file. / このファイルは解析しない。"
+
+WARNINGS_HEADER = "Warnings"
+WARNINGS_QUESTION_PREFIX = (
+    "workbook-intake: The check reported warnings for this file. Continue the analysis?\n"
+    "このファイルの検査で警告が出ました。解析を続けますか。\n"
+    "File / ファイル: "
+)
+WARNINGS_LIST_PREFIX = "\nWarnings / 警告: "
+CONTINUE_LABEL = "Continue / 続ける"
+CONTINUE_DESCRIPTION = "I reviewed the warnings and continue. / 警告を確かめたうえで続ける。"
+STOP_LABEL = "Stop / やめる"
+STOP_DESCRIPTION = "Do not analyze this file. / このファイルは解析しない。"
 ```
 
-`expected_questions(path)` は、`question`・`header`・`options`（上の 2 つ、`label` と `description` だけ）・`multiSelect: false` の 1 問。`record_consent.py` の `main` は、`tool_name` が `AskUserQuestion` で、`questions` がちょうど 1 問で `CONSENT_QUESTION_PREFIX` で始まり、残りのパスに改行がなく、`questions == expected_questions(path)` で、`selected_answer` が `CONFIRM_LABEL` で、`resolve_in_intake` が `ok` のときだけ記録する。`selected_answer` は research の 9 で分かった項目から読む（モデルが入力に書いた値で偽れないことは、research の A で確かめ済みであること）。例外はすべて捕まえ、記録せずに 0 を返す。`record-consent.sh` は `/usr/bin/xcode-select -p` の先の python3 を `-I -B` で起動するだけにし、なければ何もせずに 0 で終える。
+`expected_questions(path)` と `expected_warnings_questions(path, warnings)` は、`question`・`header`・`options`（それぞれの 2 つ、`label` と `description` だけ）・`multiSelect: false` の 1 問。`handle` は次のとおり。
+- `tool_name` が `AskUserQuestion` でない、`questions` がちょうど 1 問でない、質問が 2 つの接頭辞のどちらでも始まらない → `None`。
+- 入力の確認: 接頭辞の後をパスとし（改行があれば `question_mismatch`）、`questions == expected_questions(path)`、`selected_answer` が `CONFIRM_LABEL`、`resolve_in_intake` が `ok` のときだけ、`run_checker` を動かして `record_consent` する。
+- 警告の確認: 接頭辞と `WARNINGS_LIST_PREFIX` の間をパスとし、`resolve_in_intake` → `file_sha256` → `find_consent`（なければ `no_consent`）→ `questions == expected_warnings_questions(path, 記録の warnings)` → `selected_answer` が `CONTINUE_LABEL` のときだけ `record_warnings_ack` する。
+
+`selected_answer` は research の 9 で分かった項目から読む（モデルが入力に書いた値で偽れないことは、research の A で確かめ済みであること）。`main` は例外をすべて捕まえ、`internal_error` を返す（このプラグインの質問か分からないときは何も出さない）。`record-consent.sh` は `/usr/bin/xcode-select -p` の先の python3 を `-I -B` で起動するだけにし、なければ何もせずに 0 で終える（記録がないので、xlide の呼び出しはフックが止める）。
 
 - [ ] **Step 4: テストが通ることを確かめる**
 
 Run: `"$PY" -B -m unittest tests.test_record_consent -v && shellcheck hooks/record-consent.sh`
-Expected: すべて PASS、shellcheck の指摘なし。
+Expected: `test_wrapper_end_to_end` は skip、ほかは PASS。shellcheck の指摘なし。`test_wrapper_end_to_end` は、Task 7 の Step 5 で人が通常のターミナルで動かす。
 
 - [ ] **Step 5: コミットする**
 
 ```bash
 git add hooks/intake_common.py hooks/record_consent.py hooks/record-consent.sh tests/test_record_consent.py
-git commit -m "feat: record per-file input consent from AskUserQuestion"
+git commit -m "feat: record input consent, check results and warning acknowledgements"
 ```
 
 ---
@@ -601,7 +660,7 @@ git commit -m "feat: record per-file input consent from AskUserQuestion"
 - Create: `hooks/guard_xlide.py`、`hooks/guard-xlide.sh`、`hooks/hooks.json`、`hooks/allowed-tools.txt`、`tests/test_guard_xlide.py`
 
 **Interfaces:**
-- Consumes: Task 5 の `run_checker`、Task 6 の `resolve_in_intake`・`file_key`・`file_sha256`・`has_consent`、research の 1（`agent_type`）とツールの一覧
+- Consumes: Task 5 の `run_checker`、Task 6 の `resolve_in_intake`・`file_key`・`file_sha256`・`find_consent`・`has_warnings_ack`・`record_consent`・`record_warnings_ack`、research の 1（`agent_type`）とツールの一覧
 - Produces:
   - `hooks/allowed-tools.txt`: 1 行目は `# reviewed-for: xlide-mcp==1.2.4`（どの版のソースで見直したか）。以降は 1 行に `<ツール名> <file|nofile>`（例: `xlide_doctor nofile`）。`file` は `file_path` が必須のツール。`#` で始まる行と空行は読み飛ばす。
   - `TOOL_PREFIX = "mcp__plugin_workbook-intake_xlide__"`、`ANALYST_AGENT_TYPE = "workbook-intake:excel-analyst"`（research の 1 の値）
@@ -611,7 +670,7 @@ git commit -m "feat: record per-file input consent from AskUserQuestion"
 
 - [ ] **Step 1: 失敗するテストを書く**
 
-`HOME`・`CLAUDE_PLUGIN_DATA` を一時ディレクトリにし、承認は Task 6 の `record_consent` で直接書く。`sandbox-exec` を通す判定のテストは Task 5 と同じ条件で skip。拒否の理由は、出力の `permissionDecisionReason` に語彙が入ることで見る。
+`HOME`・`CLAUDE_PLUGIN_DATA` を一時ディレクトリにし、承認は Task 6 の `record_consent`・`record_warnings_ack` で直接書く。判定のテストは `decide` をプロセスの中で呼び、`run_checker` を mock にする（sandbox なしで動く）。本物の `run_checker` を通すテスト（`test_allows_consented_checked_file`・`test_check_failure_denied`・`test_check_timeout_denied`）は、Task 5 と同じ条件で skip。拒否の理由は、出力の `permissionDecisionReason` に語彙が入ることで見る。
 
 ```python
 def test_allows_consented_checked_file(self):              # allow
@@ -632,9 +691,12 @@ def test_oversized_file_denied_before_hashing(self):       # file_sha256 を呼�
 def test_no_consent_denied(self):                          # no_consent
 def test_changed_content_after_consent_denied(self):       # no_consent
 def test_consent_matches_across_unicode_normalization(self): # NFC で承認、NFD のパスで呼ぶ → allow（レビューの重点 1）
-def test_check_failure_denied(self):                       # zip bomb → check_failed
+def test_check_failure_denied(self):                       # zip bomb → check_failed、理由に "compression_ratio_too_high"
 def test_check_timeout_denied(self):                       # CHECK_TIMEOUT_SECONDS を 0.001 に → check_timeout
-def test_checker_error_denied(self):                       # run_checker が "error"・"sandbox_missing" を返す mock → check_error・sandbox_missing
+def test_checker_error_denied(self):                       # run_checker が status "error"・"sandbox_missing" を返す mock → check_error・sandbox_missing
+def test_warnings_without_ack_denied(self):                # run_checker が warnings [vba_project] を返す mock、警告の確認なし → warnings_not_acknowledged、理由に "vba_project"
+def test_warnings_with_ack_allowed(self):                  # 同じ警告で record_warnings_ack 済み → allow
+def test_ack_for_other_warnings_denied(self):              # 記録した警告と、今の検査の警告が違う → warnings_not_acknowledged
 def test_malformed_input_denied(self):                     # JSON でない・空 → bad_input、終了コード 0
 def test_internal_error_denied(self):                      # decide が例外を投げる mock → internal_error
 def test_wrapper_denies_without_python(self):              # DEVELOPER_DIR を存在しないディレクトリにする → python_missing
@@ -646,7 +708,7 @@ def test_allowlist_reviewed_for_pinned_version(self):      # allowed-tools.txt �
 - [ ] **Step 2: テストが失敗することを確かめる**
 
 Run: `"$PY" -B -m unittest tests.test_guard_xlide -v`
-Expected: 入口のスクリプトがなく失敗する。
+Expected: `guard_xlide` を import できずに失敗する。
 
 - [ ] **Step 3: 判定を書く**
 
@@ -655,10 +717,10 @@ Expected: 入口のスクリプトがなく失敗する。
 2. 接頭辞を除いた名前が `load_allowlist()` にない → `tool_not_allowed`
 3. `agent_type` が `ANALYST_AGENT_TYPE` でない → `wrong_caller`
 4. `tool_input` が辞書でない → `bad_input`。`file_path` 以外のキーで、名前に `path`・`file`・`dir`・`folder`・`root` を含む（大文字小文字を問わない）ものがある → `unexpected_path_argument`。`file` 種で `file_path` がない → `missing_file_path`。
-5. `file_path` があれば: `resolve_in_intake`（不合格ならその理由）→ `CLAUDE_PLUGIN_DATA` がない → `consent_store_unavailable` → `has_consent(session_id, file_key, file_sha256)` でない → `no_consent` → `run_checker`（`fail` → `check_failed`、`error` → `check_error`、`timeout` → `check_timeout`、`sandbox_missing` → `sandbox_missing`）
+5. `file_path` があれば: `resolve_in_intake`（不合格ならその理由）→ `CLAUDE_PLUGIN_DATA` がない → `consent_store_unavailable` → `find_consent(session_id, file_key, file_sha256)` がない → `no_consent` → `run_checker`（`fail` → `check_failed`、`error` → `check_error`、`timeout` → `check_timeout`、`sandbox_missing` → `sandbox_missing`）→ 警告があり、`has_warnings_ack(session_id, file_key, file_sha256, 今の検査の warnings)` でない → `warnings_not_acknowledged`
 6. すべて通れば `allow`（理由 `ok`）
 
-出力は `{"hookSpecificOutput": {"hookEventName": "PreToolUse", "permissionDecision": …, "permissionDecisionReason": "workbook-intake: <理由>. See the README (Troubleshooting)."}}`。`main` は例外をすべて捕まえて `internal_error` で拒否する。
+出力は `{"hookSpecificOutput": {"hookEventName": "PreToolUse", "permissionDecision": …, "permissionDecisionReason": "workbook-intake: <理由>[ (<語彙をカンマで>)]. See the README (Troubleshooting)."}}`。括弧の中は `check_failed` の不合格の語彙と、`warnings_not_acknowledged` の警告の語彙だけ。`main` は例外をすべて捕まえて `internal_error` で拒否する。
 
 `guard-xlide.sh` は、`/usr/bin/xcode-select -p` の先の python3 がなければ `python_missing` の拒否の JSON を出す。あれば `guard_xlide.py` を `-I -B` で動かし、終了コードが 0 でないか出力が空なら、`internal_error` の拒否の JSON を出す。
 
@@ -702,22 +764,22 @@ git commit -m "feat: guard xlide calls with allowlist, caller, consent and check
 - Create: `scripts/doctor.sh`、`tests/test_doctor.py`、`agents/excel-analyst.md`、`skills/analyze/SKILL.md`、`tests/test_skill_and_agent.py`
 
 **Interfaces:**
-- Consumes: Task 6 の固定の文、Task 7 の `allowed-tools.txt`・`TOOL_PREFIX`、research の C（スキルからスクリプトの場所を指す方法）
-- Produces: `doctor.sh` の出力は 1 行に `ok <項目>` か `missing <項目>`。項目は `macos`・`uvx`・`python3`・`sandbox_exec`・`intake_dir`。足りないものがあれば最後に `See README: Requirements` を出して終了コード 1、なければ 0。受け取り用フォルダがシンボリックリンクなら `missing intake_dir`。
+- Consumes: Task 6 の固定の文と、会話に返す文の語彙、Task 7 の `allowed-tools.txt`・`TOOL_PREFIX`、research の C（スキルからスクリプトの場所を指す方法）
+- Produces: `doctor.sh` の出力は 1 行に `ok <項目>` か `missing <項目>`。項目は `macos`・`uvx`・`python3`・`sandbox_exec`・`intake_dir_protected`。足りないものがあれば最後に `See README: Requirements` を出して終了コード 1、なければ 0。`intake_dir_protected` は、Bash から受け取り用フォルダの中を一覧できない（`ls -A` が失敗する）ときに `ok`、一覧できたら `missing`（設計の[前提の確認](design.md#doctor)）。受け取り用フォルダがないときも一覧できないので `ok` になる。あるかどうかは、sandbox の外のフックが確かめる。
 
 - [ ] **Step 1: 失敗するテストを書く**
 
 ```python
 # tests/test_doctor.py（HOME を一時ディレクトリ、PATH に uvx の偽物を置いたディレクトリを入れる）
-def test_all_present(self):            # 終了コード 0、"missing" なし
-def test_intake_dir_missing(self):     # "missing intake_dir"、終了コード 1
-def test_intake_dir_symlink(self):     # "missing intake_dir"
-def test_uvx_missing(self):            # PATH から外す → "missing uvx"
+def test_all_present_and_protected(self):  # 受け取り用フォルダの権限を 000 にして一覧できなくする → 終了コード 0、"missing" なし（後で権限を戻す）
+def test_readable_intake_dir_stops(self):  # 一覧できるフォルダ → "missing intake_dir_protected"、終了コード 1、"See README: Requirements"
+def test_uvx_missing(self):                # PATH から外す → "missing uvx"
 
 # tests/test_skill_and_agent.py
 def test_agent_tools_match_allowlist(self):   # frontmatter の tools の集合 == {TOOL_PREFIX + 名前 for 名前 in allowed-tools.txt}
 def test_agent_has_no_unsupported_fields(self): # hooks・mcpServers・permissionMode を書かない
-def test_skill_contains_consent_copy(self):   # CONSENT_HEADER・CONSENT_QUESTION_PREFIX・CONFIRM_LABEL・CONFIRM_DESCRIPTION・CANCEL_LABEL・CANCEL_DESCRIPTION がそのまま入る
+def test_skill_contains_consent_copy(self):   # 入力の確認と警告の確認の固定の文（CONSENT_* ・CONFIRM_*・CANCEL_*・WARNINGS_*・CONTINUE_*・STOP_*）がそのまま入る
+def test_skill_does_not_run_checker_in_bash(self): # SKILL.md に "check_workbook.py" が出てこない（検査はフックだけが動かす）
 def test_skill_description_makes_no_safety_claim(self): # description に "safe"・"secure"・"安全" がない
 ```
 
@@ -728,9 +790,15 @@ Expected: ファイルがなく失敗する。
 
 - [ ] **Step 3: `doctor.sh`・エージェント・スキルを書く**
 
-- `doctor.sh`: 設計の[前提の確認](design.md#doctor)の項目を見る（`uname -s` が `Darwin`、`command -v uvx`、`$(xcode-select -p)/usr/bin/python3`、`/usr/bin/sandbox-exec`、受け取り用フォルダがディレクトリでシンボリックリンクでない）。受け取り用フォルダは Task 6 の `intake_dir` と同じ決め方にする。
+- `doctor.sh`: 設計の[前提の確認](design.md#doctor)の項目を見る（`uname -s` が `Darwin`、`command -v uvx`、`$(xcode-select -p)/usr/bin/python3`、`/usr/bin/sandbox-exec`、`ls -A <受け取り用フォルダ>` が失敗する）。受け取り用フォルダは Task 6 の `intake_dir` と同じ決め方にする。
 - `agents/excel-analyst.md`: frontmatter は `name: excel-analyst`、`description`、`tools`（許可リストの完全な名前をカンマ区切り）。本文は設計の[サブエージェント](design.md#subagent)の 5 点を、英語で、自分の言葉で書く。
-- `skills/analyze/SKILL.md`: frontmatter は `name: analyze` と `description`（Excel のブックの数式・構造・VBA の解析を頼まれたときに起動する書き方。安全と読める語を使わない）。本文は設計の[流れ](design.md#flow)の 0〜3 と[スキル](design.md#skill)のとおり。入力の確認は、AskUserQuestion に Task 6 の固定の文と選択肢をそのまま渡す（`File / ファイル: ` の後に、ファイルの絶対パス）ように書く。検査の実行は `"$(xcode-select -p)/usr/bin/python3" -I -B <プラグインの場所>/scripts/check_workbook.py <絶対パス>` の形にし、プラグインの場所は research の C の方法で書く。xlide のツール（`TOOL_PREFIX` で始まるもの）が見えなければ、README の Troubleshooting を示して止まる。ファイルの中身を Read や Bash（`unzip` など）で直接読まないことも書く。
+- `skills/analyze/SKILL.md`: frontmatter は `name: analyze` と `description`（Excel のブックの数式・構造・VBA の解析を頼まれたときに起動する書き方。安全と読める語を使わない）。本文は設計の[流れ](design.md#flow)の 0〜3 と[スキル](design.md#skill)のとおり。次を書く。
+  - 最初に `doctor.sh` を動かす（プラグインの場所は research の C の方法で書く）。`missing` があれば、README の Requirements を示して止まる。
+  - ファイルの名前は人に聞き、`$HOME` から受け取り用フォルダの絶対パスを組み立てる（Bash で一覧しない。一覧できないのが正しい状態）。
+  - 入力の確認は、AskUserQuestion に Task 6 の固定の文と選択肢をそのまま渡す（`File / ファイル: ` の後に、ファイルの絶対パス）。
+  - フックが返した `workbook-intake: …` の文を読む。`consent=not_recorded` か `check=` が `pass` 以外なら、理由の語彙を人に伝えて止まる。`warnings=` が `none` 以外なら、警告の確認を、Task 6 の固定の文と選択肢で出す（`WARNINGS_LIST_PREFIX` の後に、返された警告の語彙をそのままの順で）。`warnings_ack=recorded` でなければ止まる。
+  - xlide のツール（`TOOL_PREFIX` で始まるもの）が見えなければ、README の Troubleshooting を示して止まる。
+  - フックに拒否されたら、ファイルを Read・Bash（`unzip`・Python など）・ほかのスキルで読もうとせず、拒否の理由を人に伝えて止まる。
 
 - [ ] **Step 4: テストが通ることを確かめる**
 
@@ -822,7 +890,7 @@ Expected: `README.ja.md` がなく、見出しも足りずに失敗する。
 
 - [ ] **Step 3: README を書く**
 
-設計の [README](design.md#readme) と[更新と保守](design.md#maintenance)の項目を、`README.md` に英語で書く。冒頭（タイトルの直後）に、日本語版へのリンク（`[日本語](README.ja.md)`）を置く。`README.ja.md` は同じ構成の日本語版にし、冒頭に英語版へのリンク（`[English](README.md)`）を置く。日本語の見出しには、ユーザーの Markdown の規則どおり、直前に `<a name="…"></a>` を置く。どちらにも次を書く: research の D の結果（`engines` で宣言できなければ、Claude Code 2.1.295 以上が要ること）。Troubleshooting に、フックの拒否の理由の語彙（Task 7）と、`doctor.sh` の項目（Task 8）の意味。Maintenance には、使う人に向けた方針（設計の[更新と保守](design.md#maintenance)）だけを書き、作者の手順は runbook へのリンクにする。Checks に、検査の不合格と警告の語彙（Task 3・4）の意味。
+設計の [README](design.md#readme) と[更新と保守](design.md#maintenance)の項目を、`README.md` に英語で書く。冒頭（タイトルの直後）に、日本語版へのリンク（`[日本語](README.ja.md)`）を置く。`README.ja.md` は同じ構成の日本語版にし、冒頭に英語版へのリンク（`[English](README.md)`）を置く。日本語の見出しには、ユーザーの Markdown の規則どおり、直前に `<a name="…"></a>` を置く。どちらにも次を書く: research の D の結果（`engines` で宣言できなければ、Claude Code 2.1.295 以上が要ること）。Configuration に、research の 12・14 で確かめた書き方で、受け取り用フォルダの読み込みの拒否（必須。`doctor.sh` が確かめる）、sandbox の外でコマンドを動かす逃げ道を使えなくする設定（推奨）、受け取り用フォルダの書き込みの拒否（推奨）を書く。Usage に、ファイルを受け取り用フォルダに置き、ファイルの名前を示して頼むこと（Claude は一覧できない）。Limitations に、推奨設定がない環境では、スキルを通らない使い方で Bash から読めること（設計の[受け入れるリスク](design.md#risks)）。Troubleshooting に、フックの拒否の理由の語彙（Task 7）、入力の確認のフックが返す文の語彙（Task 6）、`doctor.sh` の項目（Task 8）の意味。Maintenance には、使う人に向けた方針（設計の[更新と保守](design.md#maintenance)）だけを書き、作者の手順は runbook へのリンクにする。Checks に、検査の不合格と警告の語彙（Task 3・4）の意味。
 
 `docs/runbooks/maintenance.md`（日本語。ユーザーの指定）は、作者が保守するときに、Claude が読んで作者を案内するための文書にする。冒頭に、Claude への指示を書く: 「このファイルを読んだら、どのきっかけかを人に確かめ、該当する節の手順をチェックリストにして 1 つずつ進める。許可リストに足すかどうかなど、守りに関わる判断は人に求める」。次の節を置く。
 - きっかけと気づき方: 下の表。
@@ -868,7 +936,7 @@ git commit -m "docs: add README and maintenance runbook"
 
 - [ ] **Step 2: 人がプラグインを入れて、完了条件を 1 つずつ確かめる**
 
-入れ方は README のとおり（ローカルのリポジトリをマーケットプレイスとして足す）。設計の完了条件の 8 項目を、表にして test-report に書き、項目ごとに、頼んだこと・期待・結果（拒否の理由の語彙など）を記録する。
+入れ方と設定は README のとおり（ローカルのリポジトリをマーケットプレイスとして足し、受け取り用フォルダの読み込みの拒否を設定する）。設計の完了条件のすべての項目を、表にして test-report に書き、項目ごとに、頼んだこと・期待・結果（拒否の理由の語彙など）を記録する。
 
 - [ ] **Step 3: 全体のテストの結果を記録する**
 
