@@ -44,6 +44,15 @@ else
   report intake_dir_protected 0
 fi
 
+# The real path of the intake folder, for the skill to build file paths from. Only
+# metadata is needed, so this works under the recommended sandbox settings.
+if [ -d "$intake" ]; then
+  folder="$(realpath "$intake" 2>/dev/null)"
+  if [ -n "$folder" ]; then
+    echo "folder $folder"
+  fi
+fi
+
 if [ "$missing" -ne 0 ]; then
   echo "See README: Requirements"
   exit 1

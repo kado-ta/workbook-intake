@@ -53,6 +53,23 @@ class SkillTest(unittest.TestCase):
                      "STOP_DESCRIPTION"):
             self.assertIn(getattr(ic, name), self.text, name)
 
+    def test_fixed_blocks_equal_constants(self):
+        blocks = re.findall(r"```text\n(.*?)\n```", self.text, re.S)
+        expected = [
+            ic.CONSENT_HEADER, ic.CONSENT_QUESTION_PREFIX + "<path>",
+            ic.CONFIRM_LABEL, ic.CONFIRM_DESCRIPTION,
+            ic.CANCEL_LABEL, ic.CANCEL_DESCRIPTION,
+            ic.WARNINGS_HEADER,
+            ic.WARNINGS_QUESTION_PREFIX + "<path>" + ic.WARNINGS_LIST_PREFIX + "<warnings>",
+            ic.CONTINUE_LABEL, ic.CONTINUE_DESCRIPTION,
+            ic.STOP_LABEL, ic.STOP_DESCRIPTION,
+        ]
+        self.assertEqual(blocks, expected)
+
+    def test_file_name_not_in_shell_command(self):
+        self.assertNotIn("realpath", self.text)
+        self.assertNotIn("<file name>\"", self.text)
+
     def test_skill_does_not_run_checker_in_bash(self):
         self.assertNotIn("check_workbook.py", self.text)
 

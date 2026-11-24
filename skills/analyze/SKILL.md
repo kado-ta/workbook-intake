@@ -17,19 +17,17 @@ Run:
 bash "${CLAUDE_PLUGIN_ROOT}/scripts/doctor.sh"
 ```
 
-If any line starts with `missing`, show the output, point to README "Requirements", and stop.
+Stop, show the output and point to README "Requirements" if the script exits non-zero, prints nothing, prints any line starting with `missing`, or does not print all five lines `ok macos`, `ok uvx`, `ok python3`, `ok sandbox_exec` and `ok intake_dir_protected`.
+
+The output also has a line `folder <path>`: the real path of the intake folder. If that line is absent, the folder does not exist; tell the person to create it and stop. Use that path as `<folder>` below.
 
 If no tool whose name starts with `mcp__plugin_workbook-intake_xlide__` is visible, point to README "Troubleshooting" and stop.
 
 ## Step 1: the file
 
-The intake folder is `~/workbook-intake` (or `$WORKBOOK_INTAKE_DIR`). You cannot list it from Bash, and that is expected. Ask the person for the file name and their question. The file must be a real file in that folder, not a symlink.
+You cannot list the intake folder from Bash, and that is expected. Ask the person for the file name and their question. The name must be a plain file name: if it contains `/` or a control character, or is `.` or `..`, ask again for a plain name. The file must be a real file in the folder, not a symlink.
 
-Build the absolute path from the folder's real path and the file name:
-
-```bash
-printf '%s/%s\n' "$(realpath "${WORKBOOK_INTAKE_DIR:-$HOME/workbook-intake}")" "<file name>"
-```
+The absolute path is `<folder>/<file name>`. Write it into the question text yourself. Never put the file name into a shell command.
 
 ## Step 2: input confirmation
 
@@ -75,9 +73,9 @@ Do not analyze this file. / このファイルは解析しない。
 
 ## Step 3: read the hook's answer
 
-After the answer, a hook adds one line that starts with `workbook-intake:`. Use only that line for the check result; never run the check yourself.
+After the answer, a hook adds one line that starts with `workbook-intake:`. Use only that line for the check result; never run the check yourself. If the person chose Cancel, stop. If no line starting with `workbook-intake:` follows the result, treat it as not recorded and stop.
 
-- `workbook-intake: consent=not_recorded; reason=<reason>`: tell the person the reason and stop. Reasons: bad_input, question_mismatch, not_confirmed, path_not_absolute, intake_dir_invalid, outside_intake, not_regular_file, unsupported_extension, file_too_large, consent_store_unavailable, path_not_canonical, internal_error. For `not_regular_file` or `path_not_canonical` tell the person to place a real file (not a symlink) in the folder; for `question_mismatch` do not retry with a changed text.
+- `workbook-intake: consent=not_recorded; reason=<reason>`: tell the person the reason and stop. Reasons: bad_input, question_mismatch, not_confirmed, path_not_absolute, intake_dir_invalid, outside_intake, not_regular_file, unsupported_extension, file_too_large, consent_store_unavailable, path_not_canonical, file_changed, internal_error. For `not_regular_file` or `path_not_canonical` tell the person to place a real file (not a symlink) in the folder; for `question_mismatch` do not retry with a changed text.
 - `workbook-intake: consent=recorded; check=<status>; failures=<codes|none>; warnings=<codes|none>`: show the person the check status, failures and warnings. Continue only when `check=pass`. Other statuses (fail, error, timeout, sandbox_missing) mean stop.
 - If `warnings` is not `none`, go to step 4. Otherwise go to step 5.
 
@@ -124,13 +122,13 @@ Option 2, description:
 Do not analyze this file. / このファイルは解析しない。
 ```
 
-Continue only after the hook adds `workbook-intake: warnings_ack=recorded`. On `warnings_ack=not_recorded; reason=<reason>`, or if the person chose to stop, tell the person and stop.
+Continue only after the hook adds the line `workbook-intake: warnings_ack=recorded`. If the person chose Stop, or no `workbook-intake:` line follows, stop. On `warnings_ack=not_recorded; reason=<reason>`, or if the person chose to stop, tell the person and stop.
 
 ## Step 5: analysis
 
-Start the `workbook-intake:excel-analyst` subagent. Give it the absolute path and the person's question. Do not call the xlide tools yourself.
+Start the `workbook-intake:excel-analyst` subagent. Give it the absolute file path, the intake folder path `<folder>` and the person's question. Do not call the xlide tools yourself.
 
-If the subagent or a tool call reports a refusal (`workbook-intake: <reason>`), tell the person the reason and stop. Do not try to read the file another way: not with Read, not with `unzip` or Python in Bash, and not with another skill.
+If the subagent or a tool call reports a refusal (`workbook-intake: <reason>`), tell the person the reason and stop. Guard reasons include: bad_input, not_plugin_server, tool_not_allowed, wrong_caller, unexpected_path_argument, missing_file_path, path_not_absolute, intake_dir_invalid, outside_intake, not_regular_file, unsupported_extension, file_too_large, consent_store_unavailable, no_consent, file_changed, check_failed, check_timeout, check_error, sandbox_missing, warnings_not_acknowledged, internal_error. Do not try to read the file another way: not with Read, not with `unzip` or Python in Bash, and not with another skill.
 
 ## Step 6: report
 

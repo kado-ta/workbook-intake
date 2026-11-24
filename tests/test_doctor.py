@@ -73,6 +73,52 @@ class DoctorTest(unittest.TestCase):
                            text=True, timeout=30)
         self.assertEqual(r.returncode, 0, r.stdout)
 
+    def _run_env(self, **extra):
+        env = {"HOME": str(self.home), "PATH": str(self.bin) + ":/usr/bin:/bin"}
+        env.update(extra)
+        return subprocess.run(["/bin/bash", str(DOCTOR)], env=env, capture_output=True,
+                              text=True, timeout=30)
+
+    def test_folder_line_with_realpath(self):
+        self._fake_uvx()
+        os.chmod(self.intake, 0)
+        r = self._run_env()
+        self.assertIn("folder " + str(self.intake), r.stdout.splitlines())
+
+    def test_no_folder_line_when_folder_missing(self):
+        self._fake_uvx()
+        self.intake.rmdir()
+        r = self._run_env()
+        self.assertEqual(r.returncode, 0, r.stdout)
+        self.assertNotIn("folder ", r.stdout)
+
+    def test_home_with_spaces(self):
+        self._fake_uvx()
+        home = Path(os.path.realpath(self._tmp.name)) / "my home"
+        (home / "workbook-intake").mkdir(parents=True)
+        os.chmod(home / "workbook-intake", 0)
+        self.addCleanup(os.chmod, home / "workbook-intake", 0o700)
+        r = self._run_env(HOME=str(home))
+        self.assertEqual(r.returncode, 0, r.stdout)
+        self.assertIn("folder " + str(home / "workbook-intake"), r.stdout.splitlines())
+
+    def test_empty_env_uses_default(self):
+        self._fake_uvx()
+        os.chmod(self.intake, 0)
+        r = self._run_env(WORKBOOK_INTAKE_DIR="")
+        self.assertEqual(r.returncode, 0, r.stdout)
+        self.assertIn("folder " + str(self.intake), r.stdout.splitlines())
+
+    def test_env_starting_with_tilde(self):
+        self._fake_uvx()
+        other = self.home / "tilde dir"
+        other.mkdir()
+        self.addCleanup(os.chmod, other, 0o700)
+        os.chmod(other, 0)
+        r = self._run_env(WORKBOOK_INTAKE_DIR="~/tilde dir")
+        self.assertEqual(r.returncode, 0, r.stdout)
+        self.assertIn("folder " + str(other), r.stdout.splitlines())
+
 
 if __name__ == "__main__":
     unittest.main()
