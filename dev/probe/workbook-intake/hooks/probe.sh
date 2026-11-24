@@ -4,8 +4,8 @@
 # for normal use.
 #
 # PreToolUse (xlide tools): log the input and decide by the tool's short name.
-# PostToolUse (AskUserQuestion): log the input and return a marker string as
-# additionalContext.
+# PostToolUse (AskUserQuestion): log the input and return a marker string with
+# a per-run value as additionalContext.
 
 # Tools picked from the xlide-mcp 1.2.4 inventory (see the research document).
 T_READ="xlide_list_sheets" # takes file_path; allowed
@@ -14,8 +14,13 @@ T_SLOW="xlide_list_modules" # sleeps past the hook timeout of 5 seconds
 T_FAIL="xlide_project_info" # exits 1 without output
 
 py="$(/usr/bin/xcode-select -p 2>/dev/null)/usr/bin/python3"
-log="${CLAUDE_PLUGIN_DATA:-${TMPDIR:-/tmp}}/probe.log"
+log_dir="${CLAUDE_PLUGIN_DATA:-${TMPDIR:-/tmp}}"
+mkdir -p "$log_dir"
+log="$log_dir/probe.log"
 input=$(cat)
+# A value that changes on every run, so that the person can match what Claude
+# quotes from additionalContext against this log without naming it first.
+nonce="$(date -u +%H%M%S)-$$"
 
 sandbox_exit=0
 /usr/bin/sandbox-exec -n no-network /usr/bin/true >/dev/null 2>&1 || sandbox_exit=$?
@@ -52,7 +57,8 @@ printf 'event=%s tool=%s\n' "$event" "$tool" >>"$log"
 
 case "$event" in
 PostToolUse)
-  printf '%s\n' '{"hookSpecificOutput":{"hookEventName":"PostToolUse","additionalContext":"probe-additional-context"}}'
+  printf 'additional_context_nonce=%s\n' "$nonce" >>"$log"
+  printf '{"hookSpecificOutput":{"hookEventName":"PostToolUse","additionalContext":"probe-additional-context %s"}}\n' "$nonce"
   ;;
 PreToolUse)
   case "$short" in

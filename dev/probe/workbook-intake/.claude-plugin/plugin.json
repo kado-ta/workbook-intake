@@ -4,5 +4,8 @@
   "description": "Verification probe for the workbook-intake plugin. Not for normal use.",
   "author": {
     "name": "kado-ta"
+  },
+  "engines": {
+    "claude-code": ">=2.1.295"
   }
 }

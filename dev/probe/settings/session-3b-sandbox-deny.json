@@ -1,0 +1,8 @@
+{
+  "sandbox": {
+    "filesystem": {
+      "denyRead": ["~/workbook-intake"]
+    },
+    "allowUnsandboxedCommands": false
+  }
+}

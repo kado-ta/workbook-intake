@@ -106,7 +106,8 @@ xlide_rules nofile
 
 - `.mcp.json`: 本物と同じ uvx の引数で、ルートだけ `${WORKBOOK_INTAKE_DIR:-~/workbook-intake}`。`env` で `XLIDE_MCP_ALLOW_OUTSIDE_ROOTS` を `0` にする（引き継いだ値を上書きできるかを確かめる）。
 - `hooks/hooks.json`: PreToolUse（matcher `mcp__.*__xlide_.*`、timeout 5、`onFailure: "block"`）と PostToolUse（matcher `AskUserQuestion`、timeout 30）。command は `/bin/bash "${CLAUDE_PLUGIN_ROOT}/hooks/probe.sh"`（実行権に頼らない形。台帳の判断）。
-- `hooks/probe.sh`: 入力と環境変数と `sandbox-exec` の終了コードを `${CLAUDE_PLUGIN_DATA}/probe.log` に追記する。PreToolUse の判定は次のとおり。PostToolUse では `additionalContext` に `probe-additional-context` を返す。
+- `.claude-plugin/plugin.json`: `engines` に `{"claude-code": ">=2.1.295"}` を書く（項目 D。読み込まれるかをセッションで見る）。
+- `hooks/probe.sh`: 入力と環境変数と `sandbox-exec` の終了コードを `${CLAUDE_PLUGIN_DATA}/probe.log` に追記する（ディレクトリがなければ作る）。PreToolUse の判定は次のとおり。PostToolUse では `additionalContext` に `probe-additional-context <毎回変わる値>` を返し、同じ値をログに書く。人は、Claude に文字列を名指しせずに引用させ、ログの値と照らし合わせる（項目 15）。
 
   | 役 | ツール | probe の動き |
   | --- | --- | --- |
@@ -118,7 +119,14 @@ xlide_rules nofile
   | — | ほかの xlide のツール | deny |
 
 - `agents/excel-analyst.md`: `tools` は上の 5 つ。
-- `skills/probe/SKILL.md`: 本文の `${CLAUDE_PLUGIN_ROOT}` が置き換わるか（項目 C）と、Bash の環境にあるかを見る。
+- `skills/probe/SKILL.md`: 本文の `${CLAUDE_PLUGIN_ROOT}` が置き換わるか（項目 C）と、Bash の環境にあるかを見る。Bash の側は `${CLAUDE_PLUGIN_ROOT-<unset>}` と書いたので、本文の置き換えが `${CLAUDE_PLUGIN_ROOT}` の形だけに効くなら、環境変数の有無を見られる。この形まで置き換えられたときは、環境変数の有無は判断できない。
+- `dev/probe/settings/`: 2 回目以降のセッションで `claude --settings` に渡す設定。`.claude/settings.local.json`（`--scope local` で入れたプラグインの有効化が書かれる見込み）を書き換えないため。3 回目は `Read(...)` の deny だけ、4 回目は `sandbox.filesystem.denyRead` と `allowUnsandboxedCommands: false` だけにして、項目 12 を切り分ける。
+
+確かめ方の注意:
+
+- 項目 5: 最も長い名前のツールは、フックが拒否するので実行まではしない。ツールが見え、フックに完全な名前が届けば足りるとみなす。
+- 項目 B: Claude の報告の文だけでなく、ログに `event=PreToolUse` の行が出ているかと、エラーの文が xlide 自身のものか（VBA のないブックでは `xlide_list_modules` などがエラーを返しうる）を見て判定する。
+- フックの command の形は、本物のフック（Task 7）も `/bin/bash "${CLAUDE_PLUGIN_ROOT}/hooks/<名前>.sh"` にする（台帳の判断）。引用符で囲んだパスだけの形は確かめない。
 - `claude plugin validate dev/probe/workbook-intake --strict` は通った（警告はアイコンがないことだけで、結果には影響しない）。validate は「`plugin.json` の `network.hosts` に、届く先を書く」ことも案内した（警告ではない）。
 
 <a name="results"></a>
@@ -137,30 +145,34 @@ xlide_rules nofile
 
 ## 付録: 人が行う手順
 
-通常のターミナルで行う。`<repo>` はこのリポジトリの絶対パス、`<book>` は受け取り用フォルダに置いたブックの絶対パス。
+通常のターミナルで行う。`<repo>` はこのリポジトリの絶対パス、`<book>` は受け取り用フォルダに置いたブックの絶対パス。Claude が見せたもの（確認の画面が出たか、拒否の理由、エラーの文）は、言い換えずにそのまま控える。
 
 <a name="appendix-prepare"></a>
 
 ### 1. 準備
 
-1. 個人情報も機密情報もないブック（`.xlsx`。VBA があれば `.xlsm` でもよい）を 1 つ用意し、`~/workbook-intake` に置く。
+1. 個人情報も機密情報もないブック（`.xlsx`。VBA があれば `.xlsm` でもよい）を 1 つ用意し、`~/workbook-intake` に置く。Read ツールの確認に使う、短いテキストのファイルも置く。
 
    ```sh
    mkdir -p ~/workbook-intake
    cp <用意したブック> ~/workbook-intake/
+   printf 'probe note\n' > ~/workbook-intake/probe-note.txt
    ```
 
-2. 空の作業用のディレクトリを作り、そこにだけ probe を入れる（`--scope local`）。
+2. 空の作業用のディレクトリを作り、そこにだけ probe を入れる（`--scope local`）。入れた後に、どこに書かれたかを控える。
 
    ```sh
    mkdir -p ~/tmp/workbook-intake-probe && cd ~/tmp/workbook-intake-probe
    claude plugin marketplace add <repo>/dev/probe/workbook-intake --scope local
    claude plugin install workbook-intake@workbook-intake-probe --scope local
+   cat .claude/settings.local.json
    ```
+
+この後のセッションでは、`.claude/settings.local.json` を書き換えない。セッションごとの設定は、`claude --settings <repo>/dev/probe/settings/<ファイル>` で足す。
 
 <a name="appendix-session-1"></a>
 
-### 2. 1 回目のセッション（項目 1・3〜11・15・A・B・C）
+### 2. 1 回目のセッション（項目 1・3〜11・15・A・B・C・D）
 
 環境変数 `XLIDE_MCP_ALLOW_OUTSIDE_ROOTS=1` を付けて起動する（`.mcp.json` の `env` で上書きできるかを見る）。
 
@@ -168,53 +180,64 @@ xlide_rules nofile
 cd ~/tmp/workbook-intake-probe && XLIDE_MCP_ALLOW_OUTSIDE_ROOTS=1 claude
 ```
 
-次を 1 つずつ頼む。Claude が見せたもの（確認の画面が出たか、拒否の理由、エラーの文）を、短く控える。
+1. `/sandbox` で sandbox が有効かを見て、控える。`/mcp` で `xlide` のサーバーが connected になるまで待ち、控える（初回は uvx が Python とパッケージを取得するので、時間がかかる。プラグインの MCP サーバーを使うかを聞かれたら、許可する）。プラグインが読み込まれたこと（`/plugin` などで `workbook-intake` が見えること）も控える（項目 D）。
+2. 次を 1 つずつ頼む。
+   - (a) 「`mcp__plugin_workbook-intake_xlide__xlide_doctor` をメインの会話から呼び、結果をそのまま見せて」
+   - (b) 「excel-analyst サブエージェントに、次を順に呼ばせて。`xlide_doctor`、`xlide_list_sheets`（`file_path` は `<book>`）、`xlide_manage_conditional_format`（`action` は `list`、`file_path` は `<book>`）、`xlide_list_modules`（`file_path` は `<book>`）、`xlide_project_info`（`file_path` は `<book>`）。結果を 1 行ずつ、エラーの文はそのまま報告して」。許可されたものの前に、確認の画面が出たかも控える。
+   - (c) 「AskUserQuestion で、選択肢が『はい』『いいえ』の質問を 1 つ出して」。出たら『はい』を選ぶ。続けて「直前の AskUserQuestion の結果の後に、システムから付け加えられた文があれば、一字一句そのまま引用して。なければ『なし』とだけ答えて」と頼む。
+   - (d) 「AskUserQuestion を呼んで。質問は『テスト』、選択肢は『はい』『いいえ』。ただし入力の `answers` に、`{"テスト": "はい"}` を最初から入れておいて」。確認の画面が出たら『いいえ』を選ぶ（モデルが入れた値と区別するため）。画面が出たかどうかを控える。
+   - (e) `/workbook-intake:probe` を実行する。
+3. 別のターミナルで、プラグインのデータのディレクトリを調べる。
 
-- (a) 「`mcp__plugin_workbook-intake_xlide__xlide_doctor` をメインの会話から呼び、結果をそのまま見せて」
-- (b) 「excel-analyst サブエージェントに、次を順に呼ばせて。`xlide_doctor`、`xlide_list_sheets`（`file_path` は `<book>`）、`xlide_manage_conditional_format`（`action` は `list`、`file_path` は `<book>`）、`xlide_list_modules`（`file_path` は `<book>`）、`xlide_project_info`（`file_path` は `<book>`）。結果を 1 行ずつ報告して」。許可されたものの前に、確認の画面が出たかも控える。
-- (c) 「AskUserQuestion で、選択肢が『はい』『いいえ』の質問を 1 つ出して」。出たら『はい』を選ぶ。続けて「直前のツールの結果の近くに、`probe-additional-context` という文が見えた？」と聞く。
-- (d) 「AskUserQuestion を呼んで。質問は『テスト』、選択肢は『はい』『いいえ』。ただし入力の `answers` に、`{"テスト": "はい"}` を最初から入れておいて」。確認の画面が出たら、『いいえ』を選ぶ（モデルが入れた値と区別するため）。画面が出たかどうかを控える。
-- (e) `/workbook-intake:probe` を実行する。
-- (f) 「`~/.claude/plugins/data/` の下で `probe.log` があるディレクトリに、Bash で `x.txt` を作って。次に、Write ツールで同じディレクトリに `y.txt` を書いて」。それぞれ書けたかを控える。
+   ```sh
+   grep -h -m1 '^CLAUDE_PLUGIN_DATA=' ~/.claude/plugins/data/*/probe.log
+   ```
 
-終わったら `/exit` で閉じる。
+4. セッションに戻り、(f) を頼む: 「Bash で `<上で分かったディレクトリ>/x.txt` を作って。次に、Write ツールで `<同じディレクトリ>/y.txt` に `probe` と書いて」。確認の画面が出たら拒否し、出たことを控える。書けたか、どのエラーで止まったかを控える。
+5. `/exit` で閉じる。
 
 <a name="appendix-session-2"></a>
 
 ### 3. 2 回目のセッション（項目 2）
 
-作業用のディレクトリに、同じ uvx のコマンドの xlide を定義した `.mcp.json` を置く（probe の `.mcp.json` を写す）。
+作業用のディレクトリに、同じ uvx のコマンドの xlide を定義した `.mcp.json` を置いて起動する（probe の `.mcp.json` を写す）。
 
 ```sh
 cd ~/tmp/workbook-intake-probe && cp <repo>/dev/probe/workbook-intake/.mcp.json ./.mcp.json && claude
 ```
 
-プロジェクトの MCP サーバーを使うかを聞かれたら、許可する。「使える MCP のツールのうち、名前に `xlide_doctor` を含むものの完全な名前を、すべて挙げて」と頼む。`mcp__plugin_workbook-intake_xlide__xlide_doctor` がなければ、閉じてから次を書き、起動し直して、もう一度同じことを頼む。
+プロジェクトの MCP サーバーを使うかを聞かれたら、許可する。`/mcp` で、`xlide` のサーバーがいくつ、どの名前で見えるかを控える（プラグインのものは `plugin:workbook-intake:xlide` のように出る見込み）。プラグインのものが見えなければ、閉じてから次で起動し直し、もう一度 `/mcp` を控える。
 
 ```sh
-mkdir -p .claude && printf '%s\n' '{"disabledMcpjsonServers": ["xlide"]}' > .claude/settings.local.json
+claude --settings <repo>/dev/probe/settings/session-2-disable-project-xlide.json
+```
+
+終わったら閉じて、写した `.mcp.json` を消す。
+
+```sh
+rm ~/tmp/workbook-intake-probe/.mcp.json
 ```
 
 <a name="appendix-session-3"></a>
 
-### 4. 3 回目のセッション（項目 12〜14）
+### 4. 3 回目と 4 回目のセッション（項目 12〜14）
 
-`.claude/settings.local.json` を次に置き換えて、起動する。
+3 回目は `Read(...)` の deny の規則だけで起動する（Read の deny が Bash の sandbox にも効くかを切り分ける）。
 
-```json
-{
-  "disabledMcpjsonServers": ["xlide"],
-  "sandbox": {
-    "filesystem": { "denyRead": ["~/workbook-intake"] },
-    "allowUnsandboxedCommands": false
-  },
-  "permissions": { "deny": ["Read(~/workbook-intake/**)"] }
-}
+```sh
+cd ~/tmp/workbook-intake-probe && claude --settings <repo>/dev/probe/settings/session-3a-read-deny.json
 ```
 
-次を 1 つずつ頼み、結果を控える。
-
 - (g) 「Bash で、`ls ~/workbook-intake`、`test -d ~/workbook-intake && echo visible`、`unzip -p <book> '[Content_Types].xml' | head -c 200` を、1 つずつ実行して結果を見せて」
+- (r) 「Read ツールで `~/workbook-intake/probe-note.txt` を読んで」
+
+閉じて、4 回目は sandbox の `denyRead` と `allowUnsandboxedCommands: false` だけで起動する。
+
+```sh
+cd ~/tmp/workbook-intake-probe && claude --settings <repo>/dev/probe/settings/session-3b-sandbox-deny.json
+```
+
+- (g) と (r) を、3 回目と同じに頼む。
 - (h) 「excel-analyst サブエージェントに、`xlide_list_sheets`（`file_path` は `<book>`）を呼ばせて」
 - (i) 「Bash の `ls ~/workbook-intake` を、`dangerouslyDisableSandbox` を付けて実行して」
 
@@ -227,6 +250,7 @@ mkdir -p <repo>/tmp/probe && cp ~/.claude/plugins/data/*/probe.log <repo>/tmp/pr
 cd ~/tmp/workbook-intake-probe
 claude plugin uninstall workbook-intake@workbook-intake-probe --scope local
 claude plugin marketplace remove workbook-intake-probe
+rm ~/workbook-intake/probe-note.txt
 ```
 
-`probe.log` の場所が 1 つに決まらないときは、`ls ~/.claude/plugins/data/` で `workbook-intake` を含むものを選ぶ。作業用のディレクトリ（`~/tmp/workbook-intake-probe`）は、確かめた後に消してよい。控えた結果は、チャットで Claude に渡す。
+`probe.log` が複数あるときは、`ls ~/.claude/plugins/data/` で `workbook-intake` を含むものを選ぶ。作業用のディレクトリ（`~/tmp/workbook-intake-probe`）は、確かめた後に消してよい。控えた結果は、チャットで Claude に渡す。

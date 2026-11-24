@@ -11,4 +11,6 @@ Install it from its own marketplace (`workbook-intake-probe`), run the checks, a
 The hook writes each hook input to `probe.log` in the plugin data directory (`${CLAUDE_PLUGIN_DATA}`).
 The log contains file paths, so do not commit it.
 
-The steps and the list of checks are in the maintenance runbook (`docs/runbooks/maintenance.md`).
+The steps and the list of checks are in the first verification record (`docs/work/20261124_workbook-intake/research-plugin-behavior.md`). The maintenance runbook (`docs/runbooks/maintenance.md`) will carry them for later re-checks.
+
+`settings/` holds the extra settings that later sessions pass with `claude --settings`, so that the local settings file written by the install stays untouched.
