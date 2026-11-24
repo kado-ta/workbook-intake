@@ -1,0 +1,7 @@
+# Mirror of the pins in .mcp.json, kept only so Dependabot can see them.
+# It is NOT used for installs. tests/test_manifests.py checks that it matches .mcp.json.
+xlide-mcp==1.2.4
+pyopenvba==6.6.0
+pyofficeeditor==0.4.1
+pyvbaanalysis==3.0.3
+mcp==2.3.0

@@ -45,6 +45,12 @@ class ManifestTest(unittest.TestCase):
         self.assertEqual(s["xlide"]["args"], XLIDE_ARGS)
         self.assertEqual(s["xlide"]["env"], XLIDE_ENV)
 
+    def test_dependabot_mirror_matches_mcp_json(self):
+        pins = {XLIDE_ARGS[i + 1] for i, a in enumerate(XLIDE_ARGS) if a in ("--from", "--with")}
+        lines = (ROOT / "deps/requirements.txt").read_text(encoding="utf-8").splitlines()
+        mirror = {l.strip() for l in lines if l.strip() and not l.lstrip().startswith("#")}
+        self.assertEqual(mirror, pins)
+
     def test_probe_pins_match_plugin(self):
         probe = load_json("dev/probe/workbook-intake/.mcp.json")["mcpServers"]["xlide"]
         self.assertEqual(without_root_value(probe["args"]), without_root_value(XLIDE_ARGS))
