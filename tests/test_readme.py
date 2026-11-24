@@ -1,3 +1,4 @@
+import importlib.util
 import re
 import unittest
 from pathlib import Path
@@ -35,6 +36,27 @@ class ReadmeTest(unittest.TestCase):
 
     def test_japanese_has_same_sections(self):
         self.assertEqual(len(h2(EN)), len(h2(JA)))
+
+    def test_japanese_sections_match_in_order(self):
+        ja_anchors = re.findall(r'<a name="([^"]+)"></a>\n\n## ', JA)
+        required = [name.lower() for name in SECTIONS]
+        self.assertEqual([a for a in ja_anchors if a in required], required)
+        en_order = [t for t in h2(EN) if t in SECTIONS]
+        self.assertEqual(en_order, list(SECTIONS))
+
+    def test_vocabulary_is_documented_in_both(self):
+        spec = importlib.util.spec_from_file_location(
+            "check_workbook", ROOT / "scripts" / "check_workbook.py")
+        module = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(module)
+        doctor = (ROOT / "scripts" / "doctor.sh").read_text(encoding="utf-8")
+        items = re.findall(r"^\s*if .*; then report (\w+) 0;", doctor, flags=re.M)
+        items += re.findall(r"report (intake_dir_protected) [01]", doctor)
+        self.assertIn("uvx", items)
+        codes = list(module.FAILURE_CODES) + list(module.WARNING_CODES) + items
+        for name, text in (("README.md", EN), ("README.ja.md", JA)):
+            for code in codes:
+                self.assertIn("`%s`" % code, text, "%s: %s" % (name, code))
 
     def test_maintenance_links_runbook(self):
         self.assertIn(RUNBOOK, EN)

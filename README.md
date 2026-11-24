@@ -36,7 +36,7 @@ Files you let Claude read are sent to Anthropic as model input, and may also sta
 - macOS (the check uses Seatbelt, `sandbox-exec`).
 - Command Line Tools (`xcode-select --install`), for `python3`.
 - [uv](https://docs.astral.sh/uv/) (`uvx`).
-- Claude Code 2.1.295 or later (`onFailure` for hooks; `plugin.json` declares `engines`).
+- Claude Code 2.1.295 or later, because the hooks use `onFailure`. `plugin.json` declares this in `engines`, but Claude Code reads `engines` only from 2.1.323, so older versions do not enforce it. Pinning a marketplace by commit SHA (see Install) needs 2.1.324 or later.
 - First run: `uvx` downloads a Python and the pinned packages, so it needs a network and takes a while.
 
 `scripts/doctor.sh` checks the requirements when the skill starts. It prints `ok <item>` or `missing <item>` for `macos`, `uvx`, `python3`, `sandbox_exec` and `intake_dir_protected`, and then `folder <path>`.
@@ -98,13 +98,13 @@ Required (both). They stop Claude's Bash and Read tool from reading the intake f
 
 Recommended:
 
-- `"sandbox": {"allowUnsandboxedCommands": false}`: Claude cannot retry a blocked command outside the sandbox.
-- `"sandbox": {"failIfUnavailable": true}`: Claude Code refuses to start instead of running unsandboxed.
-- `"sandbox": {"filesystem": {"denyWrite": ["~/workbook-intake"]}}`: sandboxed commands cannot replace a file between the check and the read (matters for sessions started from `~`).
+- `"sandbox": {"allowUnsandboxedCommands": false}`: according to the Claude Code documentation, Claude Code then ignores requests to run a command outside the sandbox. I could not isolate its effect in my own check.
+- `"sandbox": {"failIfUnavailable": true}`: according to the documentation, Claude Code refuses to start when the sandbox is unavailable, instead of running unsandboxed.
+- `"sandbox": {"filesystem": {"denyWrite": ["~/workbook-intake"]}}`: keeps sandboxed commands from writing to the folder, which matters for sessions started from `~`.
 
-These sandbox keys are listed in the [settings reference](https://code.claude.com/docs/en/settings-reference.md) (`sandbox.filesystem.denyRead`, `sandbox.filesystem.denyWrite`, `sandbox.failIfUnavailable`, `sandbox.allowUnsandboxedCommands`) and in [sandboxing](https://code.claude.com/docs/en/sandboxing.md).
+I wrote the `failIfUnavailable` and `denyWrite` forms from the documented key names, not from a tested example. These sandbox keys are listed in the [settings reference](https://code.claude.com/docs/en/settings-reference.md) (`sandbox.filesystem.denyRead`, `sandbox.filesystem.denyWrite`, `sandbox.failIfUnavailable`, `sandbox.allowUnsandboxedCommands`) and in [sandboxing](https://code.claude.com/docs/en/sandboxing.md).
 
-If a project defines its own `xlide` server with the same `uvx` command, Claude Code uses one of them only, and the plugin's is dropped as a duplicate (confirmed). Disable the project's with `"disabledMcpjsonServers": ["xlide"]`.
+If a project defines its own `xlide` server with the same `uvx` command, Claude Code uses one of them only, and the plugin's is dropped as a duplicate (observed with Claude Code 2.1.331). Disable the project's with `"disabledMcpjsonServers": ["xlide"]`.
 
 To use another intake folder, set `WORKBOOK_INTAKE_DIR` in the environment that starts Claude Code, and change both deny settings to the same folder.
 
@@ -167,12 +167,13 @@ Check statuses: `pass`, `fail`, `error` (output outside the vocabulary or unexpe
 - The file can change between the check and the read. The intake folder is outside the sandbox's write range, but processes outside the sandbox (you, other apps) can still replace files. Use `denyWrite`.
 - Without the recommended settings, use outside the skill (other skills, or asking Claude directly to read the file with Bash) can still read the intake folder. `doctor.sh` runs only inside the skill.
 - Plugin hooks disabled by managed settings means no enforcement. Do not use the plugin there.
+- Tool names carry the prefix `mcp__plugin_workbook-intake_xlide__` (for example `mcp__plugin_workbook-intake_xlide__xlide_doctor`). A matcher that names only the server (`mcp__xlide__.*`) does not match them.
 - xlide is visible to the main conversation too, because plugin subagents cannot declare their own MCP servers. Calls from the main conversation are blocked by the hook.
 - A hook's allow only skips a prompt. Deny and ask rules in your settings still apply.
 - Display tricks in a file name (look-alike characters, special spaces, combining marks) cannot be fully prevented. They need a real file of that name in the intake folder.
 - `.xls` is not supported. xlide reads `.xlsb` sheets only on Windows (on macOS its sheet tool rejects `.xlsb`).
 - The approval record lives in the plugin data directory. In an environment where a sandboxed command can write there, an approval can be forged.
-- If the plugin cache is writable from a sandboxed session, the hooks could be modified. If your GitHub account is taken over, a bad update could be published; pinning by SHA with auto-update off avoids this.
+- If the plugin cache is writable from a sandboxed session, the hooks could be modified. If your GitHub account is taken over, a bad update could be published; pinning by SHA with auto-update off helps you use only versions you have reviewed, but it does not prevent this.
 - The environment can change where uv fetches from (for example `UV_DEFAULT_INDEX`).
 - macOS only. Windows live tools of xlide are not used.
 - Not covered: people who use xlide without this plugin, and the Google Sheets connector.
@@ -240,4 +241,4 @@ The author maintains this in private time, as time allows. Regular updates are n
 
 MIT. See [LICENSE](LICENSE).
 
-xlide-mcp and the libraries it is built on are MIT-licensed. They are not included in this repository; `uvx` fetches them from PyPI when the server starts.
+Thanks to the author of [xlide-mcp](https://github.com/WilliamSmithEdward/xlide_mcp) and to the authors of the libraries it is built on. They are MIT-licensed. They are not included in this repository; `uvx` fetches them from PyPI when the server starts.

@@ -40,7 +40,7 @@
 - macOS（検査に Seatbelt の `sandbox-exec` を使います）。
 - Command Line Tools（`xcode-select --install`。`python3` のため）。
 - [uv](https://docs.astral.sh/uv/)（`uvx`）。
-- Claude Code 2.1.295 以上（フックの `onFailure` のため。`plugin.json` の `engines` で宣言しています）。
+- Claude Code 2.1.295 以上（フックの `onFailure` のため）。`plugin.json` の `engines` で宣言していますが、Claude Code が `engines` を読むのは 2.1.323 以降なので、それより古い版では強制されません。マーケットプレイスをコミットの SHA で固定する（Install を見てください）には、2.1.324 以上が要ります。
 - 初回は、`uvx` が Python と固定した版のパッケージを取得するので、通信が要り、時間がかかります。
 
 `scripts/doctor.sh` が、スキルの開始時に必要なものを確かめます。`macos`・`uvx`・`python3`・`sandbox_exec`・`intake_dir_protected` ごとに `ok <項目>` か `missing <項目>` を出し、最後に `folder <パス>` を出します。
@@ -102,13 +102,13 @@ claude plugin install workbook-intake@workbook-intake
 
 推奨:
 
-- `"sandbox": {"allowUnsandboxedCommands": false}`: 止められたコマンドを、Claude が sandbox の外で再実行できなくなります。
-- `"sandbox": {"failIfUnavailable": true}`: sandbox が使えないとき、sandbox なしで動かさずに起動を止めます。
-- `"sandbox": {"filesystem": {"denyWrite": ["~/workbook-intake"]}}`: sandbox の中のコマンドが、検査と読み込みの間にファイルを差し替えられなくなります（`~` で起動したセッションで効きます）。
+- `"sandbox": {"allowUnsandboxedCommands": false}`: Claude Code のドキュメントによると、sandbox の外でコマンドを動かす要求を、Claude Code が無視するようになります。自分の確認では、この設定の効果だけを切り分けられていません。
+- `"sandbox": {"failIfUnavailable": true}`: ドキュメントによると、sandbox が使えないとき、sandbox なしで動かさずに、Claude Code が起動を止めます。
+- `"sandbox": {"filesystem": {"denyWrite": ["~/workbook-intake"]}}`: sandbox の中のコマンドが、このフォルダに書けないようにします（`~` で起動したセッションで効きます）。
 
-これらのキーは、[settings の一覧](https://code.claude.com/docs/en/settings-reference.md)（`sandbox.filesystem.denyRead`・`sandbox.filesystem.denyWrite`・`sandbox.failIfUnavailable`・`sandbox.allowUnsandboxedCommands`）と[sandboxing](https://code.claude.com/docs/en/sandboxing.md)にあります。
+`failIfUnavailable` と `denyWrite` の書き方は、動かして確かめた例ではなく、ドキュメントにあるキー名から書いたものです。これらのキーは、[settings の一覧](https://code.claude.com/docs/en/settings-reference.md)（`sandbox.filesystem.denyRead`・`sandbox.filesystem.denyWrite`・`sandbox.failIfUnavailable`・`sandbox.allowUnsandboxedCommands`）と[sandboxing](https://code.claude.com/docs/en/sandboxing.md)にあります。
 
-プロジェクトが、同じ `uvx` のコマンドで `xlide` を定義していると、使われるのは片方だけで、プラグインのものは重複として外されます（確認済み）。プロジェクトのほうは `"disabledMcpjsonServers": ["xlide"]` で無効にします。
+プロジェクトが、同じ `uvx` のコマンドで `xlide` を定義していると、使われるのは片方だけで、プラグインのものは重複として外されます（Claude Code 2.1.331 で確認）。プロジェクトのほうは `"disabledMcpjsonServers": ["xlide"]` で無効にします。
 
 別のフォルダを使うときは、Claude Code を起動する環境で `WORKBOOK_INTAKE_DIR` を設定し、2 つの拒否の設定も同じフォルダに変えます。
 
@@ -171,12 +171,13 @@ Google スプレッドシートは直接読みません。`.xlsx` でダウン�
 - 検査のあと、読むまでにファイルが差し替えられることがあります。受け取り用フォルダは sandbox の書き込みの範囲の外ですが、sandbox の外のもの（人や、ほかのアプリ）は差し替えられます。`denyWrite` を使ってください。
 - 推奨設定がない環境では、スキルを通らない使い方（ほかのスキルや、Bash で読むよう直接頼むこと）で、受け取り用フォルダを読めます。`doctor.sh` はスキルの中でしか動きません。
 - 管理設定でプラグインのフックが止められている環境では、守りが効きません。使わないでください。
+- ツール名には `mcp__plugin_workbook-intake_xlide__` が付きます（例: `mcp__plugin_workbook-intake_xlide__xlide_doctor`）。サーバー名だけを書いた matcher（`mcp__xlide__.*`）には当たりません。
 - プラグインのサブエージェントは自分の MCP サーバーを持てないので、xlide はメインの会話からも見えます。メインの会話からの呼び出しは、フックが止めます。
 - フックの許可は、確認を省くだけです。settings の deny と ask の規則は残ります。
 - ファイル名の見せかけ（似た文字、特殊な空白、結合文字）は、完全には防げません。その名前の実ファイルが受け取り用フォルダに要ります。
 - `.xls` は扱えません。xlide が `.xlsb` のシートを読めるのは Windows だけです（macOS では、シートのツールが `.xlsb` を拒否します）。
 - 承認の記録は、プラグインのデータの置き場所にあります。sandbox の中のコマンドがそこへ書ける環境では、承認を偽れます。
-- プラグインのキャッシュが sandbox から書ける環境では、フックを書き換えられます。GitHub のアカウントが乗っ取られると、悪い更新を配られうるので、SHA で固定して、自動更新を切ってください。
+- プラグインのキャッシュが sandbox から書ける環境では、フックを書き換えられます。GitHub のアカウントが乗っ取られると、悪い更新を配られうるので、SHA で固定して自動更新を切っておくと、自分で確かめた版だけを使いやすくなりますが、防げるわけではありません。
 - uv の取得元は、環境変数（`UV_DEFAULT_INDEX` など）で変えられます。
 - macOS だけです。xlide の Windows 向けの live 系のツールは使いません。
 - 守りの対象外: このプラグインなしで xlide を使う人、Google Sheets のコネクタ。
@@ -244,4 +245,4 @@ xlide を守るフックの拒否（`workbook-intake: <理由>`。必要なら�
 
 MIT。[LICENSE](LICENSE) を見てください。
 
-xlide-mcp と、その土台のライブラリは MIT です。このリポジトリには含まれず、サーバーの起動時に `uvx` が PyPI から取得します。
+[xlide-mcp](https://github.com/WilliamSmithEdward/xlide_mcp) の作者と、その土台のライブラリの作者に感謝します。どれも MIT です。このリポジトリには含まれず、サーバーの起動時に `uvx` が PyPI から取得します。
