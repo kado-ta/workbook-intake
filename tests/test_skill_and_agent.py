@@ -1,0 +1,67 @@
+import re
+import sys
+import unittest
+from pathlib import Path
+
+ROOT = Path(__file__).resolve().parent.parent
+sys.path.insert(0, str(ROOT / "hooks"))
+
+import guard_xlide as gx  # noqa: E402
+import intake_common as ic  # noqa: E402
+
+AGENT = ROOT / "agents" / "excel-analyst.md"
+SKILL = ROOT / "skills" / "analyze" / "SKILL.md"
+ALLOWLIST = ROOT / "hooks" / "allowed-tools.txt"
+
+
+def frontmatter(path):
+    text = path.read_text(encoding="utf-8")
+    match = re.match(r"---\n(.*?)\n---\n", text, re.S)
+    assert match, "no frontmatter in %s" % path
+    fields = {}
+    for line in match.group(1).splitlines():
+        key, _, value = line.partition(":")
+        fields[key.strip()] = value.strip()
+    return fields
+
+
+class AgentTest(unittest.TestCase):
+    def test_agent_tools_match_allowlist(self):
+        names = set()
+        for line in ALLOWLIST.read_text().splitlines():
+            if line.strip() and not line.startswith("#"):
+                names.add(gx.TOOL_PREFIX + line.split()[0])
+        tools = {t.strip() for t in frontmatter(AGENT)["tools"].split(",")}
+        self.assertEqual(tools, names)
+
+    def test_agent_has_no_unsupported_fields(self):
+        fields = frontmatter(AGENT)
+        for key in ("hooks", "mcpServers", "permissionMode"):
+            self.assertNotIn(key, fields)
+        self.assertEqual(fields["name"], "excel-analyst")
+
+
+class SkillTest(unittest.TestCase):
+    def setUp(self):
+        self.text = SKILL.read_text(encoding="utf-8")
+
+    def test_skill_contains_consent_copy(self):
+        for name in ("CONSENT_HEADER", "CONSENT_QUESTION_PREFIX", "CONFIRM_LABEL",
+                     "CONFIRM_DESCRIPTION", "CANCEL_LABEL", "CANCEL_DESCRIPTION",
+                     "WARNINGS_HEADER", "WARNINGS_QUESTION_PREFIX", "WARNINGS_LIST_PREFIX",
+                     "CONTINUE_LABEL", "CONTINUE_DESCRIPTION", "STOP_LABEL",
+                     "STOP_DESCRIPTION"):
+            self.assertIn(getattr(ic, name), self.text, name)
+
+    def test_skill_does_not_run_checker_in_bash(self):
+        self.assertNotIn("check_workbook.py", self.text)
+
+    def test_skill_description_makes_no_safety_claim(self):
+        description = frontmatter(SKILL)["description"].lower()
+        for word in ("safe", "secure", "安全"):
+            self.assertNotIn(word, description)
+        self.assertEqual(frontmatter(SKILL)["name"], "analyze")
+
+
+if __name__ == "__main__":
+    unittest.main()
