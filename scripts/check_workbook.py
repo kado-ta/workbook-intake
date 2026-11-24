@@ -10,6 +10,7 @@ import os
 import posixpath
 import re
 import stat
+import struct
 import sys
 import unicodedata
 import xml.etree.ElementTree as ET
@@ -329,6 +330,136 @@ def _scan_warnings(zf, infos, is_xlsb):
     return warnings, {c: counts[c] for c in warnings}
 
 
+_EOCD_SIG = b"PK\x05\x06"
+_ZIP64_LOCATOR_SIG = b"PK\x06\x07"
+_CEN_SIG = b"PK\x01\x02"
+_LOC_SIG = b"PK\x03\x04"
+_DD_SIG = b"PK\x07\x08"
+_EOCD_LEN = 22
+_CEN_LEN = 46
+_LOC_LEN = 30
+_EXTRA_ZIP64 = 0x0001
+_EXTRA_UNICODE_PATH = 0x7075
+_FLAG_DESCRIPTOR = 0x8
+_FLAG_UTF8 = 0x800
+
+
+def _read_at(f, offset, length):
+    f.seek(offset)
+    data = f.read(length)
+    return data if len(data) == length else None
+
+
+def _extra_ok(extra):
+    """True when extra is an exact run of (id, length, data) blocks without ZIP64 or Unicode Path."""
+    pos = 0
+    while pos < len(extra):
+        if pos + 4 > len(extra):
+            return False
+        block_id, block_len = struct.unpack("<HH", extra[pos:pos + 4])
+        if block_id in (_EXTRA_ZIP64, _EXTRA_UNICODE_PATH):
+            return False
+        pos += 4 + block_len
+    return pos == len(extra)
+
+
+def _bad_name(name, flags, csize, usize):
+    """True when the entry name is not one every reader decodes and splits alike."""
+    if flags & _FLAG_UTF8:
+        try:
+            name.decode("utf-8")
+        except UnicodeDecodeError:
+            return True
+    elif any(b > 0x7F for b in name):
+        return True
+    if b"\x00" in name:
+        return True
+    is_dir = name.endswith(b"/")
+    if is_dir and (csize or usize):
+        return True
+    segments = (name[:-1] if is_dir else name).split(b"/")
+    return any(s in (b"", b".") for s in segments)
+
+
+def _check_layout(path, size):
+    """Accept only ZIP layouts that every reader reads the same way.
+
+    Reads the bytes directly, since readers disagree on prefixes, comments,
+    several central directories, ZIP64 and Unicode Path. Returns a failure code
+    or None.
+    """
+    if size < _EOCD_LEN:
+        return "not_zip"
+    with open(path, "rb") as f:
+        eocd = _read_at(f, size - _EOCD_LEN, _EOCD_LEN)
+        if eocd is None or eocd[:4] != _EOCD_SIG:
+            return "not_zip"
+        disk, cd_disk, n_disk, n_total, cd_size, cd_off, comment_len = struct.unpack(
+            "<HHHHIIH", eocd[4:]
+        )
+        if comment_len or disk or cd_disk or n_disk != n_total:
+            return "not_zip"
+        if size >= _EOCD_LEN + 20 and _read_at(f, size - 42, 4) == _ZIP64_LOCATOR_SIG:
+            return "not_zip"
+        if 0xFFFF in (n_disk, n_total) or 0xFFFFFFFF in (cd_size, cd_off):
+            return "not_zip"
+        if cd_off + cd_size != size - _EOCD_LEN:
+            return "not_zip"
+        cd = _read_at(f, cd_off, cd_size)
+        if cd is None:
+            return "not_zip"
+        entries = []
+        pos = 0
+        for _ in range(n_total):
+            head = cd[pos:pos + _CEN_LEN]
+            if len(head) < _CEN_LEN or head[:4] != _CEN_SIG:
+                return "not_zip"
+            (flags, method, _t, _d, crc, csize, usize, nlen, xlen, clen,
+             _dn, _ia, _ea, off) = struct.unpack("<HHHHIIIHHHHHII", head[8:])
+            if 0xFFFFFFFF in (csize, usize, off):
+                return "not_zip"
+            end = pos + _CEN_LEN + nlen + xlen + clen
+            if end > len(cd):
+                return "not_zip"
+            name = cd[pos + _CEN_LEN:pos + _CEN_LEN + nlen]
+            if not _extra_ok(cd[pos + _CEN_LEN + nlen:pos + _CEN_LEN + nlen + xlen]):
+                return "not_zip"
+            entries.append((off, flags, method, crc, csize, usize, name))
+            pos = end
+        if pos != len(cd):
+            return "not_zip"
+        entries.sort(key=lambda e: e[0])
+        expected = 0
+        for off, flags, method, crc, csize, usize, name in entries:
+            if off != expected:
+                return "not_zip"
+            loc = _read_at(f, off, _LOC_LEN)
+            if loc is None or loc[:4] != _LOC_SIG:
+                return "not_zip"
+            lflags, lmethod, _t, _d, lcrc, lcsize, lusize, lnlen, lxlen = struct.unpack(
+                "<HHHHIIIHH", loc[6:]
+            )
+            if lflags != flags or lmethod != method or lnlen != len(name):
+                return "not_zip"
+            if not flags & _FLAG_DESCRIPTOR and (lcrc, lcsize, lusize) != (crc, csize, usize):
+                return "not_zip"
+            tail = _read_at(f, off + _LOC_LEN, lnlen + lxlen)
+            if tail is None or tail[:lnlen] != name or not _extra_ok(tail[lnlen:]):
+                return "not_zip"
+            expected = off + _LOC_LEN + lnlen + lxlen + csize
+            if flags & _FLAG_DESCRIPTOR:
+                sig = _read_at(f, expected, 4)
+                if sig is None:
+                    return "not_zip"
+                expected += 16 if sig == _DD_SIG else 12
+        if expected != cd_off:
+            return "not_zip"
+    for _off, flags, _m, _c, csize, usize, name in entries:
+        if _bad_name(name, flags, csize, usize):
+            return "unsafe_part_name"
+    return None
+
+
 def check(path):
     if os.path.splitext(path)[1].lower() not in SUPPORTED_EXTENSIONS:
         return _result(["unsupported_extension"])
@@ -339,6 +470,9 @@ def check(path):
         if head == OLE_MAGIC:
             data = head + f.read(MAX_FILE_BYTES)
             return _result(["encrypted" if ENCRYPTED_PACKAGE in data else "not_zip"])
+    layout = _check_layout(path, os.path.getsize(path))
+    if layout:
+        return _result([layout])
     try:
         zf = zipfile.ZipFile(path)
     except ZIP_ERRORS:

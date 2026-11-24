@@ -1,4 +1,6 @@
 """Builds small .xlsx files for tests. Nothing binary is tracked in the repository."""
+import io
+import struct
 import zipfile
 
 
@@ -47,4 +49,48 @@ def write_workbook(path, parts, compression=zipfile.ZIP_DEFLATED):
     with zipfile.ZipFile(path, "w", compression) as z:
         for name, data in parts.items():
             z.writestr(name, data)
+    return path
+
+
+def raw_zip(parts, compression=zipfile.ZIP_STORED):
+    """Return the bytes of a zip built in memory."""
+    buf = io.BytesIO()
+    with zipfile.ZipFile(buf, "w", compression) as z:
+        for name, data in parts.items():
+            z.writestr(name, data)
+    return buf.getvalue()
+
+
+def split_zip(raw):
+    """Split zip bytes into (entry bytes, central directory bytearray, entry count)."""
+    e = raw.rfind(b"PK\x05\x06")
+    size, off = struct.unpack("<II", raw[e + 12:e + 20])
+    return raw[:off], bytearray(raw[off:off + size]), struct.unpack("<H", raw[e + 10:e + 12])[0]
+
+
+def central_entries(cd):
+    """Yield the position of each central directory entry in a bytearray."""
+    pos = 0
+    while pos < len(cd):
+        nl, xl, cl = struct.unpack("<HHH", cd[pos + 28:pos + 34])
+        yield pos
+        pos += 46 + nl + xl + cl
+
+
+def shift_central_offsets(cd, delta):
+    for pos in central_entries(cd):
+        off = struct.unpack("<I", cd[pos + 42:pos + 46])[0]
+        cd[pos + 42:pos + 46] = struct.pack("<I", off + delta)
+
+
+def assemble_zip(body, cd, count, comment=b"", count_in_eocd=None):
+    """Join entry bytes and a central directory with a fresh EOCD."""
+    n = count if count_in_eocd is None else count_in_eocd
+    eocd = b"PK\x05\x06" + struct.pack("<HHHHIIH", 0, 0, n, n, len(cd), len(body), len(comment))
+    return body + bytes(cd) + eocd + comment
+
+
+def write_raw(path, data):
+    with open(path, "wb") as f:
+        f.write(data)
     return path

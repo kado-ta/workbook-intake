@@ -17,7 +17,10 @@ sys.path.insert(0, str(ROOT / "scripts"))
 sys.path.insert(0, str(ROOT))
 
 import check_workbook  # noqa: E402
-from tests.workbook_factory import minimal_parts, write_workbook  # noqa: E402
+from tests.workbook_factory import (  # noqa: E402
+    assemble_zip, central_entries, minimal_parts, raw_zip, shift_central_offsets,
+    split_zip, write_raw, write_workbook,
+)
 
 SCRIPT = str(ROOT / "scripts" / "check_workbook.py")
 OLE_MAGIC = bytes.fromhex("D0CF11E0A1B11AE1")
@@ -201,10 +204,10 @@ class CheckWorkbookTest(unittest.TestCase):
                 self.patch_zip(p, edit)
                 self.assertEqual(self.failures(p), ["not_zip"])
 
-    def test_invalid_utf8_name_is_not_zip(self):
+    def test_invalid_utf8_name_is_unsafe(self):
         p = self.with_part("xl/worksheets/a\u00e9.xml", b"<a/>")
         self.patch_zip(p, lambda d: d.__setitem__(slice(0, len(d)), bytes(d).replace(b"\xc3\xa9", b"\xc3\xff")))
-        self.assertEqual(self.failures(p), ["not_zip"])
+        self.assertEqual(self.failures(p), ["unsafe_part_name"])
 
     def test_inflated_declared_compress_size_is_not_zip(self):
         p = self.build()
@@ -496,6 +499,142 @@ class CheckWorkbookTest(unittest.TestCase):
         self.assertEqual(proc.returncode, 0)
         self.assertIn("instruction_like_text", json.loads(proc.stdout)["warnings"])
         self.assertNotIn(marker, proc.stdout + proc.stderr)
+
+
+class _NoSeek(object):
+    """Write-only stream: zipfile falls back to data descriptors on it."""
+
+    def __init__(self):
+        self.chunks = []
+
+    def write(self, b):
+        self.chunks.append(bytes(b))
+        return len(b)
+
+    def flush(self):
+        pass
+
+
+class LayoutTest(unittest.TestCase):
+    def setUp(self):
+        tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(tmp.cleanup)
+        self.dir = tmp.name
+
+    def check(self, data, name="book.xlsx"):
+        p = os.path.join(self.dir, name)
+        write_raw(p, data)
+        return check_workbook.check(p)
+
+    def assert_fails(self, data, code):
+        self.assertEqual(self.check(data)["failures"], [code])
+
+    def parts_zip(self, parts=None):
+        return raw_zip(parts if parts is not None else minimal_parts())
+
+    def test_two_central_directories_fail(self):
+        longer = minimal_parts()
+        longer["xl/sharedStrings.xml"] += b" " * 64
+        lb, cdb, n = split_zip(raw_zip(longer))
+        la, cda, _ = split_zip(raw_zip(minimal_parts()))
+        shift_central_offsets(cda, len(lb) + len(cdb))
+        eocd = b"PK\x05\x06" + struct.pack("<HHHHIIH", 0, 0, n, n, len(cdb), len(lb), 0)
+        # A reader that trusts the first central directory sees one set of parts,
+        # a reader that scans from the end sees the other.
+        self.assert_fails(lb + bytes(cdb) + la + bytes(cda) + eocd, "not_zip")
+
+    def test_prefixed_data_fails(self):
+        self.assert_fails(b"x" + self.parts_zip(), "not_zip")
+
+    def test_archive_comment_fails(self):
+        body, cd, n = split_zip(self.parts_zip())
+        self.assert_fails(assemble_zip(body, cd, n, comment=b"x"), "not_zip")
+
+    def test_trailing_bytes_after_eocd_fail(self):
+        self.assert_fails(self.parts_zip() + b"x", "not_zip")
+
+    def test_gap_between_entries_fails(self):
+        body, cd, n = split_zip(self.parts_zip())
+        offsets = [struct.unpack("<I", cd[p + 42:p + 46])[0] for p in central_entries(cd)]
+        second = offsets[1]
+        for p in central_entries(cd):
+            off = struct.unpack("<I", cd[p + 42:p + 46])[0]
+            if off >= second:
+                cd[p + 42:p + 46] = struct.pack("<I", off + 1)
+        body = body[:second] + b"x" + body[second:]
+        self.assert_fails(assemble_zip(body, cd, n), "not_zip")
+
+    def test_entry_count_mismatch_fails(self):
+        body, cd, n = split_zip(self.parts_zip())
+        self.assert_fails(assemble_zip(body, cd, n, count_in_eocd=n - 1), "not_zip")
+
+    def test_local_name_mismatch_fails(self):
+        raw = self.parts_zip()
+        self.assertIn(b"[Content_Types].xml", raw)
+        self.assert_fails(raw.replace(b"[Content_Types].xml", b"[Content_Types].xmX", 1), "not_zip")
+
+    def test_unicode_path_extra_fails(self):
+        body, cd, n = split_zip(self.parts_zip())
+        nl, xl = struct.unpack("<HH", cd[28:32])
+        extra = struct.pack("<HH", 0x7075, 5) + b"\x01\x00\x00\x00\x00"
+        cd[30:32] = struct.pack("<H", xl + len(extra))
+        cd[46 + nl + xl:46 + nl + xl] = extra
+        self.assert_fails(assemble_zip(body, cd, n), "not_zip")
+
+    def test_zip64_records_fail(self):
+        buf = io.BytesIO()
+        with zipfile.ZipFile(buf, "w", zipfile.ZIP_STORED) as z:
+            for name, data in minimal_parts().items():
+                with z.open(zipfile.ZipInfo(name), "w", force_zip64=True) as f:
+                    f.write(data)
+        self.assert_fails(buf.getvalue(), "not_zip")
+
+    def test_data_descriptor_layout_passes(self):
+        stream = _NoSeek()
+        with zipfile.ZipFile(stream, "w", zipfile.ZIP_DEFLATED) as z:
+            for name, data in minimal_parts().items():
+                z.writestr(name, data)
+        raw = b"".join(stream.chunks)
+        with zipfile.ZipFile(io.BytesIO(raw)) as z:
+            self.assertTrue(all(i.flag_bits & 0x8 for i in z.infolist()))
+        self.assertEqual(self.check(raw)["result"], "pass")
+
+    def test_empty_segment_name_fails(self):
+        parts = minimal_parts()
+        parts["xl//workbook.xml"] = b"<a/>"
+        self.assert_fails(self.parts_zip(parts), "unsafe_part_name")
+
+    def test_dot_segment_name_fails(self):
+        parts = minimal_parts()
+        parts["xl/./a.xml"] = b"<a/>"
+        self.assert_fails(self.parts_zip(parts), "unsafe_part_name")
+
+    def test_nul_in_name_fails(self):
+        parts = minimal_parts()
+        parts["xl/aXb.xml"] = b"<a/>"
+        raw = self.parts_zip(parts).replace(b"xl/aXb.xml", b"xl/a\x00b.xml")
+        self.assert_fails(raw, "unsafe_part_name")
+
+    def test_directory_entry_with_content_fails(self):
+        parts = minimal_parts()
+        parts["xl/book.xml/"] = b"x"
+        self.assert_fails(self.parts_zip(parts), "unsafe_part_name")
+
+    def test_empty_directory_entry_passes(self):
+        parts = minimal_parts()
+        parts["xl/"] = b""
+        self.assertEqual(self.check(self.parts_zip(parts))["result"], "pass")
+
+    def test_non_ascii_name_without_utf8_flag_fails(self):
+        parts = minimal_parts()
+        parts["xl/表.xml"] = b"<a/>"
+        raw = bytearray(self.parts_zip(parts))
+        for sig, offset in ((b"PK\x03\x04", 7), (b"PK\x01\x02", 9)):
+            i = raw.find(sig)
+            while i != -1:
+                raw[i + offset] &= ~0x08
+                i = raw.find(sig, i + 4)
+        self.assert_fails(bytes(raw), "unsafe_part_name")
 
 
 if __name__ == "__main__":
