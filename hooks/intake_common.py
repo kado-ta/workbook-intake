@@ -199,7 +199,9 @@ def intake_dir():
     configured = os.environ.get("WORKBOOK_INTAKE_DIR")
     if not configured:
         configured = "~/workbook-intake"
-    return os.path.expanduser(configured)
+    expanded = os.path.expanduser(configured)
+    # A trailing slash would make islink() follow a symlink.
+    return expanded.rstrip("/") or expanded
 
 
 def resolve_in_intake(path):
@@ -209,7 +211,8 @@ def resolve_in_intake(path):
     if not os.path.isabs(path):
         return None, "path_not_absolute"
     folder = intake_dir()
-    if os.path.islink(folder) or not os.path.isdir(folder):
+    if not os.path.isabs(folder) or folder == "/" \
+            or os.path.islink(folder) or not os.path.isdir(folder):
         return None, "intake_dir_invalid"
     try:
         real = os.path.realpath(path)
@@ -225,6 +228,17 @@ def resolve_in_intake(path):
     except (OSError, ValueError):
         return None, "not_regular_file"
     return real, "ok"
+
+
+def strictly_equal(a, b):
+    """JSON-like equality that does not treat 0 as False or 1 as True."""
+    if type(a) is not type(b):
+        return False
+    if isinstance(a, dict):
+        return a.keys() == b.keys() and all(strictly_equal(a[k], b[k]) for k in a)
+    if isinstance(a, list):
+        return len(a) == len(b) and all(strictly_equal(x, y) for x, y in zip(a, b))
+    return a == b
 
 
 def file_key(real_path):
@@ -275,6 +289,7 @@ def _store_file(session_id, create):
     if create:
         try:
             os.makedirs(directory, mode=0o700, exist_ok=True)
+            os.chmod(directory, 0o700)
         except OSError:
             return None
     name = hashlib.sha256(session_id.encode("utf-8", "surrogatepass")).hexdigest() + ".jsonl"
@@ -287,7 +302,7 @@ def _append(session_id, record):
         return False
     line = (json.dumps(record, ensure_ascii=True) + "\n").encode("ascii")
     try:
-        fd = os.open(path, os.O_APPEND | os.O_CREAT | os.O_WRONLY, 0o600)
+        fd = os.open(path, os.O_APPEND | os.O_CREAT | os.O_WRONLY | os.O_NOFOLLOW, 0o600)
         try:
             os.write(fd, line)
         finally:

@@ -290,6 +290,174 @@ class RecordConsentTest(unittest.TestCase):
             self.assertNotIn(MARKER, out)
 
 
+    def _noncanonical_paths(self):
+        book = self.book()
+        os.symlink(book, os.path.join(self.intake, "link.xlsx"))
+        paths = [
+            self.intake + "/safe.xlsx (dummy data; safe to confirm)/../book.xlsx",
+            self.intake + "/missing/../book.xlsx",
+            self.intake + "/../workbook-intake/book.xlsx",
+            os.path.join(self.intake, "link.xlsx"),
+        ]
+        for ch in ("\r", "\x1b", "\u202e"):
+            paths.append(self.intake + "/a" + ch + "b/../book.xlsx")
+        return paths
+
+    def test_noncanonical_paths_not_recorded(self):
+        for path in self._noncanonical_paths():
+            self.assertEqual(
+                rc.handle(consent_input(path)),
+                "workbook-intake: consent=not_recorded; reason=path_not_canonical", path)
+        self.assertIsNone(self.recorded(os.path.join(self.intake, "book.xlsx")))
+
+    def test_noncanonical_paths_not_acked(self):
+        book = self.book()
+        self.checker.return_value = {"status": "pass", "failures": [], "warnings": ["vba_project"]}
+        rc.handle(consent_input(book))
+        for path in self._noncanonical_paths():
+            out = rc.handle(warnings_input(path, ["vba_project"]))
+            self.assertEqual(
+                out, "workbook-intake: warnings_ack=not_recorded; reason=path_not_canonical", path)
+        real = os.path.realpath(book)
+        self.assertFalse(ic.has_warnings_ack(
+            SESSION, ic.file_key(real), ic.file_sha256(real), ["vba_project"]))
+
+    def test_file_changed_during_check_not_recorded(self):
+        path = self.book()
+
+        def change(real):
+            with open(real, "ab") as f:
+                f.write(b"x")
+            return dict(PASS)
+        self.checker.side_effect = change
+        out = rc.handle(consent_input(path))
+        self.assertEqual(out, "workbook-intake: consent=not_recorded; reason=file_changed")
+        self.assertIsNone(self.recorded(path))
+
+    def test_warnings_ack_needs_passing_consent_with_warnings(self):
+        path = self.book()
+        for check in ({"status": "pass", "failures": [], "warnings": []},
+                      {"status": "fail", "failures": ["xml_dtd"], "warnings": ["vba_project"]}):
+            self.checker.return_value = check
+            rc.handle(consent_input(path))
+            out = rc.handle(warnings_input(path, check["warnings"]))
+            self.assertEqual(
+                out, "workbook-intake: warnings_ack=not_recorded; reason=question_mismatch")
+
+    def test_multiselect_is_strict(self):
+        path = self.book()
+        qs = ic.expected_questions(path)
+        qs[0]["multiSelect"] = 0
+        self.assertEqual(rc.handle(consent_input(path, questions=qs)),
+                         "workbook-intake: consent=not_recorded; reason=question_mismatch")
+        self.assertIsNone(self.recorded(path))
+
+    def test_altered_label_order_and_extra_field_not_recorded(self):
+        path = self.book()
+        base = ic.expected_questions(path)
+        variants = []
+        v = copy.deepcopy(base)
+        v[0]["options"][0]["label"] = "Confirmed"
+        variants.append(v)
+        v = copy.deepcopy(base)
+        v[0]["options"].reverse()
+        variants.append(v)
+        v = copy.deepcopy(base)
+        v[0]["options"][0]["preview"] = "x"
+        variants.append(v)
+        for qs in variants:
+            self.assertEqual(rc.handle(consent_input(path, questions=qs)),
+                             "workbook-intake: consent=not_recorded; reason=question_mismatch")
+        self.assertIsNone(self.recorded(path))
+
+    def test_store_permissions(self):
+        path = self.book()
+        os.makedirs(os.path.join(self.data, "consents"), mode=0o755)
+        os.chmod(os.path.join(self.data, "consents"), 0o755)
+        rc.handle(consent_input(path))
+        consents = os.path.join(self.data, "consents")
+        self.assertEqual(os.stat(consents).st_mode & 0o777, 0o700)
+        f = os.path.join(consents, os.listdir(consents)[0])
+        self.assertEqual(os.stat(f).st_mode & 0o777, 0o600)
+
+    def test_stdout_error_keeps_exit_code(self):
+        path = self.book()
+        bad = mock.Mock()
+        bad.write.side_effect = BrokenPipeError()
+        with mock.patch.object(sys, "stdin", io.StringIO(json.dumps(consent_input(path)))), \
+                mock.patch.object(sys, "stdout", bad):
+            self.assertEqual(rc.main(), 0)
+
+
+@unittest.skipUnless(sys.platform == "darwin", "hook tests are macOS-only")
+class ResolveInIntakeTest(unittest.TestCase):
+    def setUp(self):
+        tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(tmp.cleanup)
+        self.home = os.path.realpath(tmp.name)
+        self.intake = os.path.join(self.home, "workbook-intake")
+        os.mkdir(self.intake)
+        env = mock.patch.dict(os.environ, {"HOME": self.home})
+        env.start()
+        self.addCleanup(env.stop)
+        os.environ.pop("WORKBOOK_INTAKE_DIR", None)
+
+    def reason(self, path):
+        return ic.resolve_in_intake(path)[1]
+
+    def test_ok(self):
+        p = write_workbook(os.path.join(self.intake, "A.XLSX"), minimal_parts())
+        self.assertEqual(ic.resolve_in_intake(p), (p, "ok"))
+
+    def test_bad_input(self):
+        self.assertEqual(self.reason(None), "bad_input")
+        self.assertEqual(self.reason(5), "bad_input")
+
+    def test_symlink_pointing_outside(self):
+        outside = write_workbook(os.path.join(self.home, "o.xlsx"), minimal_parts())
+        link = os.path.join(self.intake, "l.xlsx")
+        os.symlink(outside, link)
+        self.assertEqual(self.reason(link), "outside_intake")
+
+    def test_intake_folder_itself_is_outside(self):
+        self.assertEqual(self.reason(self.intake), "outside_intake")
+
+    def test_intake_dir_symlink(self):
+        real = os.path.join(self.home, "real")
+        os.mkdir(real)
+        write_workbook(os.path.join(real, "b.xlsx"), minimal_parts())
+        os.rmdir(self.intake)
+        os.symlink(real, self.intake)
+        self.assertEqual(self.reason(os.path.join(self.intake, "b.xlsx")), "intake_dir_invalid")
+        with mock.patch.dict(os.environ, {"WORKBOOK_INTAKE_DIR": self.intake + "/"}):
+            self.assertEqual(self.reason(os.path.join(self.intake, "b.xlsx")),
+                             "intake_dir_invalid")
+
+    def test_intake_dir_missing_or_file(self):
+        os.rmdir(self.intake)
+        self.assertEqual(self.reason(self.intake + "/b.xlsx"), "intake_dir_invalid")
+
+    def test_relative_or_root_intake_dir(self):
+        for value in ("relative/dir", "/"):
+            with mock.patch.dict(os.environ, {"WORKBOOK_INTAKE_DIR": value}):
+                self.assertEqual(self.reason("/etc/hosts"), "intake_dir_invalid")
+
+    def test_unsupported_extension(self):
+        p = os.path.join(self.intake, "a.txt")
+        open(p, "w").close()
+        self.assertEqual(self.reason(p), "unsupported_extension")
+
+    def test_file_too_large(self):
+        p = write_workbook(os.path.join(self.intake, "big.xlsx"), minimal_parts())
+        with mock.patch.object(ic, "MAX_FILE_BYTES", 10):
+            self.assertEqual(self.reason(p), "file_too_large")
+
+    def test_directory_is_not_regular(self):
+        d = os.path.join(self.intake, "d.xlsx")
+        os.mkdir(d)
+        self.assertEqual(self.reason(d), "not_regular_file")
+
+
 class WrapperTest(unittest.TestCase):
     @unittest.skipUnless(sys.platform == "darwin", "hook tests are macOS-only")
     def test_wrapper_end_to_end(self):
