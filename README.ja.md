@@ -139,8 +139,8 @@ Google スプレッドシートは直接読みません。`.xlsx` でダウン�
 | `not_zip` | zip として開けない、または読み手によって読み方が変わりうる zip の形（注釈、前置きのデータ、エントリの隙間や重なり、ZIP64、中央ディレクトリと食い違うローカルヘッダー、Unicode Path の extra、フラグの 5・6 ビット、長さや CRC が中央ディレクトリと違う部品のデータ） |
 | `too_many_parts` | 部品が 10,000 を超える |
 | `unsafe_part_name` | 部品名に `..`・絶対パス・NUL・空のセグメント・`.` のセグメント・中身のあるディレクトリ名がある、または文字コードの印と合わない名前がある |
-| `uncompressed_too_large` | 展開した合計が 1 GB を超える |
-| `compression_ratio_too_high` | 1 部品の圧縮率が 100 倍を超える |
+| `uncompressed_too_large` | 展開の合計が 256 MB を超える（Power Query の部品の中の zip を含む）。または、`customXml/item<N>.xml` の部品が 32 MB を超える |
+| `compression_ratio_too_high` | 1 つの部品（Power Query の部品の中の zip の部品を含む）が 100 倍を超えて圧縮されている |
 | `xml_dtd` | 部品に `<!DOCTYPE` か `<!ENTITY` がある。XML に限らずすべての部品を探すので、SVG の画像や、HTML を書き出すマクロでも出ることがある |
 
 警告のコード（確認してから続けます）:
