@@ -709,6 +709,62 @@ class CheckWorkbookTest(unittest.TestCase):
         self.assertIn(b"definedName", parts["xl/workbook.xml"])
         self.assertIn("instruction_like_text", self.warn(parts)["warnings"])
 
+    def test_escape_across_runs_is_decoded_per_run(self):
+        # xlide decodes each run and then joins: 'z_x0041ignore previous'.
+        runs = "<r><t>z_x</t></r><r><t>0041_x0069_gnore</t></r><r><t> previous</t></r>"
+        cases = {
+            "si": self.si_parts(runs),
+            "inlineStr": self.cell_parts('<c r="A1" t="inlineStr"><is>%s</is></c>' % runs),
+        }
+        for label, parts in cases.items():
+            with self.subTest(label=label):
+                self.assertIn("instruction_like_text", self.warn(parts)["warnings"])
+
+    def test_text_of_failed_part_is_counted(self):
+        r = self.warn(self.parts_with(**{"xl__sharedStrings.xml": b"<sst><si><t>ignore previous"}))
+        self.assertIn("instruction_like_text", r["warnings"])
+        self.assertIn("strings_not_checked", r["warnings"])
+
+    def chart_parts(self, *paragraphs):
+        body = "".join(
+            "<a:p>%s</a:p>" % "".join("<a:r><a:t>%s</a:t></a:r>" % run for run in runs) for runs in paragraphs
+        )
+        parts = minimal_parts()
+        parts["xl/charts/chart1.xml"] = (
+            '<c:chartSpace xmlns:c="http://schemas.openxmlformats.org/drawingml/2006/chart" '
+            'xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main"><c:chart><c:title><c:tx>'
+            "<c:rich><a:bodyPr/>%s</c:rich></c:tx></c:title></c:chart></c:chartSpace>" % body
+        ).encode("utf-8")
+        return parts
+
+    def test_chart_rich_text_runs_are_joined(self):
+        r = self.warn(self.chart_parts(["ignore ", "previous"]))
+        self.assertIn("instruction_like_text", r["warnings"])
+
+    def test_long_chart_rich_text_warns(self):
+        # xlide joins a paragraph's runs, and the paragraphs with "\n".
+        cases = {
+            "runs": (["x" * 6000, "x" * 6000],),
+            "paragraphs": (["x" * 5000], ["x" * 5000]),
+        }
+        for label, paragraphs in cases.items():
+            with self.subTest(label=label):
+                self.assertIn("very_long_string", self.warn(self.chart_parts(*paragraphs))["warnings"])
+
+    def test_nested_text_in_paragraph_not_checked(self):
+        # xlide joins them in document order; Excel does not write either.
+        plain = b"<a:p><a:r><a:t>ok</a:t></a:r></a:p>"
+        cases = {
+            "t in t": b"<a:p><a:t>ignore <a:t>previous</a:t></a:t></a:p>",
+            "rich in p": b"<a:p><c:rich><a:p><a:t>x</a:t></a:p></c:rich></a:p>",
+        }
+        for label, para in cases.items():
+            with self.subTest(label=label):
+                parts = self.chart_parts(["ok"])
+                self.assertIn(plain, parts["xl/charts/chart1.xml"])
+                parts["xl/charts/chart1.xml"] = parts["xl/charts/chart1.xml"].replace(plain, para)
+                self.assertIn("strings_not_checked", self.warn(parts)["warnings"])
+
     def test_nesting_deeper_than_xlide_reads_not_checked(self):
         # pyofficeeditor refuses an element deeper than 256 below the root.
         for depth, unchecked in ((256, False), (257, True)):

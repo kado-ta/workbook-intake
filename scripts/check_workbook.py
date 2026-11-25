@@ -193,6 +193,7 @@ _REL_TYPE_WARNINGS = (
 _EXPAT_ENCODINGS = {"utf-8": "UTF-8", "utf-16-le": "UTF-16LE", "utf-16-be": "UTF-16BE"}
 # Excel's escape for one UTF-16 code unit, as xlide decodes it.
 _ESCAPE = re.compile(r"_x([0-9A-Fa-f]{4})_")
+_SURROGATE_SEARCH = re.compile("[\ud800-\udfff]").search
 _TEXT_BLOCK = 8192
 # Finds any of INSTRUCTION_PHRASES in one call (values are many and mostly short).
 _PHRASE_SEARCH = re.compile("|".join(re.escape(p) for p in INSTRUCTION_PHRASES)).search
@@ -231,20 +232,66 @@ class _Text(object):
         return "".join(self.blocks)
 
 
+class _Joined(object):
+    """Text values joined twice: as written, and each one unescaped before joining."""
+
+    __slots__ = ("raw", "decoded", "changed", "lines")
+
+    def __init__(self):
+        self.raw = _Text()
+        self.decoded = _Text()
+        self.changed = False
+        self.lines = 0
+
+    def add(self, raw, decoded):
+        self.raw.add(raw)
+        self.decoded.add(decoded)
+        if decoded != raw:
+            self.changed = True
+
+    def add_line(self, raw, decoded):
+        """Add one paragraph, after a newline unless it is the first."""
+        if self.lines:
+            self.add("\n", "\n")
+        self.lines += 1
+        self.add(raw, decoded)
+
+    def count(self, counts):
+        """Count both joins. Returns them (as written, unescaped)."""
+        raw = self.raw.value()
+        _count_string(raw, counts)
+        decoded = raw
+        if self.changed:
+            decoded = self.decoded.value()
+            _count_string(decoded, counts)
+        return raw, decoded
+
+
 class _Collector(object):
     """expat handlers that count into one part's own counters, never a tree.
 
-    Strings are the values xlide reads: each element's direct text joined
-    across its children (as Element.text, without CDATA), each CDATA section
-    on its own, and for si and is the text of their r/t runs joined.
+    Strings are the values xlide reads:
+    - each element's direct text joined across its children (as
+      Element.text, without CDATA), and each CDATA section on its own;
+    - for si and is, the text of their r/t runs joined (shared and inline
+      strings);
+    - for p, the text of every t below it joined, and for rich, its p
+      children joined with newlines (chart titles and series names).
+    Joined runs are also checked with each run unescaped first, as xlide
+    decodes each run before joining. A t nested in a t, or a rich in a p,
+    under an open p is not joined in xlide's order and marks the part
+    unchecked.
     """
 
     def __init__(self):
         self.counts = dict.fromkeys(WARNING_CODES, 0)
-        self.duplicate = False
-        # One [local name, direct text, joined runs] per open element.
+        self.unchecked = False
+        # One [local name, direct text, _Joined or None] per open element.
         self._open = []
         self._cdata = None
+        # The outermost open p collects every t below it.
+        self._paragraph = None
+        self._open_t = 0
 
     def start(self, name, attrs):
         if len(self._open) > MAX_DEPTH:
@@ -255,11 +302,26 @@ class _Collector(object):
             _count_string(attrs[i + 1], self.counts)
             local = _local(attrs[i])
             if local in first:
-                self.duplicate = True
+                self.unchecked = True
             else:
                 first[local] = attrs[i + 1]
         name = _local(name)
-        self._open.append([name, None, _Text() if name in ("si", "is") else None])
+        joined = None
+        if name in ("si", "is"):
+            joined = _Joined()
+        elif name == "p":
+            if self._paragraph is None:
+                joined = self._paragraph = _Joined()
+        elif name == "rich":
+            if self._paragraph is None:
+                joined = _Joined()
+            else:
+                self.unchecked = True
+        elif name == "t":
+            if self._open_t and self._paragraph is not None:
+                self.unchecked = True
+            self._open_t += 1
+        self._open.append([name, None, joined])
         if name == "sheet":
             state = first.get("state")
             if state == "hidden":
@@ -277,17 +339,29 @@ class _Collector(object):
             self.counts["external_link"] += 1
 
     def end(self, name):
-        local, text, runs = self._open.pop()
-        value = ""
-        if text is not None:
-            value = text.value()
-            _count_string(value, self.counts)
-        if runs is not None:
-            _count_string(runs.value(), self.counts)
-        elif local == "t" and len(self._open) > 1 and self._open[-1][0] == "r":
-            outer = self._open[-2][2]
-            if outer is not None:
-                outer.add(value)
+        local, text, joined = self._open.pop()
+        value = "" if text is None else text.value()
+        decoded = None
+        if local == "t":
+            self._open_t -= 1
+            run_of = None
+            if len(self._open) > 1 and self._open[-1][0] == "r" and self._open[-2][0] in ("si", "is"):
+                run_of = self._open[-2][2]
+            if run_of is not None or self._paragraph is not None:
+                decoded = _unescape(value)
+                if run_of is not None:
+                    run_of.add(value, decoded)
+                if self._paragraph is not None:
+                    self._paragraph.add(value, decoded)
+        elif joined is not None:
+            line, line_decoded = joined.count(self.counts)
+            if joined is self._paragraph:
+                self._paragraph = None
+                parent = self._open[-1] if self._open else None
+                if parent is not None and parent[0] == "rich" and parent[2] is not None:
+                    parent[2].add_line(line, line_decoded)
+        if value:
+            _count_string(value, self.counts, decoded)
 
     def data(self, text):
         if self._cdata is not None:
@@ -313,24 +387,31 @@ class _Collector(object):
             self.end(None)
 
 
+def _escaped_char(m):
+    return chr(int(m.group(1), 16))
+
+
 def _unescape(value):
     """value with _xHHHH_ escapes decoded and surrogate halves joined, as xlide reads it."""
     if "_x" not in value:
         return value
-    # Like _ESCAPE.sub, but joined as it goes so a value made of escapes does
-    # not hold one object per escape.
-    done, pieces, last = [], [], 0
-    for m in _ESCAPE.finditer(value):
-        pieces.append(value[last:m.start()])
-        pieces.append(chr(int(m.group(1), 16)))
-        last = m.end()
-        if len(pieces) >= 8192:
-            done.append("".join(pieces))
-            pieces = []
-    pieces.append(value[last:])
-    done.append("".join(pieces))
-    decoded = "".join(done)
-    if any("\ud800" <= c <= "\udfff" for c in decoded):
+    if len(value) <= _TEXT_BLOCK:
+        decoded = _ESCAPE.sub(_escaped_char, value)
+    else:
+        # Like _ESCAPE.sub, but joined as it goes so a long value made of
+        # escapes does not hold one object per escape.
+        done, pieces, last = [], [], 0
+        for m in _ESCAPE.finditer(value):
+            pieces.append(value[last:m.start()])
+            pieces.append(_escaped_char(m))
+            last = m.end()
+            if len(pieces) >= _TEXT_BLOCK:
+                done.append("".join(pieces))
+                pieces = []
+        pieces.append(value[last:])
+        done.append("".join(pieces))
+        decoded = "".join(done)
+    if _SURROGATE_SEARCH(decoded):
         decoded = decoded.encode("utf-16-le", "surrogatepass").decode("utf-16-le", "surrogatepass")
     return decoded
 
@@ -352,12 +433,14 @@ def _has_phrase(value):
     return False
 
 
-def _count_string(value, counts):
+def _count_string(value, counts, decoded=None):
+    """Count one value; decoded is _unescape(value) when the caller has it already."""
     if not value or not value.strip():
         return
     if len(value) > LONG_STRING_CHARS:
         counts["very_long_string"] += 1
-    decoded = _unescape(value)
+    if decoded is None:
+        decoded = _unescape(value)
     if decoded == value:
         invisible = not _INVISIBLE_CHARS.isdisjoint(value)
         phrase = _has_phrase(value)
@@ -390,8 +473,9 @@ def _scan_part(zf, info, counts, read_xml):
     The part is XML when all of it decodes strictly in the encoding its first
     bytes select and it contains "<". It is parsed in the same pass into its
     own counters, which are added to counts only once the part is known to be
-    XML. An XML part expat cannot read, or with two attributes of one local
-    name on an element, adds one strings_not_checked.
+    XML. An XML part expat cannot read, or that _Collector marks unchecked
+    (two attributes of one local name on an element, nesting it cannot join
+    as xlide does), adds one strings_not_checked.
     """
     mashup = False
     tail = b""
@@ -447,7 +531,7 @@ def _scan_part(zf, info, counts, read_xml):
     collector.close()
     for code, n in collector.counts.items():
         counts[code] += n
-    if failed or collector.duplicate:
+    if failed or collector.unchecked:
         counts["strings_not_checked"] += 1
 
 
@@ -471,8 +555,8 @@ def _scan_warnings(zf, infos, is_xlsb):
     # (one object found through both a name and a relationship counts twice);
     # external_link also counts <externalReference> elements; string warnings
     # count values (attribute values, each element's direct text, each CDATA
-    # section, the joined runs of si and is); the sheet warnings count <sheet>
-    # elements in any part; strings_not_checked counts parts.
+    # section, the joined runs of si, is, p and rich); the sheet warnings count
+    # <sheet> elements in any part; strings_not_checked counts parts.
     counts = dict.fromkeys(WARNING_CODES, 0)
     for info in infos:
         name = info.filename.lower()
