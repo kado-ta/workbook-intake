@@ -5,17 +5,17 @@ prints only fixed vocabulary, counts and booleans (never strings from the file).
 """
 from __future__ import annotations
 
+import codecs
 import json
 import os
-import posixpath
 import re
 import stat
 import struct
 import sys
 import unicodedata
-import xml.etree.ElementTree as ET
 import zipfile
 import zlib
+from xml.parsers import expat
 
 SUPPORTED_EXTENSIONS = (".xlsx", ".xlsm", ".xltx", ".xltm", ".xlam", ".xlsb")
 MAX_FILE_BYTES = 100 * 1024 * 1024
@@ -26,6 +26,7 @@ RATIO_GRACE_BYTES = 100 * 1024
 READ_CHUNK = 64 * 1024
 MAX_PARSE_BYTES = 32 * 1024 * 1024
 LONG_STRING_CHARS = 10_000
+PHRASE_OVERLAP = 256
 
 FAILURE_CODES = (
     "unsupported_extension",
@@ -69,7 +70,6 @@ INVISIBLE_CODEPOINTS = (
 _INVISIBLE_CHARS = frozenset(chr(c) for c in INVISIBLE_CODEPOINTS)
 _INVISIBLE_STRIP = {c: None for c in INVISIBLE_CODEPOINTS}
 _BOMS = ((b"\xef\xbb\xbf", "utf-8"), (b"\xff\xfe", "utf-16-le"), (b"\xfe\xff", "utf-16-be"))
-_REL_OFFICE_DOCUMENT = "/relationships/officeDocument"
 
 OLE_MAGIC = bytes.fromhex("D0CF11E0A1B11AE1")
 ENCRYPTED_PACKAGE = "EncryptedPackage".encode("utf-16-le")
@@ -169,11 +169,11 @@ def _check_part(zf, info, total):
     return None, state["total"]
 
 
-def _local(tag):
-    return tag.rsplit("}", 1)[-1] if isinstance(tag, str) else ""
+def _local(name):
+    """The part of a qualified name after the last ":" (xmlns:Target -> Target)."""
+    return name.rpartition(":")[2]
 
 
-SNIFF_BYTES = 4096
 _MASHUP_NEEDLES = tuple(
     "DataMashup".encode(enc) for enc in ("utf-8", "utf-16-le", "utf-16-be")
 )
@@ -187,77 +187,110 @@ _REL_TYPE_WARNINGS = (
     ("/control", "activex"),
     ("/connections", "data_connection"),
 )
-_MAX_OFFICE_TARGETS = 100
+# Codec pyofficeeditor decodes a part with -> the same encoding's name in expat.
+_EXPAT_ENCODINGS = {"utf-8": "UTF-8", "utf-16-le": "UTF-16LE", "utf-16-be": "UTF-16BE"}
+# Excel's escape for one UTF-16 code unit, as xlide decodes it.
+_ESCAPE = re.compile(r"_x([0-9A-Fa-f]{4})_")
 
 
-def _looks_like_xml(head):
-    """True when, after an optional BOM and whitespace, the first character is "<".
-
-    Only the first SNIFF_BYTES are looked at, so the decision is linear; a part
-    with more leading whitespace than that is treated as not XML.
-    """
-    head = head[:SNIFF_BYTES]
-    candidates = [(head, enc) for enc in ("utf-8", "utf-16-le", "utf-16-be")]
+def _encoding(head):
+    """The codec pyofficeeditor reads a part with, chosen from its first bytes."""
     for bom, enc in _BOMS:
         if head.startswith(bom):
-            candidates.append((head[len(bom):], enc))
-    return any(
-        body.decode(enc, "ignore").lstrip(" \t\r\n\ufeff").startswith("<")
-        for body, enc in candidates
-    )
+            return enc
+    if head[:2] == b"<\x00":
+        return "utf-16-le"
+    if head[:2] == b"\x00<":
+        return "utf-16-be"
+    return "utf-8"
 
 
 class _Collector(object):
-    """Event target for the XML parser: keeps counters, never a tree."""
+    """expat handlers that count into one part's own counters, never a tree."""
 
-    def __init__(self, counts, is_rels, is_root_rels):
-        self.counts = counts
-        self.is_rels = is_rels
-        self.is_root_rels = is_root_rels
-        self.office_targets = []
-        self.hidden = 0
-        self.very_hidden = 0
+    def __init__(self):
+        self.counts = dict.fromkeys(WARNING_CODES, 0)
+        self.duplicate = False
         self._text = []
 
-    def _flush(self):
+    def flush(self):
         if self._text:
-            _count_string("".join(self._text), self.counts)
+            text = "".join(self._text)
             self._text = []
+            _count_string(text, self.counts)
 
-    def start(self, tag, attrib):
-        self._flush()
-        for v in attrib.values():
-            _count_string(v, self.counts)
-        name = _local(tag)
+    def start(self, name, attrs):
+        # attrs is [name, value, ...] in document order, xmlns declarations included.
+        self.flush()
+        first = {}
+        for i in range(0, len(attrs), 2):
+            _count_string(attrs[i + 1], self.counts)
+            local = _local(attrs[i])
+            if local in first:
+                self.duplicate = True
+            else:
+                first[local] = attrs[i + 1]
+        name = _local(name)
         if name == "sheet":
-            state = attrib.get("state")
+            state = first.get("state")
             if state == "hidden":
-                self.hidden += 1
+                self.counts["hidden_sheet"] += 1
             elif state == "veryHidden":
-                self.very_hidden += 1
-        elif name == "Relationship" and self.is_rels:
-            rtype = attrib.get("Type", "")
-            external = attrib.get("TargetMode", "").lower() == "external"
-            if external:
+                self.counts["very_hidden_sheet"] += 1
+        elif name == "Relationship":
+            if first.get("TargetMode", "").lower() == "external":
                 self.counts["external_relationship"] += 1
+            rtype = first.get("Type", "")
             for suffix, code in _REL_TYPE_WARNINGS:
                 if rtype.endswith(suffix):
                     self.counts[code] += 1
-            if (
-                self.is_root_rels and not external
-                and rtype.endswith(_REL_OFFICE_DOCUMENT)
-                and len(self.office_targets) < _MAX_OFFICE_TARGETS
-            ):
-                self.office_targets.append(attrib.get("Target", ""))
+        elif name == "externalReference":
+            self.counts["external_link"] += 1
 
-    def end(self, tag):
-        self._flush()
+    def end(self, name):
+        self.flush()
 
     def data(self, text):
         self._text.append(text)
 
-    def close(self):
-        self._flush()
+
+def _unescape(value):
+    """value with _xHHHH_ escapes decoded and surrogate halves joined, as xlide reads it."""
+    if "_x" not in value:
+        return value
+    # Like _ESCAPE.sub, but joined as it goes so a value made of escapes does
+    # not hold one object per escape.
+    done, pieces, last = [], [], 0
+    for m in _ESCAPE.finditer(value):
+        pieces.append(value[last:m.start()])
+        pieces.append(chr(int(m.group(1), 16)))
+        last = m.end()
+        if len(pieces) >= 8192:
+            done.append("".join(pieces))
+            pieces = []
+    pieces.append(value[last:])
+    done.append("".join(pieces))
+    decoded = "".join(done)
+    if any("\ud800" <= c <= "\udfff" for c in decoded):
+        decoded = decoded.encode("utf-16-le", "surrogatepass").decode("utf-16-le", "surrogatepass")
+    return decoded
+
+
+def _has_phrase(value):
+    """True when an instruction-like phrase appears in value once folded.
+
+    A long value loses its invisible characters first and is then folded in
+    overlapping windows, so normalize never sees more than
+    LONG_STRING_CHARS + PHRASE_OVERLAP characters.
+    """
+    if len(value) > LONG_STRING_CHARS and not _INVISIBLE_CHARS.isdisjoint(value):
+        value = value.translate(_INVISIBLE_STRIP)
+    for start in range(0, len(value), LONG_STRING_CHARS):
+        window = value[start:start + LONG_STRING_CHARS + PHRASE_OVERLAP]
+        folded = unicodedata.normalize("NFKC", window).lower().translate(_INVISIBLE_STRIP)
+        if any(p in folded for p in INSTRUCTION_PHRASES):
+            return True
+    return False
 
 
 def _count_string(value, counts):
@@ -265,76 +298,114 @@ def _count_string(value, counts):
         return
     if len(value) > LONG_STRING_CHARS:
         counts["very_long_string"] += 1
-    if not _INVISIBLE_CHARS.isdisjoint(value):
+    decoded = _unescape(value)
+    forms = (value,) if decoded == value else (value, decoded)
+    if any(not _INVISIBLE_CHARS.isdisjoint(v) for v in forms):
         counts["invisible_characters"] += 1
-    folded = unicodedata.normalize("NFKC", value).lower().translate(_INVISIBLE_STRIP)
-    if any(p in folded for p in INSTRUCTION_PHRASES):
+    if any(_has_phrase(v) for v in forms):
         counts["instruction_like_text"] += 1
 
 
-def _scan_part(zf, info, counts, parse_xml, is_rels, is_root_rels):
-    """Stream one part once: DataMashup marker scan plus, when asked, an XML pass.
+def _new_parser(enc, collector):
+    # No namespace processing; the given encoding overrides any declared one.
+    parser = expat.ParserCreate(encoding=_EXPAT_ENCODINGS[enc])
+    parser.ordered_attributes = True
+    parser.buffer_text = True
+    parser.StartElementHandler = collector.start
+    parser.EndElementHandler = collector.end
+    parser.CharacterDataHandler = collector.data
+    return parser
 
-    Returns the collector (or None when the part was not parsed as XML).
+
+def _scan_part(zf, info, counts, read_xml):
+    """Stream one part once: DataMashup marker scan and, when asked, an XML pass.
+
+    The part is XML when all of it decodes strictly in the encoding its first
+    bytes select and it contains "<". It is parsed in the same pass into its
+    own counters, which are added to counts only once the part is known to be
+    XML. An XML part expat cannot read, or with two attributes of one local
+    name on an element, adds one strings_not_checked.
     """
-    collector = None
-    parser = None
-    first = True
-    total = 0
     mashup = False
-    unchecked = False
     tail = b""
-    try:
-        with zf.open(info) as f:
-            while True:
-                chunk = f.read(READ_CHUNK)
-                if not chunk:
-                    break
-                total += len(chunk)
-                window = tail + chunk
-                if not mashup and any(n in window for n in _MASHUP_NEEDLES):
-                    mashup = True
-                tail = window[-_MASHUP_TAIL:]
-                if first:
-                    first = False
-                    if parse_xml and _looks_like_xml(chunk):
-                        collector = _Collector(counts, is_rels, is_root_rels)
-                        parser = ET.XMLParser(target=collector)
-                if parser is None:
-                    continue
-                if total > MAX_PARSE_BYTES:
-                    parser = None
-                    unchecked = True
-                    continue
-                parser.feed(chunk)
+    decoder = parser = collector = None
+    is_text = read_xml
+    has_lt = False
+    failed = False
+    with zf.open(info) as f:
+        while True:
+            chunk = f.read(READ_CHUNK)
+            if not chunk:
+                break
+            window = tail + chunk
+            if not mashup and any(n in window for n in _MASHUP_NEEDLES):
+                mashup = True
+            tail = window[-_MASHUP_TAIL:]
+            if not is_text:
+                continue
+            if decoder is None:
+                # zipfile's read(n) returns n bytes unless the part is shorter.
+                enc = _encoding(chunk)
+                decoder = codecs.getincrementaldecoder(enc)("strict")
+                if info.file_size <= MAX_PARSE_BYTES:
+                    collector = _Collector()
+                    # Without a BOM, expat itself switches to UTF-16 when either
+                    # of the first two bytes is NUL; read as UTF-8 they are not XML.
+                    if enc == "utf-8" and b"\x00" in chunk[:2]:
+                        failed = True
+                    else:
+                        parser = _new_parser(enc, collector)
+            try:
+                has_lt = "<" in decoder.decode(chunk) or has_lt
+            except UnicodeDecodeError:
+                is_text = False
+                continue
             if parser is not None:
-                parser.close()
-    except Exception:
-        unchecked = True
+                parser, failed = _feed(parser, chunk, False, collector)
+    if is_text and decoder is not None:
+        try:
+            decoder.decode(b"", True)
+        except UnicodeDecodeError:
+            is_text = False
+    if is_text and parser is not None:
+        parser, failed = _feed(parser, b"", True, collector)
     if mashup:
         counts["power_query"] += 1
-    if unchecked:
+    if not (is_text and has_lt):
+        return
+    if collector is None:
+        # Larger than MAX_PARSE_BYTES: not read.
         counts["strings_not_checked"] += 1
-    return collector
+        return
+    collector.flush()
+    for code, n in collector.counts.items():
+        counts[code] += n
+    if failed or collector.duplicate:
+        counts["strings_not_checked"] += 1
 
 
-def _resolve(by_lower, target):
-    """Resolve a root-relationship target inside the archive ("/" = package root)."""
-    target = posixpath.normpath(target.lstrip("/"))
-    if target in ("", ".", "..") or target.startswith("../"):
-        return None
-    return by_lower.get(target.lower())
+def _feed(parser, data, final, collector):
+    """Parse data. Returns (parser, failed); the parser is None once it has failed."""
+    try:
+        parser.Parse(data, final)
+        return parser, False
+    except Exception:
+        # Keep what was read: turning buffering off hands over buffered text.
+        try:
+            parser.buffer_text = False
+        except Exception:
+            pass
+        collector.flush()
+        return None, True
 
 
 def _scan_warnings(zf, infos, is_xlsb):
     # Count units: file-name and relationship warnings count parts/relationships
     # (one object found through both a name and a relationship counts twice);
-    # string warnings count values (text runs and attribute values); the sheet
-    # warnings count <sheet> elements; strings_not_checked counts parts.
+    # external_link also counts <externalReference> elements; string warnings
+    # count values (text runs and attribute values); the sheet warnings count
+    # <sheet> elements in any part; strings_not_checked counts parts.
     counts = dict.fromkeys(WARNING_CODES, 0)
-    by_lower = {i.filename.lower(): i for i in infos}
-    sheets = {}
-    office_targets = []
     for info in infos:
         name = info.filename.lower()
         if name.endswith("/"):
@@ -349,27 +420,11 @@ def _scan_warnings(zf, infos, is_xlsb):
             counts["embedded_object"] += 1
         if "activex/" in name:
             counts["activex"] += 1
-        # customXml/ is never parsed: it holds data, not workbook strings.
-        parse_xml = not is_xlsb and not name.startswith("customxml/")
-        collector = _scan_part(
-            zf, info, counts, parse_xml, name.endswith(".rels"), info.filename == "_rels/.rels"
-        )
-        if collector is not None:
-            sheets[name] = (collector.hidden, collector.very_hidden)
-            office_targets.extend(collector.office_targets)
+        # Parts are chosen by content, not by name, relationship or folder.
+        _scan_part(zf, info, counts, not is_xlsb)
     if is_xlsb:
         # Binary parts are not read, so neither strings nor sheet states are known.
         counts["strings_not_checked"] += 1
-    else:
-        seen = set()
-        for target in office_targets:
-            info = _resolve(by_lower, target)
-            if info is None or info.filename in seen or info.filename.lower() not in sheets:
-                continue
-            seen.add(info.filename)
-            hidden, very_hidden = sheets[info.filename.lower()]
-            counts["hidden_sheet"] += hidden
-            counts["very_hidden_sheet"] += very_hidden
     warnings = [c for c in WARNING_CODES if counts[c]]
     return warnings, {c: counts[c] for c in warnings}
 

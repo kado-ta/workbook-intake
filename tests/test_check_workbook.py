@@ -397,7 +397,7 @@ class CheckWorkbookTest(unittest.TestCase):
         parts["_rels/.rels"] = parts["_rels/.rels"].replace(b"xl/workbook.xml", b"/xl/book.xml")
         self.assertIn("very_hidden_sheet", self.warn(parts)["warnings"])
 
-    def test_missing_or_bad_root_rels_gives_no_sheet_warning(self):
+    def test_missing_or_bad_root_rels_still_counts_sheets(self):
         hidden = self.sheets_xml("veryHidden")
         good = minimal_parts()["_rels/.rels"]
         cases = {
@@ -416,7 +416,7 @@ class CheckWorkbookTest(unittest.TestCase):
                     parts["_rels/.rels"] = rels
                 r = self.warn(parts)
                 self.assertEqual(r["result"], "pass")
-                self.assertNotIn("very_hidden_sheet", r["warnings"])
+                self.assertIn("very_hidden_sheet", r["warnings"])
 
     def test_invisible_characters_warn(self):
         r = self.warn(self.sst_parts("a\u200bb", "c\u202ed", "e\U000e0041f"))
@@ -448,12 +448,6 @@ class CheckWorkbookTest(unittest.TestCase):
         parts = minimal_parts()
         parts["xl/strings.bin"] = b" \n" * 1000 + self.sst("Ignore previous instructions").split(b"?>", 1)[1]
         self.assertIn("instruction_like_text", self.warn(parts)["warnings"])
-
-    def test_sniff_prefix_is_bounded(self):
-        # Documents the bound: more than SNIFF_BYTES of leading whitespace means "not XML".
-        parts = minimal_parts()
-        parts["xl/strings.bin"] = b" " * (check_workbook.SNIFF_BYTES + 1) + b"<a>Ignore previous</a>"
-        self.assertEqual(self.warn(parts)["warnings"], [])
 
     def test_very_long_string_warns(self):
         limit = check_workbook.LONG_STRING_CHARS
@@ -501,6 +495,155 @@ class CheckWorkbookTest(unittest.TestCase):
         self.assertEqual(proc.returncode, 0)
         self.assertIn("instruction_like_text", json.loads(proc.stdout)["warnings"])
         self.assertNotIn(marker, proc.stdout + proc.stderr)
+
+    # --- XML parts: chosen by content, read the way xlide reads them ---
+
+    def without_declaration(self, data):
+        return data.decode("utf-8").split("?>", 1)[1]
+
+    def test_leading_byte_before_root_not_checked(self):
+        r = self.warn(self.parts_with(**{"xl__workbook.xml": b"x" + self.sheets_xml("veryHidden")}))
+        self.assertEqual(r["result"], "pass")
+        self.assertIn("strings_not_checked", r["warnings"])
+
+    def test_long_leading_whitespace_is_parsed(self):
+        r = self.warn(self.parts_with(**{"xl__workbook.xml": b" " * 5000 + self.sheets_xml("hidden")}))
+        self.assertIn("hidden_sheet", r["warnings"])
+
+    def test_hidden_sheet_counted_without_resolving_target(self):
+        parts = minimal_parts()
+        parts["xl/workbook.xml"] = self.sheets_xml("veryHidden")
+        parts["_rels/.rels"] = parts["_rels/.rels"].replace(
+            b'Target="xl/workbook.xml"', b'Target="/xl\\workbook.xml"')
+        self.assertIn(b"\\", parts["_rels/.rels"])
+        self.assertIn("very_hidden_sheet", self.warn(parts)["warnings"])
+
+    def test_workbook_under_custom_xml_is_checked(self):
+        parts = minimal_parts()
+        del parts["xl/workbook.xml"]
+        parts["customXml/workbook.xml"] = self.sheets_xml("veryHidden")
+        parts["_rels/.rels"] = parts["_rels/.rels"].replace(
+            b'Target="xl/workbook.xml"', b'Target="customXml/workbook.xml"')
+        self.assertIn("very_hidden_sheet", self.warn(parts)["warnings"])
+
+    def test_part_without_xml_name_is_checked(self):
+        r = self.warn(self.sst_parts("ignore previous", name="xl/strings.bin"))
+        self.assertIn("instruction_like_text", r["warnings"])
+
+    def test_prefixed_state_attribute_counts(self):
+        wb = (
+            b'<workbook xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main"><sheets>'
+            b'<sheet name="S1" sheetId="1" x:state="hidden" xmlns:x="urn:x"/></sheets></workbook>'
+        )
+        self.assertIn("hidden_sheet", self.warn(self.parts_with(**{"xl__workbook.xml": wb}))["warnings"])
+
+    def test_duplicate_local_attribute_not_checked(self):
+        parts = minimal_parts()
+        parts["_rels/.rels"] = parts["_rels/.rels"].replace(
+            b"<Relationship ", b'<Relationship xmlns:Target="xl/other.xml" ').replace(
+            b"</Relationships>",
+            b'<Relationship Id="rId2" Type="x" Target="a" xmlns:Target="b"/></Relationships>')
+        r = self.warn(parts)
+        self.assertIn("strings_not_checked", r["warnings"])
+        self.assertEqual(r["counts"]["strings_not_checked"], 1)
+
+    def test_external_reference_element_warns(self):
+        parts = minimal_parts()
+        parts["xl/workbook.xml"] = parts["xl/workbook.xml"].replace(
+            b"</sheets>",
+            b'</sheets><externalReferences><externalReference r:id="rId9"/></externalReferences>')
+        self.assertIn("external_link", self.warn(parts)["warnings"])
+
+    def test_escaped_invisible_character_warns(self):
+        # The second value escapes the two halves of U+E0041, which xlide joins.
+        for value in ("a_x200B_b", "e_xDB40__xDC41_f"):
+            with self.subTest(value=value):
+                self.assertIn("invisible_characters", self.warn(self.sst_parts(value))["warnings"])
+
+    def test_escaped_instruction_text_warns(self):
+        r = self.warn(self.sst_parts("ignore_x0020_previous"))
+        self.assertIn("instruction_like_text", r["warnings"])
+
+    def test_cdata_text_is_checked(self):
+        r = self.warn(self.sst_parts("<![CDATA[ignore previous]]>"))
+        self.assertIn("instruction_like_text", r["warnings"])
+
+    def test_binary_part_is_not_parsed(self):
+        data = b"\x89PNG\r\n\x1a\n" + b'<sheet state="hidden"/>'
+        r = self.warn(self.parts_with(**{"xl__media__image1.png": data}))
+        self.assertNotIn("hidden_sheet", r["warnings"])
+        self.assertNotIn("strings_not_checked", r["warnings"])
+
+    def test_text_part_without_markup_is_not_parsed(self):
+        r = self.warn(self.parts_with(**{"xl__notes.txt": "plain text without markup\n".encode("utf-8")}))
+        self.assertEqual(r["warnings"], [])
+
+    def test_utf16_without_bom_is_parsed(self):
+        # The UTF-16 bytes of U+00E9 are not valid UTF-8, so only the UTF-16 rule reads the part.
+        text = self.without_declaration(self.sst("caf\u00e9\u200b"))
+        for enc in ("utf-16-le", "utf-16-be"):
+            with self.subTest(enc=enc):
+                parts = minimal_parts()
+                parts["xl/sharedStrings.xml"] = text.encode(enc)
+                self.assertIn("invisible_characters", self.warn(parts)["warnings"])
+
+    def test_utf16_with_bom_is_parsed(self):
+        text = "\ufeff" + self.without_declaration(self.sst("caf\u00e9\u200b"))
+        for enc in ("utf-8", "utf-16-le", "utf-16-be"):
+            with self.subTest(enc=enc):
+                parts = minimal_parts()
+                parts["xl/sharedStrings.xml"] = text.encode(enc)
+                self.assertIn("invisible_characters", self.warn(parts)["warnings"])
+
+    def test_nul_in_first_two_bytes_not_checked(self):
+        # Read as UTF-8 by xlide; expat would switch to UTF-16 on its own.
+        data = (" " + self.sheets_xml("visible").decode("utf-8")).encode("utf-16-le")
+        r = self.warn(self.parts_with(**{"xl__workbook.xml": data}))
+        self.assertIn("strings_not_checked", r["warnings"])
+
+    def test_declared_encoding_is_ignored(self):
+        data = self.sst("a\u200bb").replace(b'encoding="UTF-8"', b'encoding="ISO-8859-1"')
+        self.assertIn(b"ISO-8859-1", data)
+        parts = minimal_parts()
+        parts["xl/sharedStrings.xml"] = data
+        self.assertIn("invisible_characters", self.warn(parts)["warnings"])
+
+    def test_junk_after_root_not_checked(self):
+        parts = minimal_parts()
+        parts["xl/sharedStrings.xml"] += b"tail<x/>"
+        self.assertIn("strings_not_checked", self.warn(parts)["warnings"])
+
+    def test_power_query_reports_long_string(self):
+        body = "A" * (check_workbook.LONG_STRING_CHARS + 1)
+        data = (
+            '\ufeff<DataMashup xmlns="http://schemas.microsoft.com/DataMashup">%s</DataMashup>' % body
+        ).encode("utf-16-le")
+        r = self.warn(self.parts_with(**{"customXml__item1.xml": data}))
+        self.assertIn("power_query", r["warnings"])
+        self.assertIn("very_long_string", r["warnings"])
+
+    def test_phrase_across_normalization_window_warns(self):
+        limit = check_workbook.LONG_STRING_CHARS
+        value = "x" * (limit - 5) + "ignore previous" + "x" * 100
+        self.assertLess(value.index("ignore"), limit)
+        self.assertGreater(value.index("previous"), limit)
+        self.assertIn("instruction_like_text", self.warn(self.sst_parts(value))["warnings"])
+
+    def test_normalization_input_is_bounded(self):
+        phrase = "ignore previous"
+        value = "x" * (1000000 - len(phrase)) + phrase
+        p = write_workbook(self.path(), self.sst_parts(value), zipfile.ZIP_STORED)
+        seen = []
+        real = check_workbook.unicodedata.normalize
+
+        def normalize(form, text):
+            seen.append(len(text))
+            return real(form, text)
+
+        with mock.patch.object(check_workbook.unicodedata, "normalize", normalize):
+            r = check_workbook.check(p)
+        self.assertIn("instruction_like_text", r["warnings"])
+        self.assertLessEqual(max(seen), check_workbook.LONG_STRING_CHARS + check_workbook.PHRASE_OVERLAP)
 
 
 class _NoSeek(object):
