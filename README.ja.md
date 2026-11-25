@@ -136,9 +136,9 @@ Google スプレッドシートは直接読みません。`.xlsx` でダウン�
 | `unsupported_extension` | 対象の拡張子ではない |
 | `file_too_large` | 100 MB を超える |
 | `encrypted` | 暗号化されている |
-| `not_zip` | zip として開けない |
+| `not_zip` | zip として開けない、または読み手によって読み方が変わりうる zip の形（注釈、前置きのデータ、エントリの隙間や重なり、ZIP64、中央ディレクトリと食い違うローカルヘッダー、Unicode Path の extra、フラグの 5・6 ビット、長さや CRC が中央ディレクトリと違う部品のデータ） |
 | `too_many_parts` | 部品が 10,000 を超える |
-| `unsafe_part_name` | 部品名に `..` か絶対パスがある |
+| `unsafe_part_name` | 部品名に `..`・絶対パス・NUL・空のセグメント・`.` のセグメント・中身のあるディレクトリ名がある、または文字コードの印と合わない名前がある |
 | `uncompressed_too_large` | 展開した合計が 1 GB を超える |
 | `compression_ratio_too_high` | 1 部品の圧縮率が 100 倍を超える |
 | `xml_dtd` | XML に `<!DOCTYPE` か `<!ENTITY` がある |
@@ -158,8 +158,8 @@ Google スプレッドシートは直接読みません。`.xlsx` でダウン�
 | `very_hidden_sheet` | `veryHidden` のシートがある |
 | `invisible_characters` | 文字列に、ゼロ幅・向きの制御・タグの文字がある |
 | `instruction_like_text` | AI への指示らしい文言がある |
-| `very_long_string` | 極端に長い文字列がある |
-| `strings_not_checked` | 文字列を検査していない（`.xlsb` は二進のため） |
+| `very_long_string` | 極端に長い文字列がある（Power Query のブックでも出る。クエリが 1 本の長い符号化された文字列として保存されるため） |
+| `strings_not_checked` | 確かめきれなかった部品がある。その部品の文字列・シートの状態・関係は分からない: `.xlsb`（二進）、大きすぎる XML、検査が読めない XML、1 つの要素に同じローカル名の属性が 2 つある、256 段より深い入れ子、バイトオーダーマークがなく先頭 2 バイトに NUL がある部品、段落の中の入れ子になったテキストの塊 |
 
 検査の状態: `pass`、`fail`、`error`（語彙の外の出力や、想定外の結果）、`timeout`（20 秒超）、`sandbox_missing`（`sandbox-exec` がない）。
 
@@ -216,6 +216,7 @@ xlide を守るフックの拒否（`workbook-intake: <理由>`。必要なら�
 | `missing_file_path` | ツールに `file_path` が要る |
 | `bad_input` | フックの入力を読めない |
 | `outside_intake`・`path_not_absolute`・`intake_dir_invalid`・`not_regular_file`・`unsupported_extension`・`file_too_large` | 上の表と同じ |
+| `path_not_canonical` | パスが実体のパスと違う、または前後に空白か制御文字がある（xlide が別のファイルを開くため） |
 | `consent_store_unavailable`・`no_consent` | 上の表と同じ |
 | `check_failed` | 検査が不合格（不合格のコードが続く） |
 | `check_timeout` | 検査が 20 秒を超えた |
@@ -227,7 +228,7 @@ xlide を守るフックの拒否（`workbook-intake: <理由>`。必要なら�
 
 フックが拒否したら、スキルは止まって理由を伝えます。別の方法でファイルを読もうとはしません。
 
-`doctor.sh` の項目: `macos`（macOS ではない）、`uvx`（uv が PATH にない）、`python3`（Command Line Tools がない）、`sandbox_exec`（`/usr/bin/sandbox-exec` がない）、`intake_dir_protected`（Bash から受け取り用フォルダを一覧できる。必須の設定がないか、sandbox が切れている）。xlide のツールが見えないときは、uv がない、初回の取得に失敗した、プロジェクトの `xlide` にプラグインのものが外された、のどれかです（[設定](#configuration)を見てください）。
+`doctor.sh` の項目: `macos`（macOS ではない）、`uvx`（uv が PATH にない）、`python3`（Command Line Tools がない、またはその python が root の持ち物でない）、`sandbox_exec`（`/usr/bin/sandbox-exec` がない）、`intake_dir_protected`（Bash から受け取り用フォルダを一覧できる。必須の設定がないか、sandbox が切れている）。xlide のツールが見えないときは、uv がない、初回の取得に失敗した、プロジェクトの `xlide` にプラグインのものが外された、のどれかです（[設定](#configuration)を見てください）。
 
 <a name="maintenance"></a>
 

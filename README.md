@@ -132,9 +132,9 @@ Failure codes (the file is not read):
 | `unsupported_extension` | Extension is not one of the supported ones |
 | `file_too_large` | Over 100 MB |
 | `encrypted` | Password-protected package |
-| `not_zip` | Cannot be opened as a zip |
+| `not_zip` | Cannot be opened as a zip, or the ZIP layout could be read differently by different readers (an archive comment, prefix data, gaps or overlaps between entries, ZIP64 records, local headers that disagree with the central directory, a Unicode Path extra, flag bits 5 or 6, part data whose length or CRC differs from the central directory) |
 | `too_many_parts` | More than 10,000 parts |
-| `unsafe_part_name` | A part name has `..` or an absolute path |
+| `unsafe_part_name` | A part name has `..` or an absolute path, NUL, an empty segment, a `.` segment, a directory name with content, or a name that disagrees with the UTF-8 flag |
 | `uncompressed_too_large` | Expands to more than 1 GB in total |
 | `compression_ratio_too_high` | One part compresses by more than 100 times |
 | `xml_dtd` | An XML part has `<!DOCTYPE` or `<!ENTITY` |
@@ -154,8 +154,8 @@ Warning codes (you must confirm before the analysis continues):
 | `very_hidden_sheet` | A very hidden sheet exists |
 | `invisible_characters` | Zero-width, direction-control or tag characters in strings |
 | `instruction_like_text` | Wording that looks like instructions to an AI |
-| `very_long_string` | An extremely long string |
-| `strings_not_checked` | Strings were not checked (`.xlsb` is binary) |
+| `very_long_string` | An extremely long string (Power Query workbooks also show it, because the query is stored as one long encoded string) |
+| `strings_not_checked` | Some parts could not be fully checked; strings, sheet states and relationships in them are unknown: `.xlsb` (binary), oversized XML parts, XML parts the checker cannot read, two attributes with the same local name on one element, nesting deeper than 256 levels, a part whose first two bytes contain NUL without a byte-order mark, nested text runs inside a paragraph |
 
 Check statuses: `pass`, `fail`, `error` (output outside the vocabulary or unexpected result), `timeout` (over 20 seconds), `sandbox_missing` (`sandbox-exec` not found).
 
@@ -212,6 +212,7 @@ Guard hook denials (`workbook-intake: <reason>`, with failure or warning codes i
 | `missing_file_path` | The tool needs `file_path` |
 | `bad_input` | The hook input could not be read |
 | `outside_intake`, `path_not_absolute`, `intake_dir_invalid`, `not_regular_file`, `unsupported_extension`, `file_too_large` | Same as above |
+| `path_not_canonical` | The path is not its own real path, or has surrounding whitespace or control characters (xlide would open a different file) |
 | `consent_store_unavailable`, `no_consent` | Same as above |
 | `check_failed` | The check failed (failure codes follow) |
 | `check_timeout` | The check took over 20 seconds |
@@ -223,7 +224,7 @@ Guard hook denials (`workbook-intake: <reason>`, with failure or warning codes i
 
 If a hook denies a call, the skill stops and tells you why. It does not try to read the file another way.
 
-`doctor.sh` items: `macos` (not macOS), `uvx` (uv not on PATH), `python3` (Command Line Tools missing), `sandbox_exec` (`/usr/bin/sandbox-exec` missing), `intake_dir_protected` (Bash can list the intake folder: the required settings are missing or the sandbox is off). If the xlide tools are not visible, uv may be missing, the first-run download failed, or a project's own `xlide` dropped the plugin's (see [Configuration](#configuration)).
+`doctor.sh` items: `macos` (not macOS), `uvx` (uv not on PATH), `python3` (Command Line Tools missing, or its installation is not owned by root), `sandbox_exec` (`/usr/bin/sandbox-exec` missing), `intake_dir_protected` (Bash can list the intake folder: the required settings are missing or the sandbox is off). If the xlide tools are not visible, uv may be missing, the first-run download failed, or a project's own `xlide` dropped the plugin's (see [Configuration](#configuration)).
 
 <a name="maintenance"></a>
 
