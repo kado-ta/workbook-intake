@@ -645,6 +645,78 @@ class CheckWorkbookTest(unittest.TestCase):
         self.assertIn("instruction_like_text", r["warnings"])
         self.assertLessEqual(max(seen), check_workbook.LONG_STRING_CHARS + check_workbook.PHRASE_OVERLAP)
 
+    def test_part_failing_final_decode_counts_nothing(self):
+        # The parser has counted the sheet before the cut UTF-8 sequence at the end fails decoding.
+        r = self.warn(self.parts_with(**{"xl__workbook.xml": self.sheets_xml("veryHidden") + b"\xe3"}))
+        self.assertNotIn("very_hidden_sheet", r["warnings"])
+        self.assertNotIn("strings_not_checked", r["warnings"])
+
+    # --- text as xlide joins it ---
+
+    def si_parts(self, *bodies):
+        parts = minimal_parts()
+        parts["xl/sharedStrings.xml"] = (
+            '<sst xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main">%s</sst>'
+            % "".join("<si>%s</si>" % b for b in bodies)
+        ).encode("utf-8")
+        return parts
+
+    def cell_parts(self, cell):
+        parts = minimal_parts()
+        sheet = parts["xl/worksheets/sheet1.xml"]
+        old = b'<c r="A1" t="s"><v>0</v></c>'
+        self.assertIn(old, sheet)
+        parts["xl/worksheets/sheet1.xml"] = sheet.replace(old, cell.encode("utf-8"))
+        return parts
+
+    def test_rich_text_runs_are_joined(self):
+        r = self.warn(self.si_parts("<r><t>ignore </t></r><r><t>previous</t></r>"))
+        self.assertIn("instruction_like_text", r["warnings"])
+
+    def test_text_split_by_child_element_is_joined(self):
+        r = self.warn(self.si_parts("<t>ignore <x/>previous</t>"))
+        self.assertIn("instruction_like_text", r["warnings"])
+
+    def test_cdata_inside_text_is_kept_apart(self):
+        r = self.warn(self.si_parts("<t>ignore <![CDATA[zz]]>previous</t>"))
+        self.assertIn("instruction_like_text", r["warnings"])
+
+    def test_escape_split_by_child_or_cdata_warns(self):
+        for body in ("<t>a_x20<x/>0B_b</t>", "<t>a_x20<![CDATA[q]]>0B_b</t>"):
+            with self.subTest(body=body):
+                self.assertIn("invisible_characters", self.warn(self.si_parts(body))["warnings"])
+
+    def test_long_text_split_across_runs_or_children_warns(self):
+        half = "x" * 6000
+        for body in ("<r><t>%s</t></r><r><t>%s</t></r>" % (half, half), "<t>%s<x/>%s</t>" % (half, half)):
+            with self.subTest(body=body[:12]):
+                self.assertIn("very_long_string", self.warn(self.si_parts(body))["warnings"])
+
+    def test_cell_text_split_by_children_or_runs_warns(self):
+        cells = (
+            '<c r="A1" t="inlineStr"><is><t>ignore <x/>previous</t></is></c>',
+            '<c r="A1" t="inlineStr"><is><r><t>ignore </t></r><r><t>previous</t></r></is></c>',
+            '<c r="A1" t="str"><v>ignore <x/>previous</v></c>',
+        )
+        for cell in cells:
+            with self.subTest(cell=cell):
+                self.assertIn("instruction_like_text", self.warn(self.cell_parts(cell))["warnings"])
+
+    def test_defined_name_split_by_child_element_warns(self):
+        parts = minimal_parts()
+        parts["xl/workbook.xml"] = parts["xl/workbook.xml"].replace(
+            b"</sheets>", b'</sheets><definedNames><definedName name="N">"ignore <x/>previous"</definedName></definedNames>')
+        self.assertIn(b"definedName", parts["xl/workbook.xml"])
+        self.assertIn("instruction_like_text", self.warn(parts)["warnings"])
+
+    def test_nesting_deeper_than_xlide_reads_not_checked(self):
+        # pyofficeeditor refuses an element deeper than 256 below the root.
+        for depth, unchecked in ((256, False), (257, True)):
+            with self.subTest(depth=depth):
+                data = b"<a>" + b"<b>" * depth + b"</b>" * depth + b"</a>"
+                r = self.warn(self.parts_with(**{"xl__deep.xml": data}))
+                self.assertEqual("strings_not_checked" in r["warnings"], unchecked)
+
 
 class _NoSeek(object):
     """Write-only stream: zipfile falls back to data descriptors on it."""

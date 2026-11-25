@@ -27,6 +27,8 @@ READ_CHUNK = 64 * 1024
 MAX_PARSE_BYTES = 32 * 1024 * 1024
 LONG_STRING_CHARS = 10_000
 PHRASE_OVERLAP = 256
+# pyofficeeditor refuses an element nested deeper than this below the root.
+MAX_DEPTH = 256
 
 FAILURE_CODES = (
     "unsupported_extension",
@@ -191,6 +193,9 @@ _REL_TYPE_WARNINGS = (
 _EXPAT_ENCODINGS = {"utf-8": "UTF-8", "utf-16-le": "UTF-16LE", "utf-16-be": "UTF-16BE"}
 # Excel's escape for one UTF-16 code unit, as xlide decodes it.
 _ESCAPE = re.compile(r"_x([0-9A-Fa-f]{4})_")
+_TEXT_BLOCK = 8192
+# Finds any of INSTRUCTION_PHRASES in one call (values are many and mostly short).
+_PHRASE_SEARCH = re.compile("|".join(re.escape(p) for p in INSTRUCTION_PHRASES)).search
 
 
 def _encoding(head):
@@ -205,23 +210,46 @@ def _encoding(head):
     return "utf-8"
 
 
+class _Text(object):
+    """Text that arrives in pieces, joined every _TEXT_BLOCK pieces so the pieces do not stay objects."""
+
+    __slots__ = ("blocks", "pieces")
+
+    def __init__(self):
+        self.blocks = []
+        self.pieces = []
+
+    def add(self, text):
+        self.pieces.append(text)
+        if len(self.pieces) >= _TEXT_BLOCK:
+            self.blocks.append("".join(self.pieces))
+            self.pieces = []
+
+    def value(self):
+        self.blocks.append("".join(self.pieces))
+        self.pieces = []
+        return "".join(self.blocks)
+
+
 class _Collector(object):
-    """expat handlers that count into one part's own counters, never a tree."""
+    """expat handlers that count into one part's own counters, never a tree.
+
+    Strings are the values xlide reads: each element's direct text joined
+    across its children (as Element.text, without CDATA), each CDATA section
+    on its own, and for si and is the text of their r/t runs joined.
+    """
 
     def __init__(self):
         self.counts = dict.fromkeys(WARNING_CODES, 0)
         self.duplicate = False
-        self._text = []
-
-    def flush(self):
-        if self._text:
-            text = "".join(self._text)
-            self._text = []
-            _count_string(text, self.counts)
+        # One [local name, direct text, joined runs] per open element.
+        self._open = []
+        self._cdata = None
 
     def start(self, name, attrs):
+        if len(self._open) > MAX_DEPTH:
+            raise ValueError("nested deeper than xlide reads")
         # attrs is [name, value, ...] in document order, xmlns declarations included.
-        self.flush()
         first = {}
         for i in range(0, len(attrs), 2):
             _count_string(attrs[i + 1], self.counts)
@@ -231,6 +259,7 @@ class _Collector(object):
             else:
                 first[local] = attrs[i + 1]
         name = _local(name)
+        self._open.append([name, None, _Text() if name in ("si", "is") else None])
         if name == "sheet":
             state = first.get("state")
             if state == "hidden":
@@ -248,10 +277,40 @@ class _Collector(object):
             self.counts["external_link"] += 1
 
     def end(self, name):
-        self.flush()
+        local, text, runs = self._open.pop()
+        value = ""
+        if text is not None:
+            value = text.value()
+            _count_string(value, self.counts)
+        if runs is not None:
+            _count_string(runs.value(), self.counts)
+        elif local == "t" and len(self._open) > 1 and self._open[-1][0] == "r":
+            outer = self._open[-2][2]
+            if outer is not None:
+                outer.add(value)
 
     def data(self, text):
-        self._text.append(text)
+        if self._cdata is not None:
+            self._cdata.add(text)
+            return
+        top = self._open[-1]
+        if top[1] is None:
+            top[1] = _Text()
+        top[1].add(text)
+
+    def cdata_start(self):
+        self._cdata = _Text()
+
+    def cdata_end(self):
+        text, self._cdata = self._cdata, None
+        _count_string(text.value(), self.counts)
+
+    def close(self):
+        """Count what is still open, for a part that ended early or failed."""
+        if self._cdata is not None:
+            self.cdata_end()
+        while self._open:
+            self.end(None)
 
 
 def _unescape(value):
@@ -288,7 +347,7 @@ def _has_phrase(value):
     for start in range(0, len(value), LONG_STRING_CHARS):
         window = value[start:start + LONG_STRING_CHARS + PHRASE_OVERLAP]
         folded = unicodedata.normalize("NFKC", window).lower().translate(_INVISIBLE_STRIP)
-        if any(p in folded for p in INSTRUCTION_PHRASES):
+        if _PHRASE_SEARCH(folded):
             return True
     return False
 
@@ -299,10 +358,15 @@ def _count_string(value, counts):
     if len(value) > LONG_STRING_CHARS:
         counts["very_long_string"] += 1
     decoded = _unescape(value)
-    forms = (value,) if decoded == value else (value, decoded)
-    if any(not _INVISIBLE_CHARS.isdisjoint(v) for v in forms):
+    if decoded == value:
+        invisible = not _INVISIBLE_CHARS.isdisjoint(value)
+        phrase = _has_phrase(value)
+    else:
+        invisible = not (_INVISIBLE_CHARS.isdisjoint(value) and _INVISIBLE_CHARS.isdisjoint(decoded))
+        phrase = _has_phrase(value) or _has_phrase(decoded)
+    if invisible:
         counts["invisible_characters"] += 1
-    if any(_has_phrase(v) for v in forms):
+    if phrase:
         counts["instruction_like_text"] += 1
 
 
@@ -314,6 +378,9 @@ def _new_parser(enc, collector):
     parser.StartElementHandler = collector.start
     parser.EndElementHandler = collector.end
     parser.CharacterDataHandler = collector.data
+    # With buffer_text, pending text is handed over before these are called.
+    parser.StartCdataSectionHandler = collector.cdata_start
+    parser.EndCdataSectionHandler = collector.cdata_end
     return parser
 
 
@@ -377,7 +444,7 @@ def _scan_part(zf, info, counts, read_xml):
         # Larger than MAX_PARSE_BYTES: not read.
         counts["strings_not_checked"] += 1
         return
-    collector.flush()
+    collector.close()
     for code, n in collector.counts.items():
         counts[code] += n
     if failed or collector.duplicate:
@@ -395,7 +462,7 @@ def _feed(parser, data, final, collector):
             parser.buffer_text = False
         except Exception:
             pass
-        collector.flush()
+        collector.close()
         return None, True
 
 
@@ -403,8 +470,9 @@ def _scan_warnings(zf, infos, is_xlsb):
     # Count units: file-name and relationship warnings count parts/relationships
     # (one object found through both a name and a relationship counts twice);
     # external_link also counts <externalReference> elements; string warnings
-    # count values (text runs and attribute values); the sheet warnings count
-    # <sheet> elements in any part; strings_not_checked counts parts.
+    # count values (attribute values, each element's direct text, each CDATA
+    # section, the joined runs of si and is); the sheet warnings count <sheet>
+    # elements in any part; strings_not_checked counts parts.
     counts = dict.fromkeys(WARNING_CODES, 0)
     for info in infos:
         name = info.filename.lower()
