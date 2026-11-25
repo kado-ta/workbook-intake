@@ -27,6 +27,10 @@ created: 2026-11-25
 | 2026-11-25、`f88e6dd` | Claude Code の Bash（sandbox の中） | `"$(xcode-select -p)/usr/bin/python3" -B -m unittest discover -s tests -t .` | 286 件、OK、skip 20 |
 | 2026-11-25、`f88e6dd` | 同上 | `shellcheck hooks/*.sh scripts/*.sh dev/probe/workbook-intake/hooks/*.sh` | 指摘なし |
 | 2026-11-25、`f88e6dd` | 同上 | `claude plugin validate . --strict` | 通過 |
+| 2026-11-26、`265e864` | 人、通常のターミナル | `WORKBOOK_INTAKE_REQUIRE_SANDBOX=1 "$(xcode-select -p)/usr/bin/python3" -B -m unittest discover -s tests -t . -v` | 313 件、すべて OK、skip なし。2 回目の `/review` の修正（[Task 16〜19](plan.md#review2-fixes)）の後。ほかのプロセスの引数を読めないこと、`/System/Volumes/Data` を通して読めないこと、NFD と大文字小文字の違う綴りで検査が通ることの 3 件を含む |
+| 2026-11-26、`265e864` | Claude Code の Bash（sandbox の中） | `"$(xcode-select -p)/usr/bin/python3" -B -m unittest discover -s tests -t .` | 313 件、OK、skip 23 |
+| 2026-11-26、`265e864` | 同上 | `shellcheck hooks/*.sh scripts/*.sh dev/probe/workbook-intake/hooks/*.sh` | 指摘なし |
+| 2026-11-26、`265e864` | 同上 | `claude plugin validate . --strict` | 通過 |
 
 `719943d` から `d093bcb` までに、Seatbelt・フック・検査のコードとそのテスト（`hooks/`、`scripts/check_workbook.*`、`tests/test_sandbox_profile.py`、`tests/test_guard_xlide.py`、`tests/test_record_consent.py`、`tests/test_check_workbook.py`）は変わっていない（`git diff --stat` で確かめた）。そのため、`d093bcb` では人による Seatbelt 付きの実行をやり直していない。`f88e6dd` では、1 回目の `/review` を受けて検査とフックを直したので（[Task 13〜15](plan.md#task-13)）、やり直した。CI（Linux と macOS）の結果は、PR を作った後に足す。
 
