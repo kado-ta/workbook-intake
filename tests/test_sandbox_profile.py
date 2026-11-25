@@ -197,7 +197,10 @@ class ProfileTest(unittest.TestCase):
             "if libc.sysctl(mib, 3, None, ctypes.byref(size), None, 0) != 0:\n"
             "    e = ctypes.get_errno()\n"
             "    # Only EPERM means the profile denied it; ESRCH, EINVAL etc. fail the test.\n"
-            "    raise (PermissionError if e == errno.EPERM else OSError)(e, 'sysctl failed')"
+            "    if e == errno.EPERM:\n"
+            "        raise PermissionError(e, 'sysctl failed')\n"
+            "    # Not OSError(e, ...): for EACCES that would become a PermissionError.\n"
+            "    raise RuntimeError('sysctl failed with errno %%d' %% e)"
             % sleeper.pid)
 
     def test_profile_denies_reading_through_data_volume(self):
