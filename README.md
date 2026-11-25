@@ -137,7 +137,7 @@ Failure codes (the file is not read):
 | `unsafe_part_name` | A part name has `..` or an absolute path, NUL, an empty segment, a `.` segment, a directory name with content, or a name that disagrees with the UTF-8 flag |
 | `uncompressed_too_large` | Expands to more than 1 GB in total |
 | `compression_ratio_too_high` | One part compresses by more than 100 times |
-| `xml_dtd` | An XML part has `<!DOCTYPE` or `<!ENTITY` |
+| `xml_dtd` | A part has `<!DOCTYPE` or `<!ENTITY`. Every part is searched, not only XML, so an SVG image or a macro that writes HTML can cause it |
 
 Warning codes (you must confirm before the analysis continues):
 
@@ -154,7 +154,7 @@ Warning codes (you must confirm before the analysis continues):
 | `very_hidden_sheet` | A very hidden sheet exists |
 | `invisible_characters` | Zero-width, direction-control or tag characters in strings |
 | `instruction_like_text` | Wording that looks like instructions to an AI |
-| `very_long_string` | An extremely long string (Power Query workbooks also show it, because the query is stored as one long encoded string) |
+| `very_long_string` | A string over 10,000 characters (Power Query workbooks can show it, because the query is stored as one long encoded string) |
 | `strings_not_checked` | Some parts could not be fully checked; strings, sheet states and relationships in them are unknown: `.xlsb` (binary), oversized XML parts, XML parts the checker cannot read, two attributes with the same local name on one element, nesting deeper than 256 levels, a part whose first two bytes contain NUL without a byte-order mark, nested text runs inside a paragraph |
 
 Check statuses: `pass`, `fail`, `error` (output outside the vocabulary or unexpected result), `timeout` (over 20 seconds), `sandbox_missing` (`sandbox-exec` not found).
@@ -195,7 +195,7 @@ Consent hook lines (`workbook-intake: consent=...`, `warnings_ack=...`). The lin
 | `not_regular_file` | Not a regular file |
 | `unsupported_extension` | Extension not supported |
 | `file_too_large` | Over 100 MB |
-| `path_not_canonical` | The path is not its own real path, or has control characters |
+| `path_not_canonical` | The path is not its own real path, or has surrounding whitespace or control characters |
 | `file_changed` | The file changed while it was being checked |
 | `consent_store_unavailable` | The record cannot be written (plugin data directory missing) |
 | `no_consent` | No input confirmation was recorded for this file content |
@@ -212,7 +212,7 @@ Guard hook denials (`workbook-intake: <reason>`, with failure or warning codes i
 | `missing_file_path` | The tool needs `file_path` |
 | `bad_input` | The hook input could not be read |
 | `outside_intake`, `path_not_absolute`, `intake_dir_invalid`, `not_regular_file`, `unsupported_extension`, `file_too_large` | Same as above |
-| `path_not_canonical` | The path is not its own real path, or has surrounding whitespace or control characters (xlide would open a different file) |
+| `path_not_canonical` | Same as above (the guard and xlide could resolve such a path to different files) |
 | `consent_store_unavailable`, `no_consent` | Same as above |
 | `check_failed` | The check failed (failure codes follow) |
 | `check_timeout` | The check took over 20 seconds |

@@ -141,7 +141,7 @@ Google スプレッドシートは直接読みません。`.xlsx` でダウン�
 | `unsafe_part_name` | 部品名に `..`・絶対パス・NUL・空のセグメント・`.` のセグメント・中身のあるディレクトリ名がある、または文字コードの印と合わない名前がある |
 | `uncompressed_too_large` | 展開した合計が 1 GB を超える |
 | `compression_ratio_too_high` | 1 部品の圧縮率が 100 倍を超える |
-| `xml_dtd` | XML に `<!DOCTYPE` か `<!ENTITY` がある |
+| `xml_dtd` | 部品に `<!DOCTYPE` か `<!ENTITY` がある。XML に限らずすべての部品を探すので、SVG の画像や、HTML を書き出すマクロでも出ることがある |
 
 警告のコード（確認してから続けます）:
 
@@ -158,7 +158,7 @@ Google スプレッドシートは直接読みません。`.xlsx` でダウン�
 | `very_hidden_sheet` | `veryHidden` のシートがある |
 | `invisible_characters` | 文字列に、ゼロ幅・向きの制御・タグの文字がある |
 | `instruction_like_text` | AI への指示らしい文言がある |
-| `very_long_string` | 極端に長い文字列がある（Power Query のブックでも出る。クエリが 1 本の長い符号化された文字列として保存されるため） |
+| `very_long_string` | 10,000 文字を超える文字列がある（Power Query のブックでも出ることがある。クエリが 1 本の長い符号化された文字列として保存されるため） |
 | `strings_not_checked` | 確かめきれなかった部品がある。その部品の文字列・シートの状態・関係は分からない: `.xlsb`（二進）、大きすぎる XML、検査が読めない XML、1 つの要素に同じローカル名の属性が 2 つある、256 段より深い入れ子、バイトオーダーマークがなく先頭 2 バイトに NUL がある部品、段落の中の入れ子になったテキストの塊 |
 
 検査の状態: `pass`、`fail`、`error`（語彙の外の出力や、想定外の結果）、`timeout`（20 秒超）、`sandbox_missing`（`sandbox-exec` がない）。
@@ -199,7 +199,7 @@ Google スプレッドシートは直接読みません。`.xlsx` でダウン�
 | `not_regular_file` | 通常のファイルではない |
 | `unsupported_extension` | 対象外の拡張子 |
 | `file_too_large` | 100 MB を超える |
-| `path_not_canonical` | パスが実体のパスと違う、または制御文字がある |
+| `path_not_canonical` | パスが実体のパスと違う、または前後に空白か制御文字がある |
 | `file_changed` | 検査のあいだにファイルが変わった |
 | `consent_store_unavailable` | 記録を書けない（プラグインのデータの置き場所がない） |
 | `no_consent` | このファイルの中身に、入力の確認の記録がない |
@@ -216,7 +216,7 @@ xlide を守るフックの拒否（`workbook-intake: <理由>`。必要なら�
 | `missing_file_path` | ツールに `file_path` が要る |
 | `bad_input` | フックの入力を読めない |
 | `outside_intake`・`path_not_absolute`・`intake_dir_invalid`・`not_regular_file`・`unsupported_extension`・`file_too_large` | 上の表と同じ |
-| `path_not_canonical` | パスが実体のパスと違う、または前後に空白か制御文字がある（xlide が別のファイルを開くため） |
+| `path_not_canonical` | 上の表と同じ（そのようなパスは、フックと xlide とで別のファイルに解決されうるため） |
 | `consent_store_unavailable`・`no_consent` | 上の表と同じ |
 | `check_failed` | 検査が不合格（不合格のコードが続く） |
 | `check_timeout` | 検査が 20 秒を超えた |

@@ -234,8 +234,9 @@ def resolve_in_intake(path):
 def canonical_path(path):
     """True if the path is its own realpath (compared as NFC) with no stray characters.
 
-    xlide strips the path and resolves it itself, so surrounding whitespace, control
-    characters or a symlink would let the guard check one file while xlide opens another.
+    xlide strips the path before it resolves it, so surrounding whitespace together
+    with a symlink could let the guard check one file while xlide opens another.
+    Control characters and other spellings are refused as well, to keep one form.
     """
     if path != path.strip():
         return False
