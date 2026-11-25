@@ -42,7 +42,7 @@ created: 2026-11-25
 - 名前: プラグインとマーケットプレイスは `workbook-intake`、MCP サーバーは `xlide`、ツール名の接頭辞は `mcp__plugin_workbook-intake_xlide__`、サブエージェントは `excel-analyst`（呼び出し元の名前は `workbook-intake:excel-analyst`）、スキルは `analyze`。
 - 受け取り用フォルダの既定は `~/workbook-intake`。
 - 時間: フックの timeout は 30 秒、検査の上限は 20 秒（フックの中で決める）。
-- 検査の閾値: ファイル 100 MB、部品 10,000、展開の合計 1 GB、1 部品の圧縮率 100 倍。
+- 検査の閾値: ファイル 100 MB、部品 10,000、展開の合計 256 MB（2026-11-25 に 1 GB から下げた。[Task 17](#task-17)）、1 部品の圧縮率 100 倍。
 - 検査とフックの出力（標準出力、拒否の理由、会話に返す文、JSON）には、固定の語彙・件数・真偽だけを入れる。ファイル由来の文字列（シート名、セルの文字列、部品の名前、ファイル名、パス）を入れない。フックは、検査の出力のうち、固定の語彙に一致する値だけを使う（知らない値があれば、検査できないとみなす）。
 - 検査は、2 つのフックが sandbox の外から Seatbelt の中で動かす。スキル（Claude Code の Bash）からは動かさない。推奨設定では、Bash から受け取り用フォルダを読めない（設計の[直接の読み込みを止める](design.md#direct-read)）。
 - 公開するファイル（SKILL.md、エージェントの指示、コードのコメント）は英語。README は英語の `README.md` を主とし、日本語版の `README.ja.md` を用意して、`README.md` からリンクする（ユーザーの指定、2026-11-25。設計の「公開するファイルは英語」から変える）。作業文書（`docs/work/`）と保守の runbook（`docs/runbooks/`）は日本語。
@@ -957,7 +957,7 @@ git commit -m "docs: record manual verification of workbook-intake"
 
 ### Task 12: レビューと PR の準備
 
-- [x] **Step 1: `/review` を実行し、指摘への対応を決める。直したら、全体のテストを実行し直す。** 1 回目の結果と採否は [test-report のレビュー](test-report.md#review-1)。小さな指摘は `be03451` で直した。検査と xlide の読み方の違いなどは、[Task 13](#task-13)〜[Task 15](#task-15) で直す（ユーザーの判断、2026-11-25）。Task 15 の後に、`/review` をもう一度実行してから Step 2 に進む。
+- [x] **Step 1: `/review` を実行し、指摘への対応を決める。直したら、全体のテストを実行し直す。** 1 回目の結果と採否は [test-report のレビュー](test-report.md#review-1)。小さな指摘は `be03451` で直した。検査と xlide の読み方の違いなどは、[Task 13](#task-13)〜[Task 15](#task-15) で直す（ユーザーの判断、2026-11-25）。Task 15 の後に、`/review` をもう一度実行してから Step 2 に進む。2 回目の結果と採否は [test-report のレビュー](test-report.md#review-2)。小さな指摘は `fe3b14c`・`e4ad15b`・`25108c0` で直した。残りは [Task 16](#task-16)〜[Task 19](#task-19) で直す（ユーザーの判断、2026-11-25）。Task 19 の後に、`/review` を 3 回目として実行してから Step 2 に進む。
 - [ ] **Step 2: `/security-review` を実行する（外部からの入力と権限の境界に触れるため）。**
 - [ ] **Step 3: Codex のレビューを行う（必須。ユーザーの指定）。** 人が通常のターミナルで `codex review` と、challenge（変更前と比べた後退と、壊れる入力を挙げてもらう。プロンプトは Claude が書く）を実行する。結果は、CLAUDE.md の Skill routing の手順で読み、test-report に記録してから採否を整理する。直したら、全体のテストを実行し直す。上限は 5 回。
 - [ ] **Step 4: 作業文書を締める。** design.md・plan.md・research・test-report の `status` を `done` にしてコミットする。
@@ -1205,3 +1205,222 @@ git commit -m "docs: record the parity check against xlide's readers"
 ```
 
 その後、[Task 12](#task-12) の Step 1 の続き（2 回目の `/review`）に戻る。CI の macOS のジョブで、`xcode-select -p` の先の python が root の持ち物でなく失敗したら、`.github/workflows/ci.yml` の macOS のジョブに `DEVELOPER_DIR: /Library/Developer/CommandLineTools` を足すことを検討する（PR の後に分かる）。
+
+---
+
+<a name="review2-fixes"></a>
+
+## 2 回目の `/review` の指摘の修正（Task 16〜19）
+
+2 回目の `/review` の結果と採否は [test-report](test-report.md#review-2)。ユーザーの判断（2026-11-25）:
+
+- D1: Power Query の部品の中の zip を検査で数え（F2）、展開の合計の上限を 256 MiB に下げる（F1）。VBA の展開（F3）は受け入れるリスクに記録する。
+- D2: Seatbelt の 3 つは、人の確かめで再現したものだけを直す。再現したのは、ほかのプロセスの情報だけ。パスの綴りと `/System/Volumes/Data` は再現しなかったので、回帰のテストだけ足す。
+- D3: 大きいブックの時間切れは、README に目安を書く。検査の結果の使い回しは、設計の非目標のまま。
+- D4: `_check_layout` の未テストの規則にテストを足し、3 つのリスク（`disableAllHooks`、ほかのプラグインのフック、`uvx` の PATH）を記録する。簡素化の提案 2 件は採らない。
+
+設計は 2026-11-25 の 2 つ目の改訂で直した（[design.md の改訂](design.md#revisions)）。語彙は増やさない。
+
+<a name="task-16"></a>
+
+### Task 16: 検査（zip の形の規則のテスト）
+
+**Files:**
+- Modify: `tests/test_check_workbook.py`（`LayoutTest`）。組み替えの補助が足りなければ `tests/workbook_factory.py`
+
+**Interfaces:**
+- Consumes: Task 13 の `_check_layout` と、`tests/workbook_factory.py` の `build_zip`・`deflated_entries`
+- Produces: テストだけ。製品のコードは変えない。
+
+[Task 13](#task-13) の表の規則のうち、テストがないものを 1 つずつ固定する。各テストは、その規則だけを破り、ほかの規則はすべて満たすファイルを作る。
+
+- [ ] **Step 1: テストを書く**
+
+```python
+def test_declared_comment_length_without_comment_fails(self):  # 最後の 22 バイトの EOCD の注釈の長さを 5 にする（注釈のバイトは足さない）→ "not_zip"
+def test_nonzero_disk_number_fails(self):                      # EOCD のディスク番号を 1 → "not_zip"
+def test_nonzero_central_directory_disk_fails(self):           # EOCD の中央ディレクトリのディスク番号を 1 → "not_zip"
+def test_disk_and_total_entry_counts_differ_fails(self):       # このディスクのエントリ数だけ 1 減らす（総数は正しい）→ "not_zip"
+def test_zip64_locator_signature_fails(self):                  # 最後の中央のエントリに 20 バイトの注釈を付け、その先頭を b"PK\x06\x07" にする（ファイルの最後の 42 バイト目に来る）→ "not_zip"。同じ長さで先頭が違う注釈なら合格（対照）
+def test_zip64_extra_in_central_entry_fails(self):             # 中央のエントリの extra に id 0x0001 の塊（長さ 0）→ "not_zip"
+def test_unicode_path_extra_in_local_header_fails(self):       # ローカルヘッダーの extra にだけ id 0x7075 の塊 → "not_zip"
+def test_extra_block_overrunning_its_field_fails(self):        # 中央の extra に id 0x9999、宣言の長さ 10、中身 2 バイト → "not_zip"。ローカルの extra でも同じ（subTest）
+def test_data_descriptor_without_signature_passes(self):       # bit 3 のエントリの後ろに、署名のない 12 バイトのデータ記述子（CRC と 2 つの大きさ）→ 合格
+def test_data_descriptor_with_signature_passes(self):          # 同じく、署名付きの 16 バイト → 合格
+```
+
+ほかの規則で必ず止まる組み合わせ（EOCD の大きさとオフセットの `0xFFFFFFFF`、件数の `0xFFFF`、中央のエントリの `0xFFFFFFFF`）は、小さなファイルでは 1 つだけを破れないので、テストを足さない（主担当の判断。どれかを消しても、隙間と重なりの規則か、中身の長さの規則で `not_zip` になる）。
+
+- [ ] **Step 2: テストが通ることを確かめ、規則を 1 つずつ外して落ちることを確かめる**
+
+Run: `"$PY" -B -m unittest tests.test_check_workbook -v`
+Expected: すべて PASS。次に、上の各テストについて、対応する `_check_layout` の条件を一時的に外して実行し、そのテストが FAIL になることを確かめる（12 バイトの記述子は、`else 12` を `else 16` に変えて確かめる）。確かめたら元に戻す。結果を報告に書く。
+
+- [ ] **Step 3: コミットする**
+
+```bash
+git add tests/test_check_workbook.py tests/workbook_factory.py
+git commit -m "test: pin each ZIP layout rule that no test covered"
+```
+
+<a name="task-17"></a>
+
+### Task 17: 検査（Power Query の部品の中の zip と、展開の合計の上限）
+
+**Files:**
+- Modify: `scripts/check_workbook.py`、`tests/test_check_workbook.py`、`tests/workbook_factory.py`、`README.md`、`README.ja.md`
+
+**Interfaces:**
+- Consumes: Task 13 の `_check_part`（外側の部品の展開と合計）、`MAX_TOTAL_UNCOMPRESSED`・`MAX_RATIO`・`RATIO_GRACE_BYTES`・`READ_CHUNK`・`MAX_PARSE_BYTES`・`_DTD_NEEDLES`
+- Produces:
+  - `MAX_TOTAL_UNCOMPRESSED = 256 * 1024 * 1024`
+  - `_mashup_package(raw: bytes) -> bytes | None`: 外側の部品のバイト列から、pyopenvba が展開する中の zip（DataMashup の最初の節）を取り出す。pyopenvba が取り出しに失敗する入力では `None`。
+  - `_check_package(package: bytes, total: int) -> tuple[str | None, int]`: 中の zip の部品を展開して数える。不合格の語彙か `None` と、新しい合計を返す。
+  - `check()` は、外側の部品をすべて `_check_part` で確かめた後、`_scan_warnings` の前に、名前が `^customXml/item(\d+)\.xml$`（pyopenvba の `_ITEM_PATTERN` と同じ）に合う部品ごとに、次を行う。部品の展開後の大きさが `MAX_PARSE_BYTES` を超えれば `uncompressed_too_large` で不合格。そうでなければ `zf.read` で読み、`_mashup_package` が返したものを `_check_package` に渡す。合計は外側の部品の続きから数える。
+
+取り出しは、pyopenvba 6.6.0 の `powerquery/workbook.py` の `_is_mashup_part`・`_split_item` と `_mashup.py` の `Mashup.parse` と同じ手順にする（xlide と同じものを取り出すため。違えば、中の zip bomb が検査をすり抜ける）。
+
+1. `b"DataMashup"` も `b"D\x00a\x00t\x00a\x00M\x00a\x00s\x00h\x00u\x00p"` も含まなければ `None`。
+2. 先頭の 2 バイトが `b"\xff\xfe"` なら `raw.decode("utf-16")`、そうでなければ `raw.decode("utf-8-sig")`。失敗すれば `None`。
+3. `re.search(r"(.*<DataMashup[^>]*>)(.*?)(</DataMashup>.*)", text, re.S)`。合わなければ `None`。pyopenvba のルート要素の確かめ（ElementTree）は行わない（行わなくても、検査が数える部品が増えるだけ）。
+4. `base64.b64decode(group(2), validate=False)`。`ValueError` なら `None`。
+5. 8 バイトより短ければ `None`。4 バイト目から、4 バイトの長さ（リトルエンディアン）と中身の節を 4 つ読む。どれかが終わりを越えるか、4 つ読んだ後に余りがあれば `None`。最初の節を返す。
+
+数え方（pyopenvba の `Package.parse` より広く数える。pyopenvba が例外で止まる所でも、構造が続く限り先を数える）:
+
+| 確かめること | 違えば |
+| --- | --- |
+| 位置 0 から、`PK\x03\x04` で始まる限りローカルヘッダーをたどる。30 バイトのヘッダーか、データ（位置 + 30 + 名前の長さ + extra の長さ から、圧縮後の大きさの分）が終わりを越えたら、そこでやめる | （やめるだけ） |
+| 方式 0: 圧縮後の大きさを合計に足す。方式 8: データを、宣言の展開後の大きさ + 1 バイトまで展開し（pyopenvba の `max_length` と同じ）、実際に出た長さを合計に足す。展開は `READ_CHUNK` ずつ、合計の上限を超えたところで止める。`zlib.error` なら、そこまでの長さを足して次の部品へ。ほかの方式は数えずに次の部品へ | |
+| 合計（外側の部品と中の部品の展開の合計）が `MAX_TOTAL_UNCOMPRESSED` を超えない | `uncompressed_too_large` |
+| 中の部品の展開した長さが、`RATIO_GRACE_BYTES` を超え、かつ圧縮後の大きさ（0 なら 1）の `MAX_RATIO` 倍を超えない | `compression_ratio_too_high` |
+| 中の部品の中身に `_DTD_NEEDLES` がない | `xml_dtd` |
+
+- [ ] **Step 1: 失敗するテストを書く**
+
+`tests/workbook_factory.py` に、`mashup_item(package: bytes, encoding: str = "utf-16") -> bytes` を足す。Excel と同じ包み（`<?xml version="1.0" encoding="utf-16"?><DataMashup xmlns="http://schemas.microsoft.com/DataMashup">` + base64 + `</DataMashup>`）を、`encoding` が `"utf-16"` なら BOM 付きの UTF-16LE、`"utf-8"` なら BOM なしの UTF-8 で返す。base64 の中身は、版 0、中の zip の節、権限の節（短い XML）、メタデータの節（短い XML）、空の節の 4 つ。中の zip は、正しいものは `zipfile` で作り、宣言の大きさを偽るものは生のローカルヘッダーで作る。
+
+```python
+def test_total_limit_is_256_mib(self):                  # check_workbook.MAX_TOTAL_UNCOMPRESSED == 256 * 1024 ** 2
+def test_legit_power_query_passes(self):                # 中の zip に短い Formulas/Section1.m → 合格、warnings に "power_query"
+def test_mashup_package_bomb_fails(self):               # customXml/item1.xml（UTF-16、BOM 付き）の中の zip に、0 が 1 MiB の deflate の部品 → "compression_ratio_too_high"
+def test_mashup_utf8_wrapper_checked(self):             # 同じ中身を UTF-8 の包みで → "compression_ratio_too_high"
+def test_mashup_package_total_fails(self):              # MAX_TOTAL_UNCOMPRESSED を 1 MiB に下げる。外側の部品の合計は上限より小さく、中の部品で超える形にする（中の部品は "a" と "b" の乱数列 1 MiB を deflate。圧縮率はおよそ 8 倍で 100 倍以下）→ "uncompressed_too_large"
+def test_mashup_package_dtd_fails(self):                # 中の部品に b"<!DOCTYPE x>" → "xml_dtd"
+def test_mashup_declared_size_not_trusted(self):        # 中の部品の宣言の展開後の大きさが 0xFFFFFFFF で、実際は 10 バイトに展開される → 合格
+def test_mashup_inflation_stops_after_declared_size(self):  # 宣言 1 KiB、実際の流れは 0 が 1 MiB → 展開は 1 KiB + 1 バイトで止まり、合格
+def test_mashup_counted_past_unknown_method(self):      # 方式 12 の部品の後ろに、上の bomb の部品 → "compression_ratio_too_high"
+def test_mashup_in_other_name_ignored(self):            # customXml/itemA.xml と customXml/item1.xml.bak に同じ bomb → 合格（pyopenvba は読まない）
+def test_mashup_item_over_parse_limit_fails(self):      # MAX_PARSE_BYTES を下げ、customXml/item1.xml の展開後の大きさがそれを超える → "uncompressed_too_large"
+def test_mashup_bad_base64_ignored(self):               # base64 の部分が 1 文字（復号できない）→ 合格（pyopenvba も展開しない）
+```
+
+- [ ] **Step 2: テストが失敗することを確かめる**
+
+Run: `"$PY" -B -m unittest tests.test_check_workbook -v`
+Expected: `test_total_limit_is_256_mib` と、不合格を期待するテストが FAIL。合格を期待するテストは今のコードでも通る見込み。
+
+- [ ] **Step 3: 上限を下げ、`_mashup_package` と `_check_package` を書き、`check()` から呼ぶ**
+
+- [ ] **Step 4: README を直す**
+
+`README.md`・`README.ja.md` の不合格の表: `uncompressed_too_large` を「展開の合計が 256 MB を超える（Power Query の部品の中の zip を含む）。または、`customXml/item<N>.xml` の部品が 32 MB を超える」、`compression_ratio_too_high` を「1 つの部品（Power Query の部品の中の zip の部品を含む）が 100 倍を超えて圧縮されている」にする。
+
+- [ ] **Step 5: テストが通ることを確かめ、規則を 1 つずつ外して落ちることを確かめる**
+
+Run: `"$PY" -B -m unittest discover -s tests -t . -v`
+Expected: すべて PASS（sandbox の中では skip 20）。次に、名前の判定、32 MiB の判定、合計の判定、圧縮率の判定、DTD の判定、「宣言 + 1 バイトで止める」を 1 つずつ外し、対応するテストが FAIL になることを確かめて、元に戻す。
+
+- [ ] **Step 6: コミットする**
+
+```bash
+git add scripts/check_workbook.py tests/test_check_workbook.py tests/workbook_factory.py
+git commit -m "fix: count the package inside Power Query parts and lower the total limit"
+git add README.md README.ja.md
+git commit -m "docs: describe the Power Query package check and the 256 MB limit"
+```
+
+<a name="task-18"></a>
+
+### Task 18: 検査の Seatbelt（ほかのプロセスの情報）と回帰のテスト
+
+**Files:**
+- Modify: `scripts/check_workbook.sb`、`tests/test_sandbox_profile.py`
+
+**Interfaces:**
+- Consumes: `tests/test_sandbox_profile.py` の `ProfileTest.attempt`・`assertDenied`、`hooks/intake_common.py` の `run_checker`
+- Produces: プロファイルの 3 行。テスト 3 件。
+
+`scripts/check_workbook.sb` の、シグナルの規則の後に足す（人の確かめで、2 つを両方入れたときだけ拒否され、検査が動き続けた。[test-report](test-report.md#review-2)）:
+
+```scheme
+; No information about other processes, such as their arguments (sysctl kern.procargs2).
+(deny process-info*)
+(allow process-info* (target self))
+(deny sysctl-read (sysctl-name-prefix "kern.procargs"))
+```
+
+- [ ] **Step 1: テストを書く**
+
+```python
+# tests/test_sandbox_profile.py の ProfileTest
+def test_profile_denies_other_process_arguments(self):   # /bin/sleep 60 を起こし（addCleanup で止める）、ctypes の libc.sysctl で (CTL_KERN=1, KERN_PROCARGS2=49, pid) の大きさを問う。0 以外を返したら PermissionError を上げる本文で assertDenied
+def test_profile_denies_reading_through_data_volume(self):  # "/System/Volumes/Data" + self.other の実体のパスを読む → assertDenied
+# 同じファイルの、本物の run_checker を使うテストの並び（sandbox-exec が要る。REQUIRE の扱いはほかと同じ）
+def test_checker_accepts_other_spellings(self):          # NFD で保存した "データ.xlsx" を NFC のパスで、"Book.xlsx" を "book.xlsx" で run_checker → どちらも "pass"
+```
+
+- [ ] **Step 2: プロファイルに 3 行を足す**
+
+- [ ] **Step 3: sandbox の中で実行できる範囲を確かめる**
+
+Run: `"$PY" -B -m unittest discover -s tests -t . -v`
+Expected: すべて PASS か skip（新しい 3 件は、`sandbox-exec` を入れ子にできないので skip）。今のプロファイルで 1 件目が失敗し、2・3 件目が通ることは、人の確かめで分かっている。人による実行は [Task 19](#task-19) の Step 3 でまとめて行う。
+
+- [ ] **Step 4: コミットする**
+
+```bash
+git add scripts/check_workbook.sb tests/test_sandbox_profile.py
+git commit -m "fix: hide other processes' arguments from the checker's sandbox"
+```
+
+<a name="task-19"></a>
+
+### Task 19: 文書（時間切れの目安、受け入れるリスク）と、人による実行
+
+**Files:**
+- Modify: `README.md`、`README.ja.md`、`docs/work/20261124_workbook-intake/test-report.md`
+
+**Interfaces:**
+- Consumes: 設計の[受け入れるリスク](design.md#risks)（2026-11-25 に足した 4 つ）
+- Produces: 文書だけ。
+
+- [ ] **Step 1: README を直す（英語と日本語）**
+
+- Troubleshooting の `check_timeout`: 「検査が 20 秒を超えた。XML が合計でおよそ 200 MB 以上のブック（大きなシートが多い 50 MB の `.xlsx` など）でなりやすい。検査は読むたびに行う」。
+- Limitations:
+  - 「Plugin hooks disabled by managed settings」の行を、「`disableAllHooks` はどのスコープの設定（リポジトリの `.claude/settings.json` を含む）でもフックを止めうる（管理設定のフックを除く。プラグインのフックも止まる見込みで、確かめていない）。止まると、メインの会話から xlide を呼べ、入力の確認も検査も効かない。止まっている環境では使わない」に変える。
+  - 「VBA のソースは、xlide が上限なしに展開する。マクロのブック（`vba_project` の警告）は、メモリを多く使うことがある」を足す。
+  - 「入力の確認は、AskUserQuestion の画面を人が答えることに頼る。ほかのプラグインのフックや SDK のホストが答えを埋める環境では、人の確認なしに記録されうる」を足す。
+  - 「xlide は `uvx` を PATH から探して起動する。PATH の先頭に、sandbox から書ける場所を置かない」を足す（`UV_DEFAULT_INDEX` の行の近く）。
+
+- [ ] **Step 2: テストを確かめる**
+
+Run: `"$PY" -B -m unittest tests.test_readme -v`
+Expected: PASS。
+
+- [ ] **Step 3: 全体のテストを、人が通常のターミナルで実行する**
+
+Run（人）: `WORKBOOK_INTAKE_REQUIRE_SANDBOX=1 "$(xcode-select -p)/usr/bin/python3" -B -m unittest discover -s tests -t . -v`
+Expected: すべて PASS、skip なし（Task 18 の 3 件を含む）。結果を test-report の「自動のテスト」に書く。1 件目（ほかのプロセスの引数）が落ちたら、主担当が Task 18 を開き直す。
+
+- [ ] **Step 4: コミットする**
+
+```bash
+git add README.md README.ja.md
+git commit -m "docs: add the timeout hint and the newly accepted limitations"
+git add docs/work/20261124_workbook-intake/test-report.md
+git commit -m "docs: record the Seatbelt run after the second review fixes"
+```
+
+その後、[Task 12](#task-12) の Step 1 の続き（3 回目の `/review`）に戻る。

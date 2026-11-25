@@ -119,3 +119,38 @@ gstack の `/review` で、専門のレビュアー 6 つ（Testing、Maintainab
 
 - どの形も、期待のとおり、検査で不合格になるか、xlide が読むものに合う警告か `strings_not_checked` が出た。
 - シートを隠したブックでは、xlide の `read()` が `ValueError` で失敗した。これらのブックには共有文字列の関係がないためで、読み比べの結論には関わらない。
+
+<a name="review-2"></a>
+
+### /review（2 回目、`b218361`）
+
+ブランチ全体を、gstack の `/review` でもう一度見た。SDD の最終レビューを兼ねる。専門のレビュアー 6 つ（Testing、Maintainability、Security、Performance、Simplification、State Machines）、Red Team、Claude の敵対的なパスを出した。Codex のパスは、人が通常のターミナルで実行するため、ここでは飛ばした（Task 12 の Step 3）。Security と State Machines は指摘なし。QA の確かめ（検査の成功の場合、中央ディレクトリが 2 つの場合、全体のテスト、shellcheck、`claude plugin validate . --strict`）は、どれも期待のとおりだった。
+
+| 重さ | 場所 | 内容 | 採否 |
+| --- | --- | --- | --- |
+| 重大 | `scripts/check_workbook.py` | Power Query の部品の中の zip を、xlide（pyopenvba の `Package.parse`）はヘッダーの宣言の大きさ（最大 4 GiB）まで展開し、部品の数にも上限がない。検査は外側の zip しか数えない。人に見えるのは、正規のブックと同じ `power_query` の警告だけ（ソースで確かめた） | 直す（[Task 17](plan.md#task-17)） |
+| 重大 | `hooks/guard-xlide.sh`、`hooks/record-consent.sh` | `xcode-select` は絶対パスなのに、`dirname` を PATH から探す。PATH の先頭に sandbox から書ける場所があると、そこに置かれたコマンドが sandbox の外で動く（テストで再現した） | 直した（`25108c0`。PATH を `/usr/bin:/bin` に固定） |
+| 軽微 | `scripts/check_workbook.py` | 32 MiB を超える XML の部品は `strings_not_checked` だけで通り、xlide は XML の約 31 倍のメモリを使う（31 MB の XML で 1,038 MB を計測） | 直す（[Task 17](plan.md#task-17)。合計の上限を 256 MiB に下げる） |
+| 軽微 | `scripts/check_workbook.py` | VBA のソースの圧縮（MS-OVBA）は、xlide が上限なしに展開する（数百倍、推測） | 直さない。設計の[受け入れるリスク](design.md#risks)に足した |
+| 軽微 | `scripts/check_workbook.sb` | `(allow default)` のため、ほかのプロセスの引数を `kern.procargs2` で読める（下の確かめで再現） | 直す（[Task 18](plan.md#task-18)） |
+| 軽微 | `scripts/check_workbook.py` | `_check_layout` の規則のうち、消してもテストが落ちないものがある（台帳の先送りの行 157） | 直す（[Task 16](plan.md#task-16)） |
+| 軽微 | `scripts/check_workbook.py` | XML の読み込みは約 10 MB/秒。XML が合計 310 MB のブック（50.8 MB の `.xlsx`）は 32 秒かかり、`check_timeout` で拒否される。呼び出しのたびに検査し直す | README に目安を書く（[Task 19](plan.md#task-19)）。結果の使い回しは設計の非目標のまま |
+| 軽微 | 設計、README | すべてのスコープの `disableAllHooks` でフックが止まりうる。ほかのプラグインのフックが AskUserQuestion の答えを埋めうる。`uvx` を PATH から探す | 設計の[受け入れるリスク](design.md#risks)に足した。README は [Task 19](plan.md#task-19) |
+| 軽微 | README、`hooks/intake_common.py`、`scripts/doctor.sh` | `path_not_canonical` の 2 つの行の食い違いと言い過ぎ、`very_long_string` の言い過ぎ、`xml_dtd` がすべての部品に効くこと（SVG の画像や HTML を書き出すマクロでも出る）、doctor が `xcode-select` を PATH から探すこと | 直した（`fe3b14c`、`e4ad15b`） |
+| 提案 | `hooks/intake_common.py`、`scripts/check_workbook.py` | 使われない `open_pipe` を消す。`_check_part` の dict を `nonlocal` にする | 直さない（ユーザーの判断） |
+
+Seatbelt に関わる 3 つは、Claude の sandbox の中では `sandbox-exec` を入れ子にできないので、人が通常のターミナルで確かめのスクリプト（`tmp/probe2/probe.py`。コミットしない）を実行した（2026-11-25、`25108c0`）。
+
+| 指摘 | 確かめたこと | 結果 | 判断 |
+| --- | --- | --- | --- |
+| パスの綴り（Red Team と敵対的なパスの両方） | NFD で保存した `データ.xlsx` を NFC のパスで、`Book.xlsx` を `book.xlsx` で検査する | 4 通りとも `pass`（カーネルが返すパスは入力と違うが、Seatbelt は通した） | 直さない。回帰のテストを足す（[Task 18](plan.md#task-18)） |
+| `/System/Volumes/Data` を通した読み込み | 検査の Seatbelt の中から、`/System/Volumes/Data` + 一時ファイルの実体のパスを読む | 拒否された | 直さない。回帰のテストを足す（[Task 18](plan.md#task-18)） |
+| ほかのプロセスの情報 | 検査の Seatbelt の中から、別のプロセス（`/bin/sleep`）の `kern.procargs2` を読む | 読めた（引数。環境変数の印は出なかった）。`process-info*` の拒否と `kern.procargs` の `sysctl-read` の拒否を両方入れると拒否され、検査は動き続けた。どちらか片方では読めた | 直す（[Task 18](plan.md#task-18)） |
+
+直さないと判断したもの（主担当の判断）:
+
+- xlide の推移的な依存（28 個）を固定していない: 1 回目と同じく、設計の[更新と保守](design.md#maintenance)で決めている。
+- フックの入力に `mcp_server` がないと、ツール名の接頭辞だけで判定する: 古い Claude Code の扱いとして、受け入れるリスクにある。
+- doctor が、受け取り用フォルダ・承認の記録・プラグインのキャッシュに書けないことを確かめない: 受け入れるリスクにあり、README で設定を勧めている。
+- 不可視の文字の一覧に、異体字セレクタやソフトハイフンがない: 文字列の検査は見逃す前提（受け入れるリスク）。異体字セレクタ U+FE0F は絵文字でふつうに使われるので、警告に足すと誤検知が増える。
+- CI の macOS のジョブが、runner の python の持ち主で失敗しうる: PR を作った後に分かる。plan の Task 15 の末尾に、対処を書いてある。
