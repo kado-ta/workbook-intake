@@ -20,7 +20,7 @@ sys.path.insert(0, str(ROOT))
 import check_workbook  # noqa: E402
 from tests.workbook_factory import (  # noqa: E402
     assemble_zip, build_hand_zip, build_zip, central_entries, deflate_split_at_output_limit, deflated_entries,
-    minimal_parts, patch_entry, raw_zip, shift_central_offsets,
+    local_entry, mashup_item, minimal_parts, patch_entry, raw_zip, shift_central_offsets,
     split_zip, write_raw, write_workbook,
 )
 
@@ -1118,6 +1118,132 @@ class LayoutTest(unittest.TestCase):
                 raw[i + offset] &= ~0x08
                 i = raw.find(sig, i + 4)
         self.assert_fails(bytes(raw), "unsafe_part_name")
+
+
+MIB = 1024 * 1024
+
+
+def _deflate(plain):
+    c = zlib.compressobj(6, zlib.DEFLATED, -15)
+    return c.compress(plain) + c.flush()
+
+
+class PowerQueryPackageTest(unittest.TestCase):
+    """The zip inside a customXml DataMashup part, which pyopenvba inflates."""
+
+    def setUp(self):
+        tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(tmp.cleanup)
+        self.dir = tmp.name
+
+    def check(self, items, compression=zipfile.ZIP_DEFLATED):
+        """Check the minimal workbook with items ({part name: bytes}) added."""
+        parts = minimal_parts()
+        parts.update(items)
+        return check_workbook.check(write_workbook(os.path.join(self.dir, "book.xlsx"), parts, compression))
+
+    def bomb_entry(self):
+        """A deflated package part of 1 MiB of zeros, declaring its real size."""
+        return local_entry("Formulas/Section1.m", zipfile.ZIP_DEFLATED, _deflate(b"\x00" * MIB), MIB)
+
+    def test_total_limit_is_256_mib(self):
+        self.assertEqual(check_workbook.MAX_TOTAL_UNCOMPRESSED, 256 * 1024 ** 2)
+
+    def test_legit_power_query_passes(self):
+        package = raw_zip({"Formulas/Section1.m": b"section Section1;\r\n\r\nshared Query1 = 1;"},
+                          zipfile.ZIP_DEFLATED)
+        r = self.check({"customXml/item1.xml": mashup_item(package)})
+        self.assertEqual(r["result"], "pass")
+        self.assertIn("power_query", r["warnings"])
+
+    def test_mashup_package_bomb_fails(self):
+        package = raw_zip({"Formulas/Section1.m": b"\x00" * MIB}, zipfile.ZIP_DEFLATED)
+        item = mashup_item(package)
+        self.assertTrue(item.startswith(b"\xff\xfe"))
+        r = self.check({"customXml/item1.xml": item})
+        self.assertEqual(r["failures"], ["compression_ratio_too_high"])
+
+    def test_mashup_utf8_wrapper_checked(self):
+        package = raw_zip({"Formulas/Section1.m": b"\x00" * MIB}, zipfile.ZIP_DEFLATED)
+        item = mashup_item(package, "utf-8")
+        self.assertTrue(item.startswith(b"<?xml"))
+        r = self.check({"customXml/item1.xml": item})
+        self.assertEqual(r["failures"], ["compression_ratio_too_high"])
+
+    def test_mashup_package_total_fails(self):
+        # 1 MiB of random "a" and "b": about 8 times smaller deflated, under the ratio limit.
+        plain = os.urandom(MIB).translate(bytes(b"ab"[i & 1] for i in range(256)))
+        package = raw_zip({"Formulas/Section1.m": plain}, zipfile.ZIP_DEFLATED)
+        self.assertLess(len(plain), check_workbook.MAX_RATIO * len(package))
+        item = mashup_item(package)
+        # The outer parts alone stay under the limit; the inner part alone only reaches it.
+        self.assertLess(sum(len(v) for v in minimal_parts().values()) + len(item), MIB)
+        with mock.patch.object(check_workbook, "MAX_TOTAL_UNCOMPRESSED", MIB):
+            r = self.check({"customXml/item1.xml": item})
+        self.assertEqual(r["failures"], ["uncompressed_too_large"])
+
+    def test_mashup_package_dtd_fails(self):
+        for method in (zipfile.ZIP_STORED, zipfile.ZIP_DEFLATED):
+            with self.subTest(method=method):
+                package = raw_zip({"Config/Package.xml": b"<!DOCTYPE x>"}, method)
+                r = self.check({"customXml/item1.xml": mashup_item(package)})
+                self.assertEqual(r["failures"], ["xml_dtd"])
+
+    def test_mashup_declared_size_not_trusted(self):
+        package = local_entry("Formulas/Section1.m", zipfile.ZIP_DEFLATED, _deflate(b"0123456789"), 0xFFFFFFFF)
+        r = self.check({"customXml/item1.xml": mashup_item(package)})
+        self.assertEqual(r["result"], "pass")
+
+    def test_mashup_inflation_stops_after_declared_size(self):
+        package = local_entry("Formulas/Section1.m", zipfile.ZIP_DEFLATED, _deflate(b"\x00" * MIB), 1024)
+        produced = []
+        real = zlib.decompressobj
+
+        class Counting(object):
+            def __init__(self):
+                self._d = real(-15)
+
+            def decompress(self, data, max_length=0):
+                out = self._d.decompress(data, max_length)
+                produced.append(len(out))
+                return out
+
+            def __getattr__(self, name):
+                return getattr(self._d, name)
+
+        # Stored outer parts, so only the package part is inflated.
+        with mock.patch.object(check_workbook.zlib, "decompressobj", lambda wbits: Counting()):
+            r = self.check({"customXml/item1.xml": mashup_item(package)}, zipfile.ZIP_STORED)
+        self.assertEqual(r["result"], "pass")
+        self.assertEqual(sum(produced), 1024 + 1)
+
+    def test_mashup_counted_past_unknown_method(self):
+        package = local_entry("Config/Package.xml", 12, b"\x00" * 16, 16) + self.bomb_entry()
+        r = self.check({"customXml/item1.xml": mashup_item(package)})
+        self.assertEqual(r["failures"], ["compression_ratio_too_high"])
+
+    def test_mashup_in_other_name_ignored(self):
+        item = mashup_item(self.bomb_entry())
+        self.assertEqual(self.check({"customXml/item1.xml": item})["failures"], ["compression_ratio_too_high"])
+        r = self.check({"customXml/itemA.xml": item, "customXml/item1.xml.bak": item})
+        self.assertEqual(r["result"], "pass")
+
+    def test_mashup_item_over_parse_limit_fails(self):
+        package = raw_zip({"Formulas/Section1.m": b"section Section1;"}, zipfile.ZIP_DEFLATED)
+        item = mashup_item(package)
+        for limit, failures in ((len(item), []), (len(item) - 1, ["uncompressed_too_large"])):
+            with self.subTest(limit=limit):
+                with mock.patch.object(check_workbook, "MAX_PARSE_BYTES", limit):
+                    r = self.check({"customXml/item1.xml": item})
+                self.assertEqual(r["failures"], failures)
+
+    def test_mashup_bad_base64_ignored(self):
+        text = (
+            '<?xml version="1.0" encoding="utf-16"?>'
+            '<DataMashup xmlns="http://schemas.microsoft.com/DataMashup">A</DataMashup>'
+        )
+        r = self.check({"customXml/item1.xml": b"\xff\xfe" + text.encode("utf-16-le")})
+        self.assertEqual(r["result"], "pass")
 
 
 if __name__ == "__main__":

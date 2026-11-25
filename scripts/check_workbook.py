@@ -5,6 +5,7 @@ prints only fixed vocabulary, counts and booleans (never strings from the file).
 """
 from __future__ import annotations
 
+import base64
 import codecs
 import json
 import os
@@ -20,7 +21,7 @@ from xml.parsers import expat
 SUPPORTED_EXTENSIONS = (".xlsx", ".xlsm", ".xltx", ".xltm", ".xlam", ".xlsb")
 MAX_FILE_BYTES = 100 * 1024 * 1024
 MAX_PARTS = 10_000
-MAX_TOTAL_UNCOMPRESSED = 1024 ** 3
+MAX_TOTAL_UNCOMPRESSED = 256 * 1024 * 1024
 MAX_RATIO = 100
 RATIO_GRACE_BYTES = 100 * 1024
 READ_CHUNK = 64 * 1024
@@ -169,6 +170,133 @@ def _check_part(zf, info, total):
     if state["size"] != info.file_size or state["crc"] != info.CRC:
         return "not_zip", state["total"]
     return None, state["total"]
+
+
+# The custom XML parts pyopenvba looks in for Power Query (its _ITEM_PATTERN).
+_ITEM_PATTERN = re.compile(r"^customXml/item(\d+)\.xml$")
+_MASHUP_MARKERS = (b"DataMashup", b"D\x00a\x00t\x00a\x00M\x00a\x00s\x00h\x00u\x00p")
+_MASHUP_SPLIT = re.compile(r"(.*<DataMashup[^>]*>)(.*?)(</DataMashup>.*)", re.S)
+
+
+def _mashup_package(raw):
+    """The package pyopenvba inflates from a custom XML part, or None where it stops.
+
+    Follows pyopenvba 6.6.0 (_is_mashup_part, _split_item, Mashup.parse), but
+    skips its check of the root element, which only lets more parts be counted.
+    """
+    if not any(m in raw for m in _MASHUP_MARKERS):
+        return None
+    try:
+        text = raw.decode("utf-16") if raw[:2] == b"\xff\xfe" else raw.decode("utf-8-sig")
+    except UnicodeDecodeError:
+        return None
+    match = _MASHUP_SPLIT.search(text)
+    if match is None:
+        return None
+    try:
+        blob = base64.b64decode(match.group(2), validate=False)
+    except ValueError:
+        return None
+    if len(blob) < 8:
+        return None
+    # A version, then four sections, each behind a 4-byte length.
+    sections = []
+    at = 4
+    for _ in range(4):
+        if at + 4 > len(blob):
+            return None
+        end = at + 4 + struct.unpack_from("<I", blob, at)[0]
+        if end > len(blob):
+            return None
+        sections.append(blob[at + 4:end])
+        at = end
+    if at != len(blob):
+        return None
+    return sections[0]
+
+
+def _check_package_part(body, method, usize, total):
+    """Count one part of a mashup package. Returns (failure_or_None, new_total).
+
+    Stored data counts as it is. Deflated data inflates READ_CHUNK at a time to
+    at most usize + 1 bytes, as pyopenvba asks zlib for; what came out before a
+    zlib error still counts. Other methods count nothing.
+    """
+    state = {"size": 0, "total": total, "tail": b""}
+
+    def take(chunk):
+        state["size"] += len(chunk)
+        state["total"] += len(chunk)
+        if state["total"] > MAX_TOTAL_UNCOMPRESSED:
+            return "uncompressed_too_large"
+        size = state["size"]
+        if size > RATIO_GRACE_BYTES and size > MAX_RATIO * max(len(body), 1):
+            return "compression_ratio_too_high"
+        window = state["tail"] + chunk
+        if any(n in window for n in _DTD_NEEDLES):
+            return "xml_dtd"
+        state["tail"] = window[-_TAIL:]
+        return None
+
+    if method == zipfile.ZIP_STORED:
+        for start in range(0, len(body), READ_CHUNK):
+            failure = take(body[start:start + READ_CHUNK])
+            if failure:
+                return failure, state["total"]
+        return None, state["total"]
+    if method != zipfile.ZIP_DEFLATED:
+        return None, total
+    inflater = zlib.decompressobj(-15)
+    for start in range(0, len(body), READ_CHUNK):
+        buf = body[start:start + READ_CHUNK]
+        while True:
+            # Never past usize + 1, nor past what keeps the total within its limit + 1.
+            limit = min(
+                READ_CHUNK, usize + 1 - state["size"],
+                MAX_TOTAL_UNCOMPRESSED + 1 - state["total"],
+            )
+            if limit <= 0:
+                return None, state["total"]
+            try:
+                out = inflater.decompress(buf, limit)
+            except zlib.error:
+                return None, state["total"]
+            buf = inflater.unconsumed_tail
+            if out:
+                failure = take(out)
+                if failure:
+                    return failure, state["total"]
+            if inflater.eof:
+                return None, state["total"]
+            # Keep draining while the output limit, not the input, stopped zlib.
+            if not buf and len(out) < limit:
+                break
+    return None, state["total"]
+
+
+def _check_package(package, total):
+    """Count the parts of a mashup package. Returns (failure_or_None, new_total).
+
+    Walks the local headers from the start as pyopenvba's Package.parse does,
+    but goes on past a bad name, a size mismatch, an unknown method or a zlib
+    error, where pyopenvba stops, so it counts at least what pyopenvba
+    inflates. It stops where a header or its data runs past the end.
+    """
+    at = 0
+    while package[at:at + 4] == _LOC_SIG:
+        if at + _LOC_LEN > len(package):
+            break
+        method, _t, _d, _crc, csize, usize, nlen, xlen = struct.unpack_from(
+            "<HHHIIIHH", package, at + 8
+        )
+        body_at = at + _LOC_LEN + nlen + xlen
+        if body_at + csize > len(package):
+            break
+        failure, total = _check_package_part(package[body_at:body_at + csize], method, usize, total)
+        if failure:
+            return failure, total
+        at = body_at + csize
+    return None, total
 
 
 def _local(name):
@@ -756,6 +884,21 @@ def check(path):
         for info in infos:
             try:
                 failure, total = _check_part(zf, info, total)
+            except ZIP_ERRORS + (RuntimeError,):
+                return _result(["not_zip"])
+            if failure:
+                return _result([failure])
+        # pyopenvba reads these parts whole and inflates the package inside them.
+        for info in infos:
+            if not _ITEM_PATTERN.match(info.filename):
+                continue
+            if info.file_size > MAX_PARSE_BYTES:
+                return _result(["uncompressed_too_large"])
+            try:
+                package = _mashup_package(zf.read(info))
+                failure = None
+                if package is not None:
+                    failure, total = _check_package(package, total)
             except ZIP_ERRORS + (RuntimeError,):
                 return _result(["not_zip"])
             if failure:

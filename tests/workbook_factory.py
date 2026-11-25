@@ -1,4 +1,5 @@
 """Builds small .xlsx files for tests. Nothing binary is tracked in the repository."""
+import base64
 import io
 import struct
 import zipfile
@@ -171,6 +172,44 @@ def build_hand_zip(parts, local_extra=b"", central_extra=b"", descriptor=None):
     n = len(parts)
     eocd = b"PK\x05\x06" + struct.pack("<HHHHIIH", 0, 0, n, n, len(cd), len(body), 0)
     return bytes(body + cd + eocd)
+
+
+def local_entry(name, method, payload, usize):
+    """One local header and its data, declaring usize whatever payload holds (CRC zero)."""
+    nb = name.encode()
+    return b"PK\x03\x04" + struct.pack(
+        "<HHHHHIIIHH", 20, 0, method, 0, 0x21, 0, len(payload), usize, len(nb), 0
+    ) + nb + payload
+
+
+_MASHUP_HEAD = (
+    '<?xml version="1.0" encoding="utf-16"?>'
+    '<DataMashup xmlns="http://schemas.microsoft.com/DataMashup">'
+)
+_MASHUP_PERMISSIONS = (
+    b'<?xml version="1.0" encoding="utf-8"?><PermissionList>'
+    b"<CanEvaluateFuturePackages>false</CanEvaluateFuturePackages>"
+    b"<FirewallEnabled>true</FirewallEnabled></PermissionList>"
+)
+_MASHUP_METADATA = (
+    b'<?xml version="1.0" encoding="utf-8"?><LocalPackageMetadataFile><Items/></LocalPackageMetadataFile>'
+)
+
+
+def mashup_item(package, encoding="utf-16"):
+    """A customXml item in Excel's DataMashup wrapper around package.
+
+    The base64 holds version 0, then four length-prefixed sections: package,
+    a permission list, metadata and an empty one. encoding "utf-16" gives
+    UTF-16LE with a BOM, "utf-8" gives UTF-8 without one.
+    """
+    blob = struct.pack("<I", 0)
+    for section in (package, _MASHUP_PERMISSIONS, _MASHUP_METADATA, b""):
+        blob += struct.pack("<I", len(section)) + section
+    text = _MASHUP_HEAD + base64.b64encode(blob).decode("ascii") + "</DataMashup>"
+    if encoding == "utf-8":
+        return text.encode("utf-8")
+    return b"\xff\xfe" + text.encode("utf-16-le")
 
 
 def deflated_entries(parts):
