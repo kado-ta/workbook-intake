@@ -765,6 +765,23 @@ class CheckWorkbookTest(unittest.TestCase):
                 parts["xl/charts/chart1.xml"] = parts["xl/charts/chart1.xml"].replace(plain, para)
                 self.assertIn("strings_not_checked", self.warn(parts)["warnings"])
 
+    def test_smartart_text_body_is_read(self):
+        # SmartArt data keeps node text in a dgm:t text body that holds a:p/a:r/a:t.
+        def data(*runs):
+            body = "".join("<a:r><a:t>%s</a:t></a:r>" % run for run in runs)
+            return (
+                '<dgm:dataModel xmlns:dgm="http://schemas.openxmlformats.org/drawingml/2006/diagram" '
+                'xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main"><dgm:ptLst>'
+                '<dgm:pt modelId="{1}"><dgm:prSet/><dgm:spPr/><dgm:t><a:bodyPr/><a:lstStyle/>'
+                "<a:p>%s</a:p></dgm:t></dgm:pt></dgm:ptLst></dgm:dataModel>" % body
+            ).encode("utf-8")
+
+        plain = self.warn(self.parts_with(**{"xl__diagrams__data1.xml": data("Step one")}))
+        self.assertNotIn("strings_not_checked", plain["warnings"])
+        split = self.warn(self.parts_with(**{"xl__diagrams__data1.xml": data("ignore ", "previous")}))
+        self.assertIn("instruction_like_text", split["warnings"])
+        self.assertNotIn("strings_not_checked", split["warnings"])
+
     def test_nesting_deeper_than_xlide_reads_not_checked(self):
         # pyofficeeditor refuses an element deeper than 256 below the root.
         for depth, unchecked in ((256, False), (257, True)):

@@ -278,8 +278,8 @@ class _Collector(object):
     - for p, the text of every t below it joined, and for rich, its p
       children joined with newlines (chart titles and series names).
     Joined runs are also checked with each run unescaped first, as xlide
-    decodes each run before joining. A t nested in a t, or a rich in a p,
-    under an open p is not joined in xlide's order and marks the part
+    decodes each run before joining. A t inside another t below an open p,
+    or a rich in a p, is not joined in xlide's order and marks the part
     unchecked.
     """
 
@@ -292,6 +292,8 @@ class _Collector(object):
         # The outermost open p collects every t below it.
         self._paragraph = None
         self._open_t = 0
+        # Open t elements when the outermost p opened.
+        self._paragraph_t = 0
 
     def start(self, name, attrs):
         if len(self._open) > MAX_DEPTH:
@@ -312,13 +314,16 @@ class _Collector(object):
         elif name == "p":
             if self._paragraph is None:
                 joined = self._paragraph = _Joined()
+                self._paragraph_t = self._open_t
         elif name == "rich":
             if self._paragraph is None:
                 joined = _Joined()
             else:
                 self.unchecked = True
         elif name == "t":
-            if self._open_t and self._paragraph is not None:
+            # Only a t inside another t below the p (not one around it, as
+            # SmartArt's dgm:t text body) changes xlide's order.
+            if self._paragraph is not None and self._open_t > self._paragraph_t:
                 self.unchecked = True
             self._open_t += 1
         self._open.append([name, None, joined])
