@@ -344,7 +344,7 @@ workbook-intake/
      - 承認がない・不合格・検査できない・時間切れ → 拒否。
      - 検査に警告があり、このセッションで、そのファイル（同じ `realpath` と SHA-256）に警告の確認の承認が記録されていない → 拒否。
   5. すべて通れば、`permissionDecision: "allow"` を返す（確認を省く）。
-- 許可リストは、Excel の解析に要る読み取り用ツールだけにする。Access 用（`xlide_access_catalog` など）、Windows 専用（`xlide_live_*` など）、外部のプロセスを動かすもの（`xlide_git_changes`）は除く。`file_path` を取らないツール（`xlide_doctor` など）は、1〜3 を通れば許可する。
+- 許可リストは、Excel の解析に要る読み取り用ツールだけにする。Access 用（`xlide_access_catalog` など）、Windows 専用（`xlide_live_*` など）、外部のプロセスを動かすもの（`xlide_git_changes`）は除く。`xlide_list_shapes` も除く（2026-11-25。ユーザーの判断）。このツールだけが xlide 自身の寛容な読み手（不正なバイトを置き換えて読み、`xl/workbook.xml` を決め打ちの名前で読む）を使い、厳密に読む検査と食い違うため。`file_path` を取らないツール（`xlide_doctor` など）は、1〜3 を通れば許可する。
 
 <a name="consent"></a>
 

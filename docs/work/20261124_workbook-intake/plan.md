@@ -1140,6 +1140,7 @@ git commit -m "fix: choose XML parts by content and read them the way xlide does
 
 **Files:**
 - Modify: `hooks/intake_common.py`、`hooks/guard_xlide.py`、`hooks/record_consent.py`、`scripts/doctor.sh`、`tests/test_guard_xlide.py`、`tests/test_record_consent.py`、`tests/test_doctor.py`、`README.md`、`README.ja.md`、`skills/analyze/SKILL.md`、`docs/work/20261124_workbook-intake/test-report.md`
+- Modify（Task 14 のレビューの後に足した）: `hooks/allowed-tools.txt`、`agents/excel-analyst.md`。`xlide_list_shapes` を許可リストとサブエージェントのツールから外す（ユーザーの判断、2026-11-25。xlide 自身の寛容な読み手を使い、厳密に読む検査と食い違うため）。`tests/test_guard_xlide.py` の許可リストの固定（20 件）を 19 件にし、`xlide_list_shapes` が `tool_not_allowed` になるテストを足す。README・runbook に許可したツールの数や一覧があれば合わせる。
 
 **Interfaces:**
 - Produces: `intake_common.canonical_path(path: str) -> bool`。`path == path.strip()`、`Cc`・`Cf`・`Zl`・`Zp` の文字がない、`NFC(os.path.realpath(path)) == NFC(path)` のすべてを満たすとき True。
