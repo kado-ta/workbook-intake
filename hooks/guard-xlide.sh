@@ -1,6 +1,9 @@
 #!/bin/bash
 # Run the xlide guard with the Command Line Tools python3. Every path prints one
 # PreToolUse decision and exits 0; anything unexpected is a deny.
+# The hook runs outside Claude's sandbox, so it must not run commands from a PATH
+# directory the sandbox can write.
+export PATH=/usr/bin:/bin
 deny() {
   printf '%s' '{"hookSpecificOutput": {"hookEventName": "PreToolUse", "permissionDecision": "deny", "permissionDecisionReason": "workbook-intake: '"$1"'. See the README (Troubleshooting)."}}'
   exit 0

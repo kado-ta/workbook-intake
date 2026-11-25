@@ -15,7 +15,7 @@ sys.path.insert(0, str(ROOT))
 
 import guard_xlide as gx  # noqa: E402
 import intake_common as ic  # noqa: E402
-from tests.test_record_consent import REQUIRE, _sandbox_available  # noqa: E402
+from tests.test_record_consent import REQUIRE, _sandbox_available, write_path_shims  # noqa: E402
 from tests.workbook_factory import minimal_parts, write_workbook  # noqa: E402
 
 PASS = {"status": "pass", "failures": [], "warnings": []}
@@ -378,6 +378,21 @@ class GuardXlideTest(unittest.TestCase):
         self.assertEqual(r.returncode, 0, r.stderr)
         body = json.loads(r.stdout.decode())["hookSpecificOutput"]
         self.assertEqual(body["permissionDecision"], "deny")
+        self.assertIn("workbook-intake: wrong_caller", body["permissionDecisionReason"])
+
+    def test_wrapper_ignores_commands_on_path(self):
+        # A directory early in PATH may be writable from Claude's sandbox; the hook
+        # runs outside it, so it must not run any command found there.
+        with tempfile.TemporaryDirectory() as tmp:
+            marker = write_path_shims(tmp)
+            env = {"HOME": self.home, "CLAUDE_PLUGIN_DATA": self.data,
+                   "PATH": os.path.join(tmp, "bin") + ":/usr/bin:/bin"}
+            data = call(tool=gx.TOOL_PREFIX + "xlide_doctor", agent=None)
+            r = subprocess.run(["/bin/bash", str(ROOT / "hooks" / "guard-xlide.sh")],
+                               input=json.dumps(data).encode(), env=env,
+                               stdout=subprocess.PIPE, stderr=subprocess.PIPE, timeout=60)
+            self.assertFalse(os.path.exists(marker), "a command from PATH ran")
+        body = json.loads(r.stdout.decode())["hookSpecificOutput"]
         self.assertIn("workbook-intake: wrong_caller", body["permissionDecisionReason"])
 
     def test_wrapper_denies_when_python_fails(self):

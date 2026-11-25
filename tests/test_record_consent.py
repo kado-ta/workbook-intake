@@ -507,7 +507,40 @@ class ResolveInIntakeTest(unittest.TestCase):
         self.assertEqual(self.reason(d), "not_regular_file")
 
 
+PATH_SHIM_NAMES = ("dirname", "basename", "cat", "realpath", "readlink", "python3",
+                   "xcode-select", "bash", "sh", "env")
+
+
+def write_path_shims(tmp):
+    """Put commands in tmp/bin that leave tmp/ran when run. Returns the marker path."""
+    marker = os.path.join(tmp, "ran")
+    bin_dir = os.path.join(tmp, "bin")
+    os.mkdir(bin_dir)
+    for name in PATH_SHIM_NAMES:
+        shim = os.path.join(bin_dir, name)
+        with open(shim, "w") as f:
+            f.write("#!/bin/sh\n: > '%s'\nexit 1\n" % marker)
+        os.chmod(shim, 0o755)
+    return marker
+
+
 class WrapperTest(unittest.TestCase):
+    @unittest.skipUnless(sys.platform == "darwin", "hook tests are macOS-only")
+    def test_wrapper_ignores_commands_on_path(self):
+        # A directory early in PATH may be writable from Claude's sandbox; the hook
+        # runs outside it, so it must not run any command found there.
+        with tempfile.TemporaryDirectory() as tmp:
+            marker = write_path_shims(tmp)
+            env = {"HOME": os.path.realpath(tmp), "CLAUDE_PLUGIN_DATA": os.path.join(tmp, "data"),
+                   "PATH": os.path.join(tmp, "bin") + ":/usr/bin:/bin"}
+            r = subprocess.run(
+                ["/bin/bash", str(ROOT / "hooks" / "record-consent.sh")],
+                input=b"{}", env=env, stdout=subprocess.PIPE, stderr=subprocess.PIPE,
+                timeout=60,
+            )
+            self.assertFalse(os.path.exists(marker), "a command from PATH ran")
+        self.assertEqual(r.returncode, 0, r.stderr)
+
     @unittest.skipUnless(sys.platform == "darwin", "hook tests are macOS-only")
     def test_wrapper_end_to_end(self):
         if not _sandbox_available():
