@@ -23,8 +23,12 @@ created: 2026-11-25
 | 2026-11-25、`d093bcb` | Claude Code の Bash（sandbox の中） | `"$(xcode-select -p)/usr/bin/python3" -B -m unittest discover -s tests -t .` | 217 件、OK、skip 20（`sandbox-exec` を入れ子にできないため） |
 | 2026-11-25、`d093bcb` | 同上 | `shellcheck hooks/*.sh scripts/*.sh dev/probe/workbook-intake/hooks/*.sh` | 指摘なし |
 | 2026-11-25、`d093bcb` | 同上 | `claude plugin validate . --strict` | 通過 |
+| 2026-11-25、`f88e6dd` | 人、通常のターミナル | `WORKBOOK_INTAKE_REQUIRE_SANDBOX=1 "$(xcode-select -p)/usr/bin/python3" -B -m unittest discover -s tests -t . -v` | 286 件、すべて OK、skip なし |
+| 2026-11-25、`f88e6dd` | Claude Code の Bash（sandbox の中） | `"$(xcode-select -p)/usr/bin/python3" -B -m unittest discover -s tests -t .` | 286 件、OK、skip 20 |
+| 2026-11-25、`f88e6dd` | 同上 | `shellcheck hooks/*.sh scripts/*.sh dev/probe/workbook-intake/hooks/*.sh` | 指摘なし |
+| 2026-11-25、`f88e6dd` | 同上 | `claude plugin validate . --strict` | 通過 |
 
-`719943d` から `d093bcb` までに、Seatbelt・フック・検査のコードとそのテスト（`hooks/`、`scripts/check_workbook.*`、`tests/test_sandbox_profile.py`、`tests/test_guard_xlide.py`、`tests/test_record_consent.py`、`tests/test_check_workbook.py`）は変わっていない（`git diff --stat` で確かめた）。そのため、人による Seatbelt 付きの実行は、やり直していない。CI（Linux と macOS）の結果は、PR を作った後に足す。
+`719943d` から `d093bcb` までに、Seatbelt・フック・検査のコードとそのテスト（`hooks/`、`scripts/check_workbook.*`、`tests/test_sandbox_profile.py`、`tests/test_guard_xlide.py`、`tests/test_record_consent.py`、`tests/test_check_workbook.py`）は変わっていない（`git diff --stat` で確かめた）。そのため、`d093bcb` では人による Seatbelt 付きの実行をやり直していない。`f88e6dd` では、1 回目の `/review` を受けて検査とフックを直したので（[Task 13〜15](plan.md#task-13)）、やり直した。CI（Linux と macOS）の結果は、PR を作った後に足す。
 
 <a name="manual"></a>
 
@@ -92,3 +96,26 @@ gstack の `/review` で、専門のレビュアー 6 つ（Testing、Maintainab
 - 検査の後の差し替え（TOCTOU）: 設計の[受け入れるリスク](design.md#risks)にある。
 
 直すものの方針は、[plan.md の Task 13](plan.md#task-13) に書く。
+
+<a name="parity"></a>
+
+### xlide の読み手との読み比べ（`f88e6dd`）
+
+[Task 15 の Step 6](plan.md#task-15)。1 回目の `/review` と[調査](research-xlide-parsing.md)で、検査と xlide 1.2.4 の読み方が食い違った形ごとに、ブックを 1 つずつ作った。どのブックも、veryHidden のシートか、`ignore previous` という句のどちらか 1 つを隠している。各ブックを、検査（Command Line Tools の python3）と、xlide 1.2.4 の uv の環境の python（`xlide_mcp.cells` の `sheets()` と `read()`）で読んだ。読み比べのスクリプトとブックは `tmp/parity/` に置き、コミットしていない。
+
+| 形 | 検査の結果 | xlide 1.2.4 が読んだもの |
+| --- | --- | --- |
+| 基準（隠したシートだけ） | 合格、`very_hidden_sheet` | 非表示のシート |
+| 中央ディレクトリが 2 つ | 不合格、`not_zip` | 非表示のシート（EOCD の位置どおりに読む、前の中央ディレクトリの組） |
+| `xl/workbook.xml` の先頭に 1 バイト | 合格、`strings_not_checked` | 非表示のシート |
+| 関係の Target に `\` | 合格、`very_hidden_sheet` | 非表示のシート |
+| ブックの本体を `customXml/` に置く | 合格、`very_hidden_sheet` | 非表示のシート |
+| 関係に `xmlns:Target` の属性 | 合格、`very_hidden_sheet`・`strings_not_checked` | 非表示のシート（`xl/other.xml` を本体として読む） |
+| `x:state="hidden"`（接頭辞付き） | 合格、`hidden_sheet` | 非表示のシート |
+| 共有文字列に `_x200B_` | 合格、`invisible_characters` | ゼロ幅スペースを含む文字列 |
+| 句をリッチテキストの 2 つの run に分ける | 合格、`instruction_like_text` | 句 |
+| `_xHHHH_` を run の境目で分ける | 合格、`instruction_like_text` | 句 |
+| `t` の中に子の要素を入れて句を分ける | 合格、`instruction_like_text` | 句 |
+
+- どの形も、期待のとおり、検査で不合格になるか、xlide が読むものに合う警告か `strings_not_checked` が出た。
+- シートを隠したブックでは、xlide の `read()` が `ValueError` で失敗した。これらのブックには共有文字列の関係がないためで、読み比べの結論には関わらない。
