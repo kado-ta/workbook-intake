@@ -19,7 +19,7 @@ sys.path.insert(0, str(ROOT))
 
 import check_workbook  # noqa: E402
 from tests.workbook_factory import (  # noqa: E402
-    assemble_zip, build_zip, central_entries, deflate_split_at_output_limit, deflated_entries,
+    assemble_zip, build_hand_zip, build_zip, central_entries, deflate_split_at_output_limit, deflated_entries,
     minimal_parts, patch_entry, raw_zip, shift_central_offsets,
     split_zip, write_raw, write_workbook,
 )
@@ -1015,6 +1015,71 @@ class LayoutTest(unittest.TestCase):
         raw = b"".join(stream.chunks)
         with zipfile.ZipFile(io.BytesIO(raw)) as z:
             self.assertTrue(all(i.flag_bits & 0x8 for i in z.infolist()))
+        self.assertEqual(self.check(raw)["result"], "pass")
+
+    # --- one rule per file ---
+
+    def patch_eocd(self, raw, offset, fmt, value):
+        data = bytearray(raw)
+        struct.pack_into(fmt, data, len(data) - 22 + offset, value)
+        return bytes(data)
+
+    def test_declared_comment_length_without_comment_fails(self):
+        self.assert_fails(self.patch_eocd(self.parts_zip(), 20, "<H", 5), "not_zip")
+
+    def test_nonzero_disk_number_fails(self):
+        self.assert_fails(self.patch_eocd(self.parts_zip(), 4, "<H", 1), "not_zip")
+
+    def test_nonzero_central_directory_disk_fails(self):
+        self.assert_fails(self.patch_eocd(self.parts_zip(), 6, "<H", 1), "not_zip")
+
+    def test_disk_and_total_entry_counts_differ_fails(self):
+        raw = self.parts_zip()
+        n = struct.unpack_from("<H", raw, len(raw) - 22 + 10)[0]
+        self.assert_fails(self.patch_eocd(raw, 8, "<H", n - 1), "not_zip")
+
+    def last_entry_comment(self, comment):
+        body, cd, n = split_zip(self.parts_zip())
+        last = list(central_entries(cd))[-1]
+        cd[last + 32:last + 34] = struct.pack("<H", len(comment))
+        cd += comment
+        return assemble_zip(body, cd, n)
+
+    def test_zip64_locator_signature_fails(self):
+        locator = b"PK\x06\x07" + b"\x00" * 16
+        raw = self.last_entry_comment(locator)
+        self.assertEqual(raw[len(raw) - 42:len(raw) - 38], b"PK\x06\x07")
+        self.assert_fails(raw, "not_zip")
+        # Control: the same length with other first bytes.
+        self.assertEqual(self.check(self.last_entry_comment(b"XXXX" + b"\x00" * 16))["result"], "pass")
+
+    def test_zip64_extra_in_central_entry_fails(self):
+        body, cd, n = split_zip(self.parts_zip())
+        nl, xl = struct.unpack("<HH", cd[28:32])
+        extra = struct.pack("<HH", 0x0001, 0)
+        cd[30:32] = struct.pack("<H", xl + len(extra))
+        cd[46 + nl + xl:46 + nl + xl] = extra
+        self.assert_fails(assemble_zip(body, cd, n), "not_zip")
+
+    def test_unicode_path_extra_in_local_header_fails(self):
+        extra = struct.pack("<HH", 0x7075, 5) + b"\x01\x00\x00\x00\x00"
+        self.assert_fails(build_hand_zip(minimal_parts(), local_extra=extra), "not_zip")
+
+    def test_extra_block_overrunning_its_field_fails(self):
+        benign = struct.pack("<HH", 0x9999, 2) + b"ab"
+        overrun = struct.pack("<HH", 0x9999, 10) + b"ab"
+        self.assertEqual(self.check(build_hand_zip(
+            minimal_parts(), local_extra=benign, central_extra=benign))["result"], "pass")
+        for where in ("central", "local"):
+            with self.subTest(where=where):
+                self.assert_fails(build_hand_zip(minimal_parts(), **{where + "_extra": overrun}), "not_zip")
+
+    def test_data_descriptor_without_signature_passes(self):
+        raw = build_hand_zip(minimal_parts(), descriptor="short")
+        self.assertEqual(self.check(raw)["result"], "pass")
+
+    def test_data_descriptor_with_signature_passes(self):
+        raw = build_hand_zip(minimal_parts(), descriptor="signed")
         self.assertEqual(self.check(raw)["result"], "pass")
 
     def test_empty_segment_name_fails(self):

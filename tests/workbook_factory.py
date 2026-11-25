@@ -142,6 +142,37 @@ def build_zip(entries):
     return bytes(body + cd + eocd)
 
 
+def build_hand_zip(parts, local_extra=b"", central_extra=b"", descriptor=None):
+    """Build a stored zip by hand with an extra field on every entry.
+
+    descriptor is None, "short" (12 bytes) or "signed" (16 bytes). With a
+    descriptor, flag bit 3 is set and the local CRC and sizes are zero.
+    """
+    body = bytearray()
+    cd = bytearray()
+    flags = 0x8 if descriptor else 0
+    for name, plain in parts.items():
+        nb = name.encode()
+        off = len(body)
+        crc = zlib.crc32(plain)
+        lcrc, lsize = (0, 0) if descriptor else (crc, len(plain))
+        body += b"PK\x03\x04" + struct.pack(
+            "<HHHHHIIIHH", 20, flags, 0, 0, 0x21, lcrc, lsize, lsize, len(nb), len(local_extra)
+        ) + nb + local_extra + plain
+        dd = struct.pack("<III", crc, len(plain), len(plain))
+        if descriptor == "signed":
+            body += b"PK\x07\x08" + dd
+        elif descriptor == "short":
+            body += dd
+        cd += b"PK\x01\x02" + struct.pack(
+            "<HHHHHHIIIHHHHHII", 20, 20, flags, 0, 0, 0x21, crc,
+            len(plain), len(plain), len(nb), len(central_extra), 0, 0, 0, 0, off
+        ) + nb + central_extra
+    n = len(parts)
+    eocd = b"PK\x05\x06" + struct.pack("<HHHHIIH", 0, 0, n, n, len(cd), len(body), 0)
+    return bytes(body + cd + eocd)
+
+
 def deflated_entries(parts):
     """Entries for build_zip: every part raw-deflated."""
     entries = {}
