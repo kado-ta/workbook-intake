@@ -137,7 +137,7 @@ Failure codes (the file is not read):
 | `unsafe_part_name` | A part name has `..` or an absolute path, NUL, an empty segment, a `.` segment, a directory name with content, or a name that disagrees with the UTF-8 flag |
 | `uncompressed_too_large` | Expands to more than 256 MB in total (including the zip inside a Power Query part), or a `customXml/item<N>.xml` part is over 32 MB |
 | `compression_ratio_too_high` | One part (including a part of the zip inside a Power Query part) compresses by more than 100 times |
-| `xml_dtd` | A part has `<!DOCTYPE` or `<!ENTITY`. Every part is searched, not only XML, so an SVG image or a macro that writes HTML can cause it |
+| `xml_dtd` | A part has `<!DOCTYPE` or `<!ENTITY`. Every part is searched, not only XML, and so are the parts of the zip inside a Power Query part, so an SVG image or a macro that writes HTML can cause it |
 
 Warning codes (you must confirm before the analysis continues):
 
@@ -166,7 +166,9 @@ Check statuses: `pass`, `fail`, `error` (output outside the vocabulary or unexpe
 - The string checks can miss things, and false positives happen. This is not antivirus. Leave virus scanning to your own endpoint protection.
 - The file can change between the check and the read. The intake folder is outside the sandbox's write range, but processes outside the sandbox (you, other apps) can still replace files. Use `denyWrite`.
 - Without the recommended settings, use outside the skill (other skills, or asking Claude directly to read the file with Bash) can still read the intake folder. `doctor.sh` runs only inside the skill.
-- Plugin hooks disabled by managed settings means no enforcement. Do not use the plugin there.
+- `disableAllHooks` can turn off hooks from a settings file at any scope, including the repository's `.claude/settings.json` (hooks from managed settings are exempt). Plugin hooks are expected to be turned off too (inferred, not verified). When they are off, the main conversation can call xlide, and neither the input confirmation nor the check runs. Do not use the plugin in such an environment.
+- xlide expands VBA source with no size limit. A workbook with macros (the `vba_project` warning) can use a lot of memory.
+- The input confirmation relies on a person answering the AskUserQuestion screen. In an environment where another plugin's hook or an SDK host fills in the answer, an approval can be recorded without a person confirming it.
 - Tool names carry the prefix `mcp__plugin_workbook-intake_xlide__` (for example `mcp__plugin_workbook-intake_xlide__xlide_doctor`). A matcher that names only the server (`mcp__xlide__.*`) does not match them.
 - xlide is visible to the main conversation too, because plugin subagents cannot declare their own MCP servers. Calls from the main conversation are blocked by the hook.
 - A hook's allow only skips a prompt. Deny and ask rules in your settings still apply.
@@ -175,6 +177,7 @@ Check statuses: `pass`, `fail`, `error` (output outside the vocabulary or unexpe
 - The approval record lives in the plugin data directory. In an environment where a sandboxed command can write there, an approval can be forged.
 - If the plugin cache is writable from a sandboxed session, the hooks could be modified. If your GitHub account is taken over, a bad update could be published; pinning by SHA with auto-update off helps you use only versions you have reviewed, but it does not prevent this.
 - The environment can change where uv fetches from (for example `UV_DEFAULT_INDEX`).
+- xlide finds `uvx` through PATH. Do not put a directory that a sandboxed command can write to at the front of PATH.
 - macOS only. Windows live tools of xlide are not used.
 - Not covered: people who use xlide without this plugin, and the Google Sheets connector.
 
@@ -215,7 +218,7 @@ Guard hook denials (`workbook-intake: <reason>`, with failure or warning codes i
 | `path_not_canonical` | Same as above (the guard and xlide could resolve such a path to different files) |
 | `consent_store_unavailable`, `no_consent` | Same as above |
 | `check_failed` | The check failed (failure codes follow) |
-| `check_timeout` | The check took over 20 seconds |
+| `check_timeout` | The check took over 20 seconds. This tends to happen with a workbook whose XML totals about 200 MB or more (for example a 50 MB `.xlsx` with many large sheets). The check runs on every read |
 | `sandbox_missing` | `sandbox-exec` not found |
 | `check_error` | The check result was unusable, or the file changed after the check |
 | `warnings_not_acknowledged` | Warnings exist and no warning confirmation was recorded |
