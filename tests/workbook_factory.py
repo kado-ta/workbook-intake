@@ -2,6 +2,7 @@
 import io
 import struct
 import zipfile
+import zlib
 
 
 def minimal_parts():
@@ -121,3 +122,71 @@ def patch_entry(raw, name, central=None, local=None):
             struct.pack_into(fmt, data, loc + off, value)
         return bytes(data)
     raise KeyError(name)
+
+
+def build_zip(entries):
+    """Build a zip by hand from {name: (method, stored payload, plain bytes)}."""
+    body = bytearray()
+    cd = bytearray()
+    for name, (method, payload, plain) in entries.items():
+        nb = name.encode()
+        off = len(body)
+        crc = zlib.crc32(plain)
+        fields = (20, 0, method, 0, 0x21, crc, len(payload), len(plain), len(nb), 0)
+        body += b"PK\x03\x04" + struct.pack("<HHHHHIIIHH", *fields) + nb + payload
+        cd += b"PK\x01\x02" + struct.pack(
+            "<HHHHHHIIIHHHHHII", 20, 20, 0, method, 0, 0x21, crc,
+            len(payload), len(plain), len(nb), 0, 0, 0, 0, 0, off) + nb
+    n = len(entries)
+    eocd = b"PK\x05\x06" + struct.pack("<HHHHIIH", 0, 0, n, n, len(cd), len(body), 0)
+    return bytes(body + cd + eocd)
+
+
+def deflated_entries(parts):
+    """Entries for build_zip: every part raw-deflated."""
+    entries = {}
+    for name, data in parts.items():
+        c = zlib.compressobj(6, zlib.DEFLATED, -15)
+        entries[name] = (zipfile.ZIP_DEFLATED, c.compress(data) + c.flush(), data)
+    return entries
+
+
+class _Bits(object):
+    def __init__(self):
+        self.acc = 0
+        self.n = 0
+        self.out = bytearray()
+
+    def put(self, value, nbits):
+        self.acc |= value << self.n
+        self.n += nbits
+        while self.n >= 8:
+            self.out.append(self.acc & 0xFF)
+            self.acc >>= 8
+            self.n -= 8
+
+    def huff(self, code, nbits):
+        self.put(int(format(code, "0%db" % nbits)[::-1], 2), nbits)
+
+    def done(self):
+        if self.n:
+            self.out.append(self.acc & 0xFF)
+        return bytes(self.out)
+
+
+def deflate_split_at_output_limit(n=65536 - 1 - 100):
+    """A valid raw deflate stream whose 64 KiB output limit falls inside its last match.
+
+    A stored block of n bytes, then a final fixed-Huffman block: one literal, a
+    length-258 match, end of block. Returns (stream, plain bytes).
+    """
+    stored = bytes((i * 7 + 3) & 0xFF for i in range(n))
+    head = b"\x00" + struct.pack("<HH", n, n ^ 0xFFFF) + stored
+    b = _Bits()
+    b.put(1, 1)
+    b.put(1, 2)
+    b.huff(0x190, 9)
+    b.huff(0xC0 + 5, 8)
+    b.huff(0, 5)
+    b.huff(0, 7)
+    return head + b.done(), stored + b"\x90" * 259

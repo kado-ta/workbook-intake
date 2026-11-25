@@ -118,45 +118,55 @@ def _check_part(zf, info, total):
         return "not_zip", total
     inflater = None if stored else zlib.decompressobj(-15)
     remaining = info.compress_size
-    size = 0
-    crc = 0
-    tail = b""
+    state = {"size": 0, "crc": 0, "total": total, "tail": b""}
+
+    def take(chunk):
+        """Account for one output chunk. Returns a failure code or None."""
+        state["size"] += len(chunk)
+        state["total"] += len(chunk)
+        state["crc"] = zlib.crc32(chunk, state["crc"])
+        if state["total"] > MAX_TOTAL_UNCOMPRESSED:
+            return "uncompressed_too_large"
+        size = state["size"]
+        if size > RATIO_GRACE_BYTES and size > MAX_RATIO * max(info.compress_size, 1):
+            return "compression_ratio_too_high"
+        # Part types come from the package metadata, so scan every part.
+        window = state["tail"] + chunk
+        if any(n in window for n in _DTD_NEEDLES):
+            return "xml_dtd"
+        state["tail"] = window[-_TAIL:]
+        if size > info.file_size:
+            return "not_zip"
+        return None
+
     while remaining > 0 or (inflater is not None and not inflater.eof):
         raw = fp.read(min(READ_CHUNK, remaining))
         if not raw:
-            return "not_zip", total
+            return "not_zip", state["total"]
         remaining -= len(raw)
-        pieces = [raw]
-        if inflater is not None:
-            pieces = []
-            buf = raw
-            while buf and not inflater.eof:
-                pieces.append(inflater.decompress(buf, READ_CHUNK))
-                buf = inflater.unconsumed_tail
-            if inflater.eof and (buf or inflater.unused_data or remaining):
-                return "not_zip", total
-        for chunk in pieces:
-            if not chunk:
-                continue
-            size += len(chunk)
-            total += len(chunk)
-            crc = zlib.crc32(chunk, crc)
-            if total > MAX_TOTAL_UNCOMPRESSED:
-                return "uncompressed_too_large", total
-            if size > RATIO_GRACE_BYTES and size > MAX_RATIO * max(info.compress_size, 1):
-                return "compression_ratio_too_high", total
-            # Part types come from the package metadata, so scan every part.
-            window = tail + chunk
-            if any(n in window for n in _DTD_NEEDLES):
-                return "xml_dtd", total
-            tail = window[-_TAIL:]
-            if size > info.file_size:
-                return "not_zip", total
-        if inflater is not None and not inflater.eof and remaining == 0:
-            return "not_zip", total
-    if size != info.file_size or crc != info.CRC:
-        return "not_zip", total
-    return None, total
+        if inflater is None:
+            failure = take(raw)
+            if failure:
+                return failure, state["total"]
+            continue
+        buf = raw
+        while True:
+            # Never inflate past what the central directory allows (+1 to notice).
+            limit = min(READ_CHUNK, info.file_size - state["size"] + 1)
+            out = inflater.decompress(buf, limit)
+            buf = inflater.unconsumed_tail
+            if out:
+                failure = take(out)
+                if failure:
+                    return failure, state["total"]
+            # Keep draining while the output limit, not the input, stopped zlib.
+            if inflater.eof or (not buf and len(out) < limit):
+                break
+        if inflater.eof and (buf or inflater.unused_data or remaining):
+            return "not_zip", state["total"]
+    if state["size"] != info.file_size or state["crc"] != info.CRC:
+        return "not_zip", state["total"]
+    return None, state["total"]
 
 
 def _local(tag):
@@ -451,6 +461,9 @@ def _check_layout(path, size):
             (flags, method, _t, _d, crc, csize, usize, nlen, xlen, clen,
              _dn, _ia, _ea, off) = struct.unpack("<HHHHIIIHHHHHII", head[8:])
             if 0xFFFFFFFF in (csize, usize, off):
+                return "not_zip"
+            # Bits 5 and 6 (patched data, strong encryption): zipfile refuses to open such a part.
+            if flags & 0x60:
                 return "not_zip"
             end = pos + _CEN_LEN + nlen + xlen + clen
             if end > len(cd):

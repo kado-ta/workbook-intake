@@ -19,7 +19,8 @@ sys.path.insert(0, str(ROOT))
 
 import check_workbook  # noqa: E402
 from tests.workbook_factory import (  # noqa: E402
-    assemble_zip, central_entries, minimal_parts, patch_entry, raw_zip, shift_central_offsets,
+    assemble_zip, build_zip, central_entries, deflate_split_at_output_limit, deflated_entries,
+    minimal_parts, patch_entry, raw_zip, shift_central_offsets,
     split_zip, write_raw, write_workbook,
 )
 
@@ -631,6 +632,71 @@ class LayoutTest(unittest.TestCase):
         raw = patch_entry(buf.getvalue(), "xl/pad.bin", central={"usize": 162, "crc": crc},
                           local={"usize": 162, "crc": crc})
         self.assert_fails(raw, "not_zip")
+
+    def book_with(self, payload, plain):
+        entries = deflated_entries(minimal_parts())
+        entries["xl/pad.bin"] = (zipfile.ZIP_DEFLATED, payload, plain)
+        return build_zip(entries)
+
+    def deflate(self, plain):
+        c = zlib.compressobj(6, zlib.DEFLATED, -15)
+        return c.compress(plain) + c.flush()
+
+    def test_deflate_stream_split_at_output_limit_passes(self):
+        stream, plain = deflate_split_at_output_limit()
+        d = zlib.decompressobj(-15)
+        self.assertEqual(d.decompress(stream), plain)
+        self.assertTrue(d.eof and not d.unused_data)
+        raw = self.book_with(stream, plain)
+        with zipfile.ZipFile(io.BytesIO(raw)) as z:
+            self.assertIsNone(z.testzip())
+        self.assertEqual(self.check(raw)["result"], "pass")
+
+    def test_deflate_output_shorter_than_declared_size_fails(self):
+        plain = b"a" * 100
+        raw = self.book_with(self.deflate(plain), plain)
+        raw = patch_entry(raw, "xl/pad.bin", central={"usize": 101}, local={"usize": 101})
+        self.assert_fails(raw, "not_zip")
+
+    def test_deflate_unused_data_after_stream_fails(self):
+        plain = b"a" * 100
+        self.assert_fails(self.book_with(self.deflate(plain) + b"junk", plain), "not_zip")
+
+    def test_deflate_stream_not_ending_within_compressed_size_fails(self):
+        plain = b"a" * 100
+        self.assert_fails(self.book_with(self.deflate(plain)[:-1], plain), "not_zip")
+
+    def test_patched_data_and_strong_encryption_flags_fail(self):
+        for flag in (0x20, 0x40):
+            with self.subTest(flag=hex(flag)):
+                raw = patch_entry(self.stored_book(), "xl/_rels/workbook.xml.rels",
+                                  central={"flags": flag}, local={"flags": flag})
+                self.assert_fails(raw, "not_zip")
+
+    def test_inflation_stops_past_declared_size(self):
+        plain = b"\x00" * (20 * 1024 * 1024)
+        raw = self.book_with(self.deflate(plain), plain)
+        crc = zlib.crc32(plain[:162])
+        raw = patch_entry(raw, "xl/pad.bin", central={"usize": 162, "crc": crc},
+                          local={"usize": 162, "crc": crc})
+        produced = []
+        real = zlib.decompressobj
+
+        class Counting(object):
+            def __init__(self):
+                self._d = real(-15)
+
+            def decompress(self, data, max_length=0):
+                out = self._d.decompress(data, max_length)
+                produced.append(len(out))
+                return out
+
+            def __getattr__(self, name):
+                return getattr(self._d, name)
+
+        with mock.patch.object(check_workbook.zlib, "decompressobj", lambda wbits: Counting()):
+            self.assert_fails(raw, "not_zip")
+        self.assertLess(sum(produced), 10000)
 
     def test_crc_mismatch_fails(self):
         raw = patch_entry(self.stored_book(), "xl/sharedStrings.xml",
