@@ -322,6 +322,34 @@ class RecordConsentTest(unittest.TestCase):
         self.assertFalse(ic.has_warnings_ack(
             SESSION, ic.file_key(real), ic.file_sha256(real), ["vba_project"]))
 
+    def test_trailing_space_path_not_recorded(self):
+        # xlide strips the path, so a trailing-space alias must not take the consent.
+        book = self.book()
+        alias = os.path.join(self.intake, "b.xlsm ")
+        os.symlink(book, alias)
+        self.assertEqual(
+            rc.handle(consent_input(alias)),
+            "workbook-intake: consent=not_recorded; reason=path_not_canonical")
+        self.assertIsNone(self.recorded(book))
+        plain = os.path.join(self.intake, "c.xlsx ")
+        write_workbook(plain, minimal_parts())
+        self.assertIn("consent=not_recorded", rc.handle(consent_input(plain)))
+
+    def test_warnings_question_without_list_not_acked(self):
+        path = self.book()
+        self.checker.return_value = {"status": "pass", "failures": [], "warnings": ["vba_project"]}
+        rc.handle(consent_input(path))
+        question = ic.WARNINGS_QUESTION_PREFIX + path
+        data = warnings_input(path, ["vba_project"])
+        data["tool_response"] = {"answers": {question: ic.CONTINUE_LABEL}}
+        data["tool_input"]["questions"][0]["question"] = question
+        self.assertEqual(
+            rc.handle(data),
+            "workbook-intake: warnings_ack=not_recorded; reason=question_mismatch")
+        real = os.path.realpath(path)
+        self.assertFalse(ic.has_warnings_ack(
+            SESSION, ic.file_key(real), ic.file_sha256(real), ["vba_project"]))
+
     def test_file_changed_during_check_not_recorded(self):
         path = self.book()
 

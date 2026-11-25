@@ -96,6 +96,26 @@ class GuardXlideTest(unittest.TestCase):
         nfd = os.path.join(self.intake, unicodedata.normalize("NFD", name))
         self.assertEqual(gx.decide(call(nfd)), ("allow", "ok"))
 
+    def test_symlink_alias_denied(self):
+        # xlide strips the path before resolving it, so "b.xlsm " opens b.xlsm while the
+        # guard resolves the symlink to a.xlsx, which has consent and a passing check.
+        target = self.consented("a.xlsx")
+        self.book("b.xlsm")
+        alias = os.path.join(self.intake, "b.xlsm ")
+        os.symlink(target, alias)
+        self.assertDenied(call(alias), "path_not_canonical")
+
+    def test_trailing_space_file_denied(self):
+        # A regular file whose name ends in a space has no supported extension, so it is
+        # stopped before the canonical-path check; either way it is never allowed.
+        path = self.consented("c.xlsx ")
+        self.assertDenied(call(path), "unsupported_extension")
+
+    def test_xlide_list_shapes_not_allowed(self):
+        path = self.consented()
+        self.assertDenied(call(path, tool=gx.TOOL_PREFIX + "xlide_list_shapes"),
+                          "tool_not_allowed")
+
     def test_warnings_with_ack_allowed(self):
         path = self.consented()
         self.checker.return_value = {"status": "pass", "failures": [], "warnings": ["vba_project"]}
@@ -440,7 +460,7 @@ class ManifestTest(unittest.TestCase):
             "project_info", "validate_project", "list_modules", "read_module",
             "list_procedures", "search_modules", "analyze", "list_references", "list_forms",
             "read_form", "list_queries", "read_query", "list_sheets", "read_cells",
-            "evaluate_formula", "list_shapes", "check_cells", "page_setup"), "file")
+            "evaluate_formula", "check_cells", "page_setup"), "file")
         expected.update({"doctor": "nofile", "rules": "nofile"})
         self.assertEqual(tools, {"xlide_" + k: v for k, v in expected.items()})
 

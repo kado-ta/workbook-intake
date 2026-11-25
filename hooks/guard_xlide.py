@@ -55,6 +55,8 @@ def _decide_file(session_id, file_path):
     real, reason = ic.resolve_in_intake(file_path)
     if real is None:
         return "deny", reason, []
+    if not ic.canonical_path(file_path):
+        return "deny", "path_not_canonical", []
     if not os.environ.get("CLAUDE_PLUGIN_DATA"):
         return "deny", "consent_store_unavailable", []
     key, digest = ic.file_key(real), ic.file_sha256(real)

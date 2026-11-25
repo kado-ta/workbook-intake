@@ -31,7 +31,13 @@ if [ "$(uname -s)" = "Darwin" ]; then report macos 0; else report macos 1; fi
 if command -v uvx >/dev/null 2>&1; then report uvx 0; else report uvx 1; fi
 
 clt="$(xcode-select -p 2>/dev/null)"
-if [ -n "$clt" ] && [ -x "$clt/usr/bin/python3" ]; then report python3 0; else report python3 1; fi
+# The hooks run this python3, so it and its installation must belong to root.
+if [ -n "$clt" ] && [ -x "$clt/usr/bin/python3" ] \
+    && "$clt/usr/bin/python3" -I -c 'import os,sys; sys.exit(os.stat(os.path.realpath(sys.base_prefix)).st_uid != 0)' >/dev/null 2>&1; then
+  report python3 0
+else
+  report python3 1
+fi
 
 if [ -x /usr/bin/sandbox-exec ]; then report sandbox_exec 0; else report sandbox_exec 1; fi
 

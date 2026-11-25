@@ -231,6 +231,20 @@ def resolve_in_intake(path):
     return real, "ok"
 
 
+def canonical_path(path):
+    """True if the path is its own realpath (compared as NFC) with no stray characters.
+
+    xlide strips the path and resolves it itself, so surrounding whitespace, control
+    characters or a symlink would let the guard check one file while xlide opens another.
+    """
+    if path != path.strip():
+        return False
+    if any(unicodedata.category(c) in ("Cc", "Cf", "Zl", "Zp") for c in path):
+        return False
+    return (unicodedata.normalize("NFC", os.path.realpath(path))
+            == unicodedata.normalize("NFC", path))
+
+
 def strictly_equal(a, b):
     """JSON-like equality that does not treat 0 as False or 1 as True."""
     if type(a) is not type(b):

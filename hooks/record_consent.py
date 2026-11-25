@@ -2,7 +2,6 @@
 import json
 import os
 import sys
-import unicodedata
 
 # Run with -I, which does not put the script's directory on sys.path.
 sys.path.insert(0, os.path.dirname(os.path.realpath(__file__)))
@@ -51,16 +50,6 @@ def _our_question(hook_input):
     return None
 
 
-def _canonical(path):
-    """True if the path text is already its own realpath and has no control characters.
-
-    The person sees this text in the question, so it must name the file it resolves to.
-    """
-    if os.path.realpath(path) != path:
-        return False
-    return not any(unicodedata.category(c) in ("Cc", "Cf", "Zl", "Zp") for c in path)
-
-
 def _joined(items):
     return ",".join(items) if items else "none"
 
@@ -86,7 +75,7 @@ def _handle_consent(hook_input, question):
     real, reason = ic.resolve_in_intake(path)
     if real is None:
         return _consent_not_recorded(reason)
-    if not _canonical(path):
+    if not ic.canonical_path(path):
         return _consent_not_recorded("path_not_canonical")
     if not os.environ.get("CLAUDE_PLUGIN_DATA"):
         return _consent_not_recorded("consent_store_unavailable")
@@ -114,7 +103,7 @@ def _handle_warnings(hook_input, question):
     real, reason = ic.resolve_in_intake(path)
     if real is None:
         return _ack_not_recorded(reason)
-    if not _canonical(path):
+    if not ic.canonical_path(path):
         return _ack_not_recorded("path_not_canonical")
     if not os.environ.get("CLAUDE_PLUGIN_DATA"):
         return _ack_not_recorded("consent_store_unavailable")

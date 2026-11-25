@@ -79,6 +79,18 @@ class DoctorTest(unittest.TestCase):
         return subprocess.run(["/bin/bash", str(DOCTOR)], env=env, capture_output=True,
                               text=True, timeout=30)
 
+    def test_python_not_owned_by_root_is_missing(self):
+        self._fake_uvx()
+        os.chmod(self.intake, 0)
+        dev = Path(os.path.realpath(self._tmp.name)) / "dev"
+        (dev / "usr" / "bin").mkdir(parents=True)
+        fake = dev / "usr" / "bin" / "python3"
+        fake.write_text("#!/bin/bash\nexit 1\n")
+        fake.chmod(stat.S_IRWXU)
+        r = self._run_env(DEVELOPER_DIR=str(dev))
+        self.assertEqual(r.returncode, 1, r.stdout)
+        self.assertIn("missing python3", r.stdout)
+
     def test_folder_line_with_realpath(self):
         self._fake_uvx()
         os.chmod(self.intake, 0)
