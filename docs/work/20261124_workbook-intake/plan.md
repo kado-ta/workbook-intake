@@ -38,7 +38,7 @@ created: 2026-11-25
 
 - 動く環境は macOS だけ。Python は Command Line Tools の python3（手元は 3.9.6）と標準ライブラリだけを使う。`match` 文、実行時に評価される `X | Y` の型、3.10 以降の標準ライブラリの機能を使わない（型注釈は `from __future__ import annotations` を付ければよい）。
 - シェルは `/bin/bash` 3.2 で動かす。連想配列、`mapfile`、`${var,,}` を使わない。JSON の解釈は python3 で行い、jq に頼らない（使う人の環境にあるとは限らない）。
-- 版の固定（設計のとおり）: `xlide-mcp==1.2.4`、`pyopenvba==6.6.0`、`pyofficeeditor==0.4.1`、`pyvbaanalysis==3.0.3`、`mcp==2.3.0`。
+- 版の固定（設計のとおり）: `xlide-mcp==1.2.4`、`pyopenvba==6.6.0`、`pyofficeeditor==0.4.1`、`pyvbaanalysis==3.0.3`、`mcp==2.3.0`。xlide の Python は 3.15（`uvx --python 3.15`。2026-11-26 に足した。[Task 23](#task-23)）。
 - 名前: プラグインとマーケットプレイスは `workbook-intake`、MCP サーバーは `xlide`、ツール名の接頭辞は `mcp__plugin_workbook-intake_xlide__`、サブエージェントは `excel-analyst`（呼び出し元の名前は `workbook-intake:excel-analyst`）、スキルは `analyze`。
 - 受け取り用フォルダの既定は `~/workbook-intake`。
 - 時間: フックの timeout は 30 秒、検査の上限は 20 秒（フックの中で決める）。
@@ -957,7 +957,7 @@ git commit -m "docs: record manual verification of workbook-intake"
 
 ### Task 12: レビューと PR の準備
 
-- [x] **Step 1: `/review` を実行し、指摘への対応を決める。直したら、全体のテストを実行し直す。** 1 回目の結果と採否は [test-report のレビュー](test-report.md#review-1)。小さな指摘は `be03451` で直した。検査と xlide の読み方の違いなどは、[Task 13](#task-13)〜[Task 15](#task-15) で直す（ユーザーの判断、2026-11-25）。Task 15 の後に、`/review` をもう一度実行してから Step 2 に進む。2 回目の結果と採否は [test-report のレビュー](test-report.md#review-2)。小さな指摘は `fe3b14c`・`e4ad15b`・`25108c0` で直した。残りは [Task 16](#task-16)〜[Task 19](#task-19) で直す（ユーザーの判断、2026-11-25）。Task 19 の後に、`/review` を 3 回目として実行してから Step 2 に進む。
+- [x] **Step 1: `/review` を実行し、指摘への対応を決める。直したら、全体のテストを実行し直す。** 1 回目の結果と採否は [test-report のレビュー](test-report.md#review-1)。小さな指摘は `be03451` で直した。検査と xlide の読み方の違いなどは、[Task 13](#task-13)〜[Task 15](#task-15) で直す（ユーザーの判断、2026-11-25）。Task 15 の後に、`/review` をもう一度実行してから Step 2 に進む。2 回目の結果と採否は [test-report のレビュー](test-report.md#review-2)。小さな指摘は `fe3b14c`・`e4ad15b`・`25108c0` で直した。残りは [Task 16](#task-16)〜[Task 19](#task-19) で直す（ユーザーの判断、2026-11-25）。Task 19 の後に、`/review` を 3 回目として実行してから Step 2 に進む。3 回目の結果と採否は [test-report のレビュー](test-report.md#review-3)。小さな指摘は `77dd89c`・`1fb2760` で直した。残りは [Task 20](#task-20)〜[Task 24](#task-24) で直す（ユーザーの判断、2026-11-26）。Task 24 の後に、`/review` を 4 回目として実行してから Step 2 に進む。
 - [ ] **Step 2: `/security-review` を実行する（外部からの入力と権限の境界に触れるため）。**
 - [ ] **Step 3: Codex のレビューを行う（必須。ユーザーの指定）。** 人が通常のターミナルで `codex review` と、challenge（変更前と比べた後退と、壊れる入力を挙げてもらう。プロンプトは Claude が書く）を実行する。結果は、CLAUDE.md の Skill routing の手順で読み、test-report に記録してから採否を整理する。直したら、全体のテストを実行し直す。上限は 5 回。
 - [ ] **Step 4: 作業文書を締める。** design.md・plan.md・research・test-report の `status` を `done` にしてコミットする。
@@ -1424,3 +1424,237 @@ git commit -m "docs: record the Seatbelt run after the second review fixes"
 ```
 
 その後、[Task 12](#task-12) の Step 1 の続き（3 回目の `/review`）に戻る。
+
+---
+
+<a name="review3-fixes"></a>
+
+## 3 回目の `/review` の指摘の修正（Task 20〜24）
+
+3 回目の `/review` の結果と採否は [test-report](test-report.md#review-3)。根は 2 つある。検査（Command Line Tools の Python 3.9）と xlide（Python 3.15）の標準ライブラリの違いと、pyofficeeditor の独自の XML の読み手と expat の違い。ユーザーの判断（2026-11-26）:
+
+- D1: Power Query の部品の中の zip は、pyopenvba の止まる所をまねるのをやめ、Excel が書かない形をすべて不合格にする。部品名は版に依らない広い形で選び、base64 を戻した全体も DTD を探す。
+- D2: `<!-->` のコメントを `strings_not_checked` にし、pyofficeeditor と expat の構文の読み方の違いをほかにも洗い出す。
+- D3: xlide の Python を 3.15 に固定する。
+- D4: フックの bash を `-p` で動かし、Power Query の中の文字列は確かめないことを文書に正しく書く。
+
+設計は 2026-11-26 の改訂で直した（[design.md の改訂](design.md#revisions)）。語彙は増やさない。
+
+<a name="task-20"></a>
+
+### Task 20: 調査（pyofficeeditor と expat の、XML の構文の読み方の違い）
+
+**Files:**
+- Modify: `docs/work/20261124_workbook-intake/research-xlide-parsing.md`（節を 1 つ足す。アンカーは `xml-syntax`）
+
+**Interfaces:**
+- Produces: research の表。[Task 21](#task-21) はこの表の「検査の扱い」を実装する。
+
+pyofficeeditor 0.4.1 の XML の読み手（`pyofficeeditor/_xml.py`。xlide の uv の環境、Python 3.15.2）と、検査の expat（Command Line Tools の Python 3.9.6、`_new_parser` と同じ設定）とで、同じバイト列から読む要素・属性・文字が違う構文を洗い出す。分かっているのは、中身が `>` か `->` で始まるコメント（pyofficeeditor は `<!--` の `<` の位置から `-->` を探すので、その場で閉じる）。
+
+- [ ] **Step 1: `_xml.py` を読み、構文ごとに候補を挙げる**
+
+見る構文: コメント、処理命令、CDATA、DOCTYPE、文字参照と実体参照、属性値（引用符、`<`、`>`、改行、空白の正規化）、要素名と属性名に使える文字、終わりのタグの照合、閉じていない要素、ルート要素の前後、XML 宣言、BOM と文字コード、`_consume_until` のような「探し始めの位置」の扱い。
+
+- [ ] **Step 2: 候補ごとに、2 つの読み手で確かめる**
+
+小さな XML を `$TMPDIR` に作り、xlide の環境の python（`-I` で）で pyofficeeditor に読ませた結果と、検査の expat に読ませた結果を並べる。expat がエラーにする形は、今の検査で `strings_not_checked` になるので、違いとして扱わない。
+
+- [ ] **Step 3: research に表を書く**
+
+| 構文の例 | pyofficeeditor が読むもの | expat が読むもの | 検査の扱い |
+| --- | --- | --- | --- |
+
+「検査の扱い」は、expat がエラーなく違うものを読む形は `strings_not_checked`、同じに読む形は「なし」とする。根拠の行（`_xml.py:<行>`）を添える。
+
+- [ ] **Step 4: コミットする**
+
+```bash
+git add docs/work/20261124_workbook-intake/research-xlide-parsing.md
+git commit -m "docs: research where pyofficeeditor and expat read XML differently"
+```
+
+<a name="task-21"></a>
+
+### Task 21: 検査（XML の構文の違い）
+
+**Files:**
+- Modify: `scripts/check_workbook.py`、`tests/test_check_workbook.py`、`README.md`、`README.ja.md`
+
+**Interfaces:**
+- Consumes: [Task 20](#task-20) の research の表、Task 14 の `_Collector`・`_new_parser`
+- Produces: `_Collector.comment(text: str) -> None`。`text` が `">"` か `"->"` で始まれば `self.unchecked = True`。`_new_parser` は `parser.CommentHandler = collector.comment` を設定する。Task 20 の表で「`strings_not_checked`」とした構文ごとに、同じく `unchecked` にする判定を足す。
+
+- [ ] **Step 1: 失敗するテストを書く**
+
+```python
+def test_comment_closed_early_by_xlide_hides_sheet(self):   # xl/workbook.xml の <sheets> の中に '<!--><sheet name="Two" sheetId="2" state="hidden" r:id="rId2"/>-->' → warnings に "strings_not_checked"
+def test_comment_starting_with_dash_gt_marks_unchecked(self):  # '<!--->...-->' の形 → "strings_not_checked"
+def test_ordinary_comment_is_fine(self):                     # '<!-- note -->' → "strings_not_checked" なし
+# Task 20 の表で strings_not_checked とした構文ごとに 1 件
+```
+
+- [ ] **Step 2: テストが失敗することを確かめる**
+
+Run: `"$PY" -B -m unittest tests.test_check_workbook -v`
+Expected: 1 件目と 2 件目、Task 20 の構文のテストが FAIL。3 件目は PASS。
+
+- [ ] **Step 3: 実装する**
+
+- [ ] **Step 4: README を直す**
+
+`README.md`・`README.ja.md` の `strings_not_checked` の行に、「xlide の読み手と XML の構文の読み方が違う部品（`<!-->` で始まるコメントなど）」を足す。
+
+- [ ] **Step 5: テストが通ることを確かめ、判定を外すと落ちることを確かめる**
+
+Run: `"$PY" -B -m unittest discover -s tests -t . -v`
+Expected: すべて PASS（sandbox の中では skip あり）。判定を 1 つずつ外して、対応するテストが FAIL になることを確かめる（写しで行い、本物のファイルは変えない）。
+
+- [ ] **Step 6: コミットする**
+
+```bash
+git add scripts/check_workbook.py tests/test_check_workbook.py
+git commit -m "fix: mark XML parts that xlide's reader parses differently as unchecked"
+git add README.md README.ja.md
+git commit -m "docs: list XML syntax that xlide reads differently under strings_not_checked"
+```
+
+<a name="task-22"></a>
+
+### Task 22: 検査（Power Query の部品の中の zip を、食い違いのない形で数える）
+
+**Files:**
+- Modify: `scripts/check_workbook.py`、`tests/test_check_workbook.py`、`tests/workbook_factory.py`、`README.md`、`README.ja.md`
+
+**Interfaces:**
+- Consumes: Task 17 の `_mashup_package`・`_check_package_part`・`_check_package`・`check()` の中の部品のループ
+- Produces（名前は変えてよいが、振る舞いはこのとおり）:
+  - `_ITEM_PATTERN = re.compile(r"^customXml/item[^/]*\.xml$")`。pyopenvba の `^customXml/item(\d+)\.xml$` を、どの Python の版でも含む広い形。
+  - `_mashup_blob(raw: bytes) -> tuple[str | None, bytes | None]`: pyopenvba が DataMashup の要素を見つけない部品（印がない、文字として復号できない、正規表現が合わない）は `(None, None)`。見つけたのに base64 が正規の形でなければ `("not_zip", None)`。そうでなければ `(None, 戻した全体)`。
+  - `_mashup_sections(blob: bytes) -> list[bytes] | None`: 版の 4 バイトの後の 4 つの節。長さが合わないか、余りがあれば `None`（呼び出し元は `not_zip`）。
+  - `_check_package(package: bytes, total: int) -> tuple[str | None, int]`: 下の表の規則で数える。
+
+取り出しの手順 1〜3（印、文字としての復号、正規表現）は Task 17 のまま。その後の規則:
+
+| 確かめること | 違えば |
+| --- | --- |
+| 正規表現の 2 つ目の組から、空白（` `・`\t`・`\r`・`\n`）を除いた文字列が `[A-Za-z0-9+/]*={0,2}` に合い、長さが 4 の倍数。合えば `base64.b64decode(..., validate=True)` で戻す | `not_zip` |
+| 戻した全体が 8 バイト以上で、4 つの節の長さがちょうど合い、余りがない | `not_zip` |
+| 戻した全体に `_DTD_NEEDLES` がない（メタデータと権限の節を含む） | `xml_dtd` |
+| 戻した全体の大きさを合計に足しても、`MAX_TOTAL_UNCOMPRESSED` を超えない | `uncompressed_too_large` |
+| 中の zip: `PK\x03\x04` で始まる限りたどる。ヘッダーかデータが終わりを越えない。方式は格納か deflate。名前が UTF-8 として正しい。格納なら圧縮後と展開後の大きさが等しい。deflate なら、宣言の展開後の大きさ + 1 バイトまで展開して（`zlib.error` なし）、出た長さが宣言とちょうど等しい | `not_zip` |
+| 中の zip の部品の展開: 合計・圧縮率・DTD の規則は Task 17 のまま | `uncompressed_too_large`・`compression_ratio_too_high`・`xml_dtd` |
+
+- [ ] **Step 1: 失敗するテストを書き、期待が変わるテストを直す**
+
+```python
+def test_mashup_base64_with_inner_padding_fails(self):      # 正しい包みの base64 の先頭を 'QQ==' に替える（3.9 では途中で止まる形）→ "not_zip"
+def test_mashup_base64_with_line_breaks_passes(self):       # 正しい base64 を 76 文字ごとに改行 → 合格（power_query）
+def test_mashup_newer_unicode_digit_name_counted(self):     # bomb の部品を 'customXml/item\U00016AC0.xml'（UTF-8 の印付き）に置く → "compression_ratio_too_high"
+def test_mashup_metadata_dtd_fails(self):                   # メタデータの節に '<!DOCTYPE x>' → "xml_dtd"
+def test_mashup_trailing_bytes_after_sections_fail(self):   # 4 つの節の後ろに 1 バイト → "not_zip"
+def test_mashup_truncated_entry_fails(self):                # 中の zip の最後の部品のデータを 1 バイト削る → "not_zip"
+def test_mashup_zlib_error_fails(self):                     # 中の部品の deflate のデータを壊す → "not_zip"
+def test_mashup_size_mismatch_fails(self):                  # 宣言の展開後の大きさを 1 増やす → "not_zip"
+def test_mashup_non_utf8_name_fails(self):                  # 中の部品の名前に b"\xff" → "not_zip"
+```
+
+Task 17 のテストのうち、期待が変わるもの（ユーザーの判断 D1 による。理由をテストの注釈に書く）:
+
+- `test_mashup_declared_size_not_trusted`（宣言 0xFFFFFFFF、実際は 10 バイト）→ `not_zip`
+- `test_mashup_inflation_stops_after_declared_size`（宣言 1 KiB、実際は 0 が 1 MiB）→ `not_zip`
+- `test_mashup_counted_past_unknown_method`（方式 12 の部品の後ろに bomb）→ `not_zip`
+- `test_mashup_bad_base64_ignored`（base64 が 1 文字）→ `not_zip`。名前を `test_mashup_bad_base64_fails` に変える
+- `test_mashup_in_other_name_ignored`: `customXml/itemA.xml` は広い形に合うので bomb で落ちる。`customXml/item1.xml.bak` だけで「読まない」ことを確かめる形に直す
+
+- [ ] **Step 2: テストが失敗することを確かめる**
+
+Run: `"$PY" -B -m unittest tests.test_check_workbook -v`
+Expected: 新しいテストと、期待を変えたテストが FAIL（改行の base64 のテストは PASS の見込み）。
+
+- [ ] **Step 3: 実装する**
+
+`_check_package_part` の説明は、`zlib.error` で不合格にする形に合わせて書き直す。
+
+- [ ] **Step 4: README と設計を直す**
+
+`README.md`・`README.ja.md`:
+- `not_zip` の行に「Power Query の部品の中の zip が壊れている（正規の形でない base64、節や部品の長さの食い違い）」を足す。
+- `xml_dtd` の行の「Power Query の部品の中にある zip の部品も探す」を「Power Query の部品の中身（中の zip の部品とメタデータ）も探す」にする。
+- 警告の `power_query` の行に「クエリの中の文字列（M のコード、クエリ名、説明）は確かめない」を足す。
+
+- [ ] **Step 5: テストが通ることを確かめ、判定を外すと落ちることを確かめる**
+
+Run: `"$PY" -B -m unittest discover -s tests -t . -v`
+Expected: すべて PASS（sandbox の中では skip あり）。上の表の判定を 1 つずつ外して、対応するテストが FAIL になることを確かめる（写しで行う）。
+
+- [ ] **Step 6: コミットする**
+
+```bash
+git add scripts/check_workbook.py tests/test_check_workbook.py tests/workbook_factory.py
+git commit -m "fix: fail Power Query packages that Excel would not write"
+git add README.md README.ja.md
+git commit -m "docs: describe the stricter Power Query package check"
+```
+
+<a name="task-23"></a>
+
+### Task 23: 定義とフック（xlide の Python 3.15、bash の `-p`）
+
+**Files:**
+- Modify: `.mcp.json`、`tests/test_manifests.py`、`hooks/hooks.json`、`tests/test_guard_xlide.py`、`README.md`、`README.ja.md`、`docs/runbooks/maintenance.md`
+
+**Interfaces:**
+- `.mcp.json` の `args` は、`"--no-config"` の直後に `"--python", "3.15"` を置く。ほかは変えない。`tests/test_manifests.py` の固定（`XLIDE_ARGS` など）も合わせる。
+- `hooks/hooks.json` の 2 つの `command` は `/bin/bash -p "${CLAUDE_PLUGIN_ROOT}/hooks/guard-xlide.sh"` と `/bin/bash -p "${CLAUDE_PLUGIN_ROOT}/hooks/record-consent.sh"`。`tests/test_guard_xlide.py` の `ManifestTest` の固定も合わせる。
+- `dev/probe/` は確かめのための別のプラグインなので変えない。
+
+- [ ] **Step 1: 固定のテストを先に直し、失敗することを確かめる**
+
+Run: `"$PY" -B -m unittest tests.test_manifests tests.test_guard_xlide -v`
+Expected: 直した固定のテストが FAIL。
+
+- [ ] **Step 2: `.mcp.json` と `hooks/hooks.json` を直す**
+
+- [ ] **Step 3: 文書を直す**
+
+- `README.md`・`README.ja.md` の Requirements: 「xlide は Python 3.15 で動く。手元になければ、uv が初回の起動で取得する（取得できない環境では xlide のツールが見えない）」。README に uvx の引数やフックのコマンドを写している所があれば合わせる。
+- `docs/runbooks/maintenance.md`: xlide の Python の版を上げるときは、依存の版を上げるときと同じ確かめ（読み比べと、検査の写しの見直し）を行う、を足す。
+
+- [ ] **Step 4: テストが通ることを確かめる**
+
+Run: `"$PY" -B -m unittest discover -s tests -t . -v && claude plugin validate . --strict`
+Expected: すべて PASS（sandbox の中では skip あり）、通過。
+
+- [ ] **Step 5: コミットする**
+
+```bash
+git add .mcp.json tests/test_manifests.py
+git commit -m "fix: pin xlide to Python 3.15"
+git add hooks/hooks.json tests/test_guard_xlide.py
+git commit -m "fix: start the hook wrappers with bash -p"
+git add README.md README.ja.md docs/runbooks/maintenance.md
+git commit -m "docs: note the Python 3.15 pin and how to raise it"
+```
+
+<a name="task-24"></a>
+
+### Task 24: xlide との読み比べと、人による実行（メインの会話で行う）
+
+- [ ] **Step 1: 3 回目の形を、xlide の読み手と読み比べる**
+
+[Task 15](#task-15) の Step 6 と同じやり方で、`tmp/` にブックを作り、検査の結果と、xlide の環境の python（3.15）で pyofficeeditor と pyopenvba に読ませた結果を並べる。形: `<!-->` の中の非表示のシート、`<!-->` の中の不可視の文字、base64 の途中の `=` の中の zip bomb、Unicode の新しい数字の部品名の中の zip bomb、メタデータの節の DTD、Task 20 の表で `strings_not_checked` とした構文。期待: どの形も、検査で不合格になるか、`strings_not_checked` が出る。結果を test-report に書く。
+
+- [ ] **Step 2: 全体のテストを、人が通常のターミナルで実行する**
+
+Run（人）: `WORKBOOK_INTAKE_REQUIRE_SANDBOX=1 "$(xcode-select -p)/usr/bin/python3" -B -m unittest discover -s tests -t . -v`
+Expected: すべて PASS、skip なし。結果を test-report に書く。
+
+- [ ] **Step 3: コミットする**
+
+```bash
+git add docs/work/20261124_workbook-intake/test-report.md
+git commit -m "docs: record the parity check and Seatbelt run after the third review fixes"
+```
+
+その後、[Task 12](#task-12) の Step 1 の続き（4 回目の `/review`）に戻る。

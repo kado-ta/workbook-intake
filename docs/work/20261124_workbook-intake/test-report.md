@@ -158,3 +158,30 @@ Seatbelt に関わる 3 つは、Claude の sandbox の中では `sandbox-exec` 
 - doctor が、受け取り用フォルダ・承認の記録・プラグインのキャッシュに書けないことを確かめない: 受け入れるリスクにあり、README で設定を勧めている。
 - 不可視の文字の一覧に、異体字セレクタやソフトハイフンがない: 文字列の検査は見逃す前提（受け入れるリスク）。異体字セレクタ U+FE0F は絵文字でふつうに使われるので、警告に足すと誤検知が増える。
 - CI の macOS のジョブが、runner の python の持ち主で失敗しうる: PR を作った後に分かる。plan の Task 15 の末尾に、対処を書いてある。
+
+<a name="review-3"></a>
+
+### /review（3 回目、`2d75fc2`）
+
+2 回目の修正（Task 16〜19）の後に、ブランチ全体をもう一度見た。専門のレビュアー 6 つ、Red Team、Claude の敵対的なパスを出し、2 回目の後の差分を重点にした。Codex のパスは、人が通常のターミナルで実行するため、ここでは飛ばした。Testing・Performance・Simplification・State Machines は指摘なし。QA の確かめ（小さな正しい Power Query のブックは `pass` と `power_query`、Power Query の中の zip bomb は `compression_ratio_too_high`、全体のテスト、shellcheck、`claude plugin validate . --strict`）は、どれも期待のとおりだった。
+
+重大な指摘は、どれもレビュアーが xlide の環境（Python 3.15.2）で、検査を外して xlide に読ませるところまで再現した。base64 と `\d` の違いは、主担当も 2 つの Python で確かめた（3.9.6 は `b64decode("QQ==QQ==")` が `b'A'`、3.15.2 は `b'A\x04\x10'`。`\d` は U+16AC0 に 3.9.6 で合わず、3.15.2 で合う）。
+
+| 重さ | 場所 | 内容 | 採否 |
+| --- | --- | --- | --- |
+| 重大 | `scripts/check_workbook.py` | DataMashup の base64 の途中に `=` を入れると、検査（Python 3.9）は途中で止まって何も数えず、xlide（3.13 以降）は全部を戻して展開する（Security と敵対的なパスの両方） | 直す（[Task 22](plan.md#task-22)） |
+| 重大 | `scripts/check_workbook.py` | 部品名の `\d` が合う数字は Unicode の版で違う。Unicode 14 以降の数字の部品名を、検査は読み飛ばし、pyopenvba は読む | 直す（[Task 22](plan.md#task-22)） |
+| 重大 | `scripts/check_workbook.py` | DataMashup の中のメタデータの XML を、検査は見ない。pyopenvba は ElementTree で読み、xlide の expat 2.9.0 は内部実体を入力の 100 倍まで展開する（200 KB から 1,500 万文字） | 直す（[Task 22](plan.md#task-22)）。Task 17 の主担当の判断（メタデータは探さない）は誤りだった |
+| 重大 | `scripts/check_workbook.py` | `<!-->` で始まるコメントを、pyofficeeditor はその場で閉じて後ろを読み、expat は次の `-->` まで読み飛ばす。非表示のシートや文字列を、警告なしで xlide に読ませられる | 直す（[Task 20](plan.md#task-20) で読み方の違いを洗い出し、[Task 21](plan.md#task-21) で直す） |
+| 軽微 | `scripts/check_workbook.py` | pyopenvba の止まる所をまねる方式は、両方の Python の標準ライブラリが同じに動くことに頼る | 直す（[Task 22](plan.md#task-22)。Excel が書かない形をすべて不合格にする） |
+| 軽微 | `.mcp.json` | xlide の Python の版を固定していない。調査と読み比べは 3.15.2 で行った | 直す（[Task 23](plan.md#task-23)。`--python 3.15`） |
+| 軽微 | `hooks/hooks.json` | bash は、スクリプトの PATH の固定より前に、環境の `BASH_ENV` を読み、環境から渡された関数を取り込む | 直す（[Task 23](plan.md#task-23)。`/bin/bash -p`。bash 3.2 で効くことを主担当が確かめた） |
+| 軽微 | 設計、README | 設計は Power Query の部品の文字列を見ると書くが、見ているのは base64 の文字の並びだけ | 文書を直す（[Task 22](plan.md#task-22)。M のコードは確かめない、という 1 回目の判断は変えない） |
+| 軽微 | README、テスト | 日本語の言い回し 2 か所、`unsafe_part_name` の行の不足、Seatbelt のテストが EACCES でも拒否と数えうること | 直した（`77dd89c`、`1fb2760`） |
+
+各 Task のレビューで先送りにした軽微な指摘は、主担当が仕分けた。上の表で直したものと、2 回目までに直ったもののほかは、直さない（主担当の判断）。どれも拒否の側に倒れるか、見た目だけか、plan の形のままのテストである。
+
+- 拒否の側に倒れるもの: 中身のない zip は検査を通るが xlide が読めない。deflate した空のディレクトリのエントリは `unsafe_part_name`。暗号化の bit と bit 5・6 の組は `not_zip`。作った 32 MB の部品で 779 MB・9.2 秒。正規表現は作った入力で遅い（時間切れで拒否）。中の zip のエントリの数に上限がない（32 MB の中で数十万、増え方は線形）。
+- 見た目と書き方: テストと `.mcp.json` に引数の写しがある。`check()` が `os.path.getsize` を 3 回呼ぶ。中の zip の展開の規則が `_check_part` の写しになっている。長い import の行。
+- テストの形: plan の形のままで、規則を 1 つずつは固定していないテスト（`canonical_path` の部分、doctor の uid の規則）。変更の前から通っていたテスト。大文字小文字を区別しない APFS を前提にするテスト。
+- CI: ジョブの時間の上限と同時実行の設定がない。Dependabot の github-actions に待ち時間がない。

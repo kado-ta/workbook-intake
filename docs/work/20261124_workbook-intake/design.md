@@ -26,6 +26,7 @@ created: 2026-11-24
 - 2026-11-25: メインの会話が Bash（`unzip` など）で受け取り用フォルダのファイルを直接読めると分かった。入力の確認と検査を迂回できるため、[直接の読み込みを止める](#direct-read)を足した。あわせて、検査の結果を人に見せる方法を、Bash での検査から、フックが検査して会話に返す形に変えた（[流れ](#flow)・[入力の確認](#consent)）。
 - 2026-11-25: `/review` で、検査（標準ライブラリの `zipfile` と expat）と xlide（pyofficeeditor の独自の zip と XML の読み手など、4 通りの読み手）が、同じファイルを違う形で読むことが分かった。検査には綺麗に見せて、xlide には別の部品や属性を読ませられる（[research-xlide-parsing.md](research-xlide-parsing.md)）。[検査](#checker)を、読み手が食い違わない zip の形だけを通し、XML の部品を名前ではなく中身で選び、名前空間を外したローカル名で見る形に変えた。[フック](#hook)は、正規形でないパスを拒否する。[前提の確認](#doctor)は、python3 の持ち主も確かめる。
 - 2026-11-25: 2 回目の `/review` で、検査の大きさの上限が外側の zip にしか効かないと分かった。xlide（pyopenvba）は、Power Query の部品の中にあるもう 1 段の zip を、宣言の大きさまで展開する。[検査](#checker)は、その中の zip も同じ上限で数え、展開の合計の上限を 1 GB から 256 MB に下げる（xlide は XML の約 31 倍のメモリを使うため。計測は [test-report](test-report.md#review-2)）。[検査の Seatbelt](#sandbox-profile) は、ほかのプロセスの情報も読ませない。VBA の展開、すべてのスコープの `disableAllHooks`、ほかのプラグインのフック、`uvx` を PATH から探すことを、[受け入れるリスク](#risks)に足した（ユーザーの判断）。
+- 2026-11-26: 3 回目の `/review` で、検査（Command Line Tools の Python 3.9）と xlide（uvx が選ぶ Python、調べたのは 3.15.2）の標準ライブラリの違いと、pyofficeeditor の独自の XML の読み手と expat の違いで、検査を外せると分かった（[test-report](test-report.md#review-3)）。Power Query の部品の中の zip は、pyopenvba の止まる所をまねるのをやめ、Excel が書かない形をすべて不合格にする（[検査](#checker)）。pyofficeeditor と expat で読み方が違う XML の構文は `strings_not_checked` にする。xlide の Python は 3.15 に固定し（[xlide の定義](#xlide-def)）、フックの bash は `-p` で動かす（[フック](#hook)）。Power Query の中の文字列（M のコード、クエリ名）は確かめないことを、文書で正しく書く（ユーザーの判断）。
 
 <a name="intent"></a>
 
@@ -252,11 +253,14 @@ workbook-intake/
 
 <a name="mcp-definition"></a>
 
+<a name="xlide-def"></a>
+
 ### xlide の定義（`.mcp.json`）
 
 - サーバー名は `xlide`。ツール名は `mcp__plugin_workbook-intake_xlide__xlide_<名前>` になる。
 - コマンドは `uvx`。引数は次のとおり。
   - `--no-config`
+  - `--python 3.15`（2026-11-26 に足した。xlide の読み方の調査と読み比べをした Python の版に固定する。uv は、その版がなければ初回の起動で取得する）
   - `--from xlide-mcp==1.2.4`
   - `--with` で依存を固定: `pyopenvba==6.6.0`、`pyofficeeditor==0.4.1`、`pyvbaanalysis==3.0.3`、`mcp==2.3.0`
   - `xlide-mcp --root ~/workbook-intake --read-only`
@@ -312,8 +316,12 @@ workbook-intake/
 - XML は、名前空間を外したローカル名で見る（pyofficeeditor は名前空間を処理せず、ローカル名の最初の一致で属性を引くため）。expat で読めない部品と、同じ要素に同じローカル名の属性（`xmlns:` の宣言を含む）が 2 つ以上ある部品は、「文字列は未検査」（`strings_not_checked`）とする。その部品のシートの状態や関係も分からないので、警告の意味は「確かめきれなかった部品がある」になる。
 - 非表示のシートは、読んだすべての部品の `sheet` 要素の `state` で数える。外部リンクは、名前と関係の種類に加えて、`externalReference` 要素でも数える。どちらも、関係の先を解決して本体を見分けることに頼らない。
 - 文字列は、`_xHHHH_` を文字に戻した形でも確かめる（xlide は戻してから返すため）。
-- 文字列を見る部品の例: 共有文字列、シートのインラインの文字列、コメントとスレッド形式のコメント、名前の定義、入力規則のメッセージ、文書のプロパティ（`docProps/`）、Power Query の部品（`customXml/`）。Power Query のブックは、中身が長い 1 つの文字列なので、`very_long_string` も出ることがある。
-- Power Query の部品の中の zip（2026-11-25 に足した）: pyopenvba は、`customXml/item<数字>.xml` の部品から base64 を取り出し、その中の zip の部品を、ローカルヘッダーの宣言の大きさまで展開する（[research-xlide-parsing.md](research-xlide-parsing.md)）。検査は、同じ規則で取り出し、中の部品を実際に展開して、外側の部品と同じ合計・圧縮率・DTD の規則で数える。pyopenvba が取り出しに失敗する部品は、展開されないので数えない。`customXml/item<数字>.xml` の部品が 32 MB を超えれば、取り出さずに不合格（`uncompressed_too_large`）にする。
+- 文字列を見る部品の例: 共有文字列、シートのインラインの文字列、コメントとスレッド形式のコメント、名前の定義、入力規則のメッセージ、文書のプロパティ（`docProps/`）。Power Query の部品（`customXml/`）は、XML の文字としては見るが、中身は base64 の文字の並びなので、クエリの中の文字列（M のコード、クエリ名、説明）は確かめない（1 回目の判断。`power_query` の警告で知らせる。2026-11-26 に書き直した）。Power Query のブックは、中身が長い 1 つの文字列なので、`very_long_string` も出ることがある。
+- Power Query の部品の中の zip（2026-11-25 に足し、2026-11-26 に変えた）: pyopenvba は、`customXml/item<数字>.xml` の部品から base64 を取り出し、その中の zip の部品を、ローカルヘッダーの宣言の大きさまで展開する（[research-xlide-parsing.md](research-xlide-parsing.md)）。検査と xlide は Python の版が違い、標準ライブラリの細かい動き（base64 の途中の `=`、`\d` が合う数字）が違うので、pyopenvba の止まる所をまねず、Excel が書かない形をすべて不合格にする。
+  - 対象の部品: 名前が `customXml/item` で始まり `.xml` で終わるもの（版に依らず、pyopenvba の名前の規則より広い）。32 MB を超えれば、取り出さずに不合格（`uncompressed_too_large`）。
+  - 文字として復号でき（pyopenvba と同じ規則）、`<DataMashup` 要素があれば、その中を確かめる。中の base64 が正規の形（空白を除いて英数字と `+`・`/` だけ、`=` は末尾に 2 つまで、長さは 4 の倍数）でない、4 つの節の長さが合わない、中の zip のヘッダーかデータが途中で切れる、`zlib` のエラー、格納と deflate 以外の方式、展開した長さが宣言と違う、名前が UTF-8 でない、のどれかなら不合格（`not_zip`）。
+  - 中の zip の部品は、実際に展開して、外側の部品と同じ合計・圧縮率・DTD の規則で数える。base64 を戻した全体（メタデータと権限の節を含む）も DTD を探し（`xml_dtd`）、大きさを合計に数える。pyopenvba はメタデータの XML を ElementTree で読み、xlide の expat は内部実体を入力の 100 倍まで展開するため（3 回目の `/review` で確かめた）。
+- pyofficeeditor の XML の読み手と expat で、構文の読み方が違う形（2026-11-26 に足した）: 中身が `>` か `->` で始まるコメント（`<!-->`）を、pyofficeeditor はその場で閉じ、expat は次の `-->` まで読む。このような形を含む部品は `strings_not_checked` にする。ほかの構文の違いは、[plan の Task 20](plan.md#task-20) の調査で洗い出し、同じく扱う。
 - `.xlsb` の文字列は二進の形式なので、初版では見ない。「文字列は未検査」と警告に書く。
 - 指示らしい文言は、英語と日本語の短い一覧で探す（例: 「ignore previous」「system prompt」「前の指示を無視」）。見逃しも誤検知もある前提で、件数だけを返す。
 - XML は、`<!DOCTYPE`・`<!ENTITY` を先に調べてから読む。読む量にも上限を置く。
@@ -337,6 +345,7 @@ workbook-intake/
 
 - matcher は `mcp__.*__xlide_.*`。xlide のツール名はすべて `xlide_` で始まるので、どの名前で定義された xlide にも当たる。`onFailure: "block"`、timeout は 30 秒。
 - macOS の `/bin/bash` 3.2 と python3 で動かす。入力を読めないときは拒否する（fail closed）。
+- bash は `-p` で起動する（2026-11-26 に足した）。環境の `BASH_ENV` のファイルと、環境から渡された関数を読まないため（bash 3.2 で確かめた）。シェルの中では PATH を `/usr/bin:/bin` に固定する。
 - 拒否の理由は、固定の文と、固定の語彙（拒否の理由、検査の不合格と警告の語彙）だけにする。引数やファイル由来の文字列を入れない。
 - 判定の順:
   1. ツール名が `mcp__plugin_workbook-intake_xlide__` で始まらない → 拒否。プラグイン以外で定義された xlide は使わせない。
@@ -541,7 +550,7 @@ README に書くこと:
 ## 完了条件
 
 - 検査とフックのテストが通る。shellcheck が通る。
-- 検査と xlide の読み方の違いを突くファイル（[research-xlide-parsing.md](research-xlide-parsing.md) で確かめた形）は、検査で不合格になるか、xlide が読むものと同じ警告か「文字列は未検査」の警告になる。自動のテストで確かめ、主な形は xlide 1.2.4 の読み手とも読み比べる（2026-11-25 に足した）。
+- 検査と xlide の読み方の違いを突くファイル（[research-xlide-parsing.md](research-xlide-parsing.md) で確かめた形）は、検査で不合格になるか、xlide が読むものと同じ警告か「文字列は未検査」の警告になる。自動のテストで確かめ、主な形は xlide 1.2.4 の読み手とも読み比べる（2026-11-25 に足した）。3 回目の `/review` で見つかった形（`<!-->` のコメント、base64 の途中の `=`、Unicode の新しい数字の部品名、メタデータの節の DTD）も、Python 3.15 の xlide と読み比べる（2026-11-26 に足した）。
 - 実機で、次を確かめる。
   - メインの会話から xlide のツールを呼ぶと、止まる。
   - 入力の確認を承認していないファイルを渡すと、止まる。
