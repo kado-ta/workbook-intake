@@ -4,6 +4,7 @@ import socket
 import subprocess
 import sys
 import tempfile
+import unicodedata
 import unittest
 import zipfile
 from pathlib import Path
@@ -82,6 +83,16 @@ class RunCheckerTest(unittest.TestCase):
     def test_timeout_maps_to_timeout(self):
         r = intake_common.run_checker(self.book(minimal_parts()), timeout=0.001)
         self.assertEqual(r["status"], "timeout")
+
+    def test_checker_accepts_other_spellings(self):
+        # Saved as NFD, checked through the NFC spelling; saved as Book.xlsx, checked as book.xlsx.
+        nfd = unicodedata.normalize("NFD", "データ.xlsx")
+        nfc = unicodedata.normalize("NFC", "データ.xlsx")
+        self.book(minimal_parts(), name=nfd)
+        self.assertEqual(intake_common.run_checker(os.path.join(self.dir, nfc))["status"], "pass")
+        self.book(minimal_parts(), name="Book.xlsx")
+        self.assertEqual(
+            intake_common.run_checker(os.path.join(self.dir, "book.xlsx"))["status"], "pass")
 
 
 @needs_sandbox
@@ -168,6 +179,25 @@ class ProfileTest(unittest.TestCase):
 
     def test_profile_denies_fork(self):
         self.assertDenied("import os\nos.fork()", catch="OSError")
+
+    def test_profile_denies_other_process_arguments(self):
+        # sysctl kern.procargs2 for another process: (CTL_KERN=1, KERN_PROCARGS2=49, pid).
+        sleeper = subprocess.Popen(["/bin/sleep", "60"], stdin=subprocess.DEVNULL)
+
+        def stop():
+            sleeper.kill()
+            sleeper.wait()
+        self.addCleanup(stop)
+        self.assertDenied(
+            "import ctypes\n"
+            "libc = ctypes.CDLL('/usr/lib/libc.dylib', use_errno=True)\n"
+            "mib = (ctypes.c_int * 3)(1, 49, %d)\n"
+            "size = ctypes.c_size_t(0)\n"
+            "if libc.sysctl(mib, 3, None, ctypes.byref(size), None, 0) != 0:\n"
+            "    raise PermissionError(ctypes.get_errno(), 'sysctl denied')" % sleeper.pid)
+
+    def test_profile_denies_reading_through_data_volume(self):
+        self.assertDenied("open(%r).read()" % ("/System/Volumes/Data" + os.path.realpath(self.other)))
 
 
 ERROR = {"status": "error", "failures": [], "warnings": []}

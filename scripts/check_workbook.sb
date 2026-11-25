@@ -28,6 +28,11 @@
 (deny signal)
 (allow signal (target same-sandbox))
 
+; No information about other processes, such as their arguments (sysctl kern.procargs2).
+(deny process-info*)
+(allow process-info* (target self))
+(deny sysctl-read (sysctl-name-prefix "kern.procargs"))
+
 ; Reading file contents is denied by default (metadata such as stat is not blocked).
 ; Allowed: what Python needs to start (the root directory, which libignition opens at
 ; startup, system libraries, locale data, the timezone database, the python3
