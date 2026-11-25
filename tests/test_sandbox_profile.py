@@ -193,8 +193,12 @@ class ProfileTest(unittest.TestCase):
             "libc = ctypes.CDLL('/usr/lib/libc.dylib', use_errno=True)\n"
             "mib = (ctypes.c_int * 3)(1, 49, %d)\n"
             "size = ctypes.c_size_t(0)\n"
+            "import errno\n"
             "if libc.sysctl(mib, 3, None, ctypes.byref(size), None, 0) != 0:\n"
-            "    raise PermissionError(ctypes.get_errno(), 'sysctl denied')" % sleeper.pid)
+            "    e = ctypes.get_errno()\n"
+            "    # Only EPERM means the profile denied it; ESRCH, EINVAL etc. fail the test.\n"
+            "    raise (PermissionError if e == errno.EPERM else OSError)(e, 'sysctl failed')"
+            % sleeper.pid)
 
     def test_profile_denies_reading_through_data_volume(self):
         self.assertDenied("open(%r).read()" % ("/System/Volumes/Data" + os.path.realpath(self.other)))
