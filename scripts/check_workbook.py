@@ -103,16 +103,44 @@ def _unsafe_name(name):
 
 
 def _check_part(zf, info, total):
-    """Stream one part. Returns (failure_or_None, new_total)."""
+    """Stream one part's data bytes. Returns (failure_or_None, new_total).
+
+    Reads the bytes the central directory points at, not what zipfile makes of
+    them: the stream must end exactly at the compressed size, inflate to exactly
+    the declared size and match the declared CRC, so every reader sees the same.
+    """
+    fp = zf.fp
+    fp.seek(info.header_offset + 26)
+    nlen, xlen = struct.unpack("<HH", fp.read(4))
+    fp.seek(info.header_offset + _LOC_LEN + nlen + xlen)
+    stored = info.compress_type == zipfile.ZIP_STORED
+    if stored and info.compress_size != info.file_size:
+        return "not_zip", total
+    inflater = None if stored else zlib.decompressobj(-15)
+    remaining = info.compress_size
     size = 0
+    crc = 0
     tail = b""
-    with zf.open(info) as f:
-        while True:
-            chunk = f.read(READ_CHUNK)
+    while remaining > 0 or (inflater is not None and not inflater.eof):
+        raw = fp.read(min(READ_CHUNK, remaining))
+        if not raw:
+            return "not_zip", total
+        remaining -= len(raw)
+        pieces = [raw]
+        if inflater is not None:
+            pieces = []
+            buf = raw
+            while buf and not inflater.eof:
+                pieces.append(inflater.decompress(buf, READ_CHUNK))
+                buf = inflater.unconsumed_tail
+            if inflater.eof and (buf or inflater.unused_data or remaining):
+                return "not_zip", total
+        for chunk in pieces:
             if not chunk:
-                break
+                continue
             size += len(chunk)
             total += len(chunk)
+            crc = zlib.crc32(chunk, crc)
             if total > MAX_TOTAL_UNCOMPRESSED:
                 return "uncompressed_too_large", total
             if size > RATIO_GRACE_BYTES and size > MAX_RATIO * max(info.compress_size, 1):
@@ -122,6 +150,12 @@ def _check_part(zf, info, total):
             if any(n in window for n in _DTD_NEEDLES):
                 return "xml_dtd", total
             tail = window[-_TAIL:]
+            if size > info.file_size:
+                return "not_zip", total
+        if inflater is not None and not inflater.eof and remaining == 0:
+            return "not_zip", total
+    if size != info.file_size or crc != info.CRC:
+        return "not_zip", total
     return None, total
 
 

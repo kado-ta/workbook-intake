@@ -94,3 +94,30 @@ def write_raw(path, data):
     with open(path, "wb") as f:
         f.write(data)
     return path
+
+
+# field -> (offset in local header, offset in central entry, struct format)
+_ENTRY_FIELDS = {
+    "flags": (6, 8, "<H"), "method": (8, 10, "<H"), "crc": (14, 16, "<I"),
+    "csize": (18, 20, "<I"), "usize": (22, 24, "<I"),
+}
+
+
+def patch_entry(raw, name, central=None, local=None):
+    """Return raw with fields of one entry replaced in its central entry and/or local header."""
+    data = bytearray(raw)
+    body, cd, _n = split_zip(bytes(data))
+    for pos in central_entries(cd):
+        nl = struct.unpack("<H", cd[pos + 28:pos + 30])[0]
+        if bytes(cd[pos + 46:pos + 46 + nl]) != name.encode("utf-8"):
+            continue
+        loc = struct.unpack("<I", cd[pos + 42:pos + 46])[0]
+        base = len(body)
+        for field, value in (central or {}).items():
+            off, fmt = _ENTRY_FIELDS[field][1], _ENTRY_FIELDS[field][2]
+            struct.pack_into(fmt, data, base + pos + off, value)
+        for field, value in (local or {}).items():
+            off, fmt = _ENTRY_FIELDS[field][0], _ENTRY_FIELDS[field][2]
+            struct.pack_into(fmt, data, loc + off, value)
+        return bytes(data)
+    raise KeyError(name)

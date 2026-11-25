@@ -9,6 +9,7 @@ import tempfile
 import zipfile
 import unittest
 import warnings
+import zlib
 from pathlib import Path
 from unittest import mock
 
@@ -18,7 +19,7 @@ sys.path.insert(0, str(ROOT))
 
 import check_workbook  # noqa: E402
 from tests.workbook_factory import (  # noqa: E402
-    assemble_zip, central_entries, minimal_parts, raw_zip, shift_central_offsets,
+    assemble_zip, central_entries, minimal_parts, patch_entry, raw_zip, shift_central_offsets,
     split_zip, write_raw, write_workbook,
 )
 
@@ -537,11 +538,19 @@ class LayoutTest(unittest.TestCase):
         longer["xl/sharedStrings.xml"] += b" " * 64
         lb, cdb, n = split_zip(raw_zip(longer))
         la, cda, _ = split_zip(raw_zip(minimal_parts()))
-        shift_central_offsets(cda, len(lb) + len(cdb))
+        self.assertEqual(len(cda), len(cdb))
+        # zipfile adds the unexplained prefix to every offset, so la's entries
+        # are stored relative to the second copy.
+        shift_central_offsets(cda, len(lb) + len(cdb) - len(la) - len(cda))
         eocd = b"PK\x05\x06" + struct.pack("<HHHHIIH", 0, 0, n, n, len(cdb), len(lb), 0)
-        # A reader that trusts the first central directory sees one set of parts,
-        # a reader that scans from the end sees the other.
-        self.assert_fails(lb + bytes(cdb) + la + bytes(cda) + eocd, "not_zip")
+        raw = lb + bytes(cdb) + la + bytes(cda) + eocd
+        # The built file really splits readers: zipfile reads la's parts, a
+        # reader that goes to the recorded offset reads lb's central directory.
+        with zipfile.ZipFile(io.BytesIO(raw)) as z:
+            self.assertEqual(z.read("xl/sharedStrings.xml"), minimal_parts()["xl/sharedStrings.xml"])
+        at_offset = raw[len(lb):len(lb) + len(cdb)]
+        self.assertEqual(at_offset, bytes(cdb))
+        self.assert_fails(raw, "not_zip")
 
     def test_prefixed_data_fails(self):
         self.assert_fails(b"x" + self.parts_zip(), "not_zip")
@@ -572,6 +581,61 @@ class LayoutTest(unittest.TestCase):
         raw = self.parts_zip()
         self.assertIn(b"[Content_Types].xml", raw)
         self.assert_fails(raw.replace(b"[Content_Types].xml", b"[Content_Types].xmX", 1), "not_zip")
+
+    def stored_book(self, extra_parts=None):
+        parts = minimal_parts()
+        parts.update(extra_parts or {})
+        return raw_zip(parts)
+
+    def test_local_header_values_must_match_central(self):
+        sheet = "xl/worksheets/sheet1.xml"
+        cases = {
+            "crc": {"crc": 1},
+            "method": {"method": 8},
+            "flags": {"flags": 0x2},
+            "csize": {"csize": 1},
+            "usize": {"usize": 1},
+        }
+        for label, local in cases.items():
+            with self.subTest(label=label):
+                raw = patch_entry(self.stored_book(), sheet, local=local)
+                self.assert_fails(raw, "not_zip")
+
+    def test_local_name_mismatch_is_caught_by_layout(self):
+        raw = self.stored_book().replace(b"[Content_Types].xml", b"[Content_Types].xmX", 1)
+        p = os.path.join(self.dir, "book.xlsx")
+        write_raw(p, raw)
+        self.assertEqual(check_workbook._check_layout(p, len(raw)), "not_zip")
+
+    def test_overlapping_entries_fail(self):
+        # Two central entries that point at the same local header.
+        body, cd, n = split_zip(self.stored_book())
+        cd += bytes(cd[:46 + struct.unpack("<H", cd[28:30])[0]])
+        self.assert_fails(assemble_zip(body, cd, n + 1), "not_zip")
+
+    def test_stored_size_mismatch_hides_trailing_bytes(self):
+        base = b"a" * 162
+        raw = self.stored_book({"xl/pad.bin": base + b"<!DOCTYPE x>" + b"b" * 18})
+        raw = patch_entry(raw, "xl/pad.bin", central={"usize": 162, "crc": zlib.crc32(base)},
+                          local={"usize": 162, "crc": zlib.crc32(base)})
+        self.assert_fails(raw, "not_zip")
+
+    def test_deflate_expanding_past_declared_size_fails(self):
+        big = b"\x00" * (20 * 1024 * 1024)
+        buf = io.BytesIO()
+        with zipfile.ZipFile(buf, "w", zipfile.ZIP_DEFLATED) as z:
+            for name, data in minimal_parts().items():
+                z.writestr(name, data)
+            z.writestr("xl/pad.bin", big)
+        crc = zlib.crc32(b"\x00" * 162)
+        raw = patch_entry(buf.getvalue(), "xl/pad.bin", central={"usize": 162, "crc": crc},
+                          local={"usize": 162, "crc": crc})
+        self.assert_fails(raw, "not_zip")
+
+    def test_crc_mismatch_fails(self):
+        raw = patch_entry(self.stored_book(), "xl/sharedStrings.xml",
+                          central={"crc": 1}, local={"crc": 1})
+        self.assert_fails(raw, "not_zip")
 
     def test_unicode_path_extra_fails(self):
         body, cd, n = split_zip(self.parts_zip())
