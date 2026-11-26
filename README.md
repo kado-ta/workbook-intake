@@ -171,7 +171,7 @@ Check statuses: `pass`, `fail`, `error` (output outside the vocabulary or unexpe
 - The check runs on the Command Line Tools Python 3.9.6, with its expat 2.2.8. Seatbelt stops a hijacked check from writing, using the network, or running programs, but it does not protect the verdict itself. Strict decoding of the character encoding, rejection of DTDs, and a 32 MB limit per part narrow what can reach the parser.
 - xlide expands VBA source with no size limit. A workbook with macros (the `vba_project` warning) can use a lot of memory.
 - A crafted file can still make xlide use a lot of time or memory through the tools that stay allowed. Examples (measured values are in the [test report](docs/work/20261124_workbook-intake/test-report.md#review-5)): reading a long shared formula, a row with a huge number of cells, thousands of queries, many VBA line continuations. xlide runs outside the sandbox and has no memory limit. If things get heavy, stop Claude Code and end the xlide process from a normal terminal (for example `pkill -f xlide-mcp`; commands inside the sandbox cannot see it). The heaviest shapes (calculation, static analysis of VBA, regular-expression search) are blocked by the hook.
-- This assumes Claude Code's experimental agent teams (`CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS`) are off. When they are on, the agent that reads the workbook can message other teammates directly.
+- Claude Code's experimental agent teams (`CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS`) must be off. When they are on, the agent that reads the workbook can message other teammates directly, so the hook blocks every xlide call while the variable is set (`agent_teams_enabled`). This check sees only the environment passed to the hook process.
 - `.mcp.json` pins only xlide-mcp and four dependencies. The other dependencies are resolved by uv when it builds the environment, which can happen again on a later start, so a newer version of them can arrive on any start (on purpose, to receive security fixes of the dependencies below).
 - The input confirmation relies on a person answering the AskUserQuestion screen. In an environment where another plugin's hook or an SDK host fills in the answer, an approval can be recorded without a person confirming it.
 - Tool names carry the prefix `mcp__plugin_workbook-intake_xlide__` (for example `mcp__plugin_workbook-intake_xlide__xlide_doctor`). A matcher that names only the server (`mcp__xlide__.*`) does not match them.
@@ -220,6 +220,8 @@ Guard hook denials (`workbook-intake: <reason>`, with failure or warning codes i
 | `unexpected_path_argument` | A path-like argument other than `file_path` |
 | `calculation_not_allowed` | A call that asks for calculation (such as `calculate=true`). xlide's calculation engine can use unbounded memory |
 | `regex_not_allowed` | A call that asks for regular-expression search (`is_regex=true`). xlide runs the given regular expression with no time limit |
+| `query_too_long` | A search `query` longer than 256 characters. The cost of a case-insensitive search grows with the body length times the query length |
+| `agent_teams_enabled` | Agent teams are on (`CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS` is set). Turn them off and start Claude Code again |
 | `missing_file_path` | The tool needs `file_path` |
 | `bad_input` | The hook input could not be read |
 | `outside_intake`, `path_not_absolute`, `intake_dir_invalid`, `not_regular_file`, `unsupported_extension`, `file_too_large` | Same as above |

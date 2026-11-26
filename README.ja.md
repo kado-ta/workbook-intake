@@ -175,7 +175,7 @@ Google スプレッドシートは直接読みません。`.xlsx` でダウン�
 - 検査は、Command Line Tools の Python 3.9.6 と、その expat 2.2.8 で動きます。Seatbelt は、乗っ取られた検査の書き込み・通信・実行を止めますが、判定そのものは守りません。文字コードの厳密な復号、DTD の拒否、1 部品 32 MB の上限で、届く面を狭くしています。
 - VBA のソースは、xlide が上限なしに展開します。マクロのブック（`vba_project` の警告）は、メモリを多く使うことがあります。
 - 細工したファイルで、許可しているツールを通して、xlide が多くの時間やメモリを使うことがまだありえます。例（測った値は[テストレポート](docs/work/20261124_workbook-intake/test-report.md#review-5)にあります）: 長い共有数式を読む、1 行に大量のセルがある、クエリが数千件ある、VBA の行の継続が多い。xlide は sandbox の外で動き、メモリの上限がありません。重くなったら Claude Code を止め、通常のターミナルで xlide のプロセスを終えてください（例: `pkill -f xlide-mcp`。sandbox の中のコマンドからは見えません）。最も重い形（計算、VBA の静的な解析、正規表現の検索）はフックが止めます。
-- エージェントのチーム（実験的な機能、`CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS`）を切った前提です。有効にすると、ブックを読むエージェントがほかの仲間に直接話しかけられることがあります。
+- エージェントのチーム（実験的な機能、`CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS`）は切ってください。有効にすると、ブックを読むエージェントがほかの仲間に直接話しかけられることがあるため、この変数が設定されている間は、フックがすべての xlide の呼び出しを止めます（`agent_teams_enabled`）。この確かめは、フックのプロセスに渡る環境だけを見ます。
 - `.mcp.json` が固定するのは xlide-mcp と 4 つの依存だけです。ほかの依存は、uv が環境を作るときに解決します。後の起動で作り直すこともあるので、新しい版はどの起動でも入りえます（下の依存のセキュリティの修正を受け取るため）。
 - 入力の確認は、AskUserQuestion の画面に人が答えることに頼ります。ほかのプラグインのフックや SDK のホストが答えを埋める環境では、人の確認なしに承認が記録されることがあります。
 - ツール名には `mcp__plugin_workbook-intake_xlide__` が付きます（例: `mcp__plugin_workbook-intake_xlide__xlide_doctor`）。サーバー名だけを書いた matcher（`mcp__xlide__.*`）には当たりません。
@@ -224,6 +224,8 @@ xlide を守るフックの拒否（`workbook-intake: <理由>`。必要なら�
 | `unexpected_path_argument` | `file_path` 以外にパスらしい引数がある |
 | `calculation_not_allowed` | 計算を求める呼び出し（`calculate=true` など）。xlide の計算エンジンは上限なくメモリを使いうるため |
 | `regex_not_allowed` | 正規表現の検索を求める呼び出し（`is_regex=true`）。xlide は渡された正規表現を時間の上限なしに当てるため |
+| `query_too_long` | 256 文字を超える検索の文字列（`query`）。大文字小文字を区別しない検索の手間は、本文の長さと文字列の長さの掛け算で増えるため |
+| `agent_teams_enabled` | エージェントのチームが有効（`CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS` が設定されている）。切ってから Claude Code を起動し直してください |
 | `missing_file_path` | ツールに `file_path` が要る |
 | `bad_input` | フックの入力を読めない |
 | `outside_intake`・`path_not_absolute`・`intake_dir_invalid`・`not_regular_file`・`unsupported_extension`・`file_too_large` | 上の表と同じ |
