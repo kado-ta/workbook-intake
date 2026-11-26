@@ -47,10 +47,13 @@ xlide-mcp か、固定した依存（pyopenvba・pyofficeeditor・pyvbaanalysis�
 
 Dependabot の pip の PR（毎週の版の更新と、脆弱性の修正版を入れる security updates）は、この手順を始める合図として扱い、PR そのものはマージしない。Dependabot が変えるのは写しの `deps/requirements.txt` だけなので、`tests/test_manifests.py` の一致のテストで CI が落ちる。PR のブランチに残りの変更を足してマージすることもしない。CI は通るようになるが、SkillSpector と許可リストの確かめ直しが抜ける（`main` のルールセットは承認を求めないので、止まらない）。この手順を自分のブランチで行い、マージした後、Dependabot の PR が開いたままなら閉じる。
 
-- [ ] 版を上げる。次の 3 か所を同じ版にそろえる。
+- [ ] 版を上げる。次の箇所を同じ版にそろえる。
   - `.mcp.json`
   - `deps/requirements.txt`
   - `dev/probe/workbook-intake/.mcp.json`
+  - `tests/test_manifests.py` の `XLIDE_ARGS`
+  - このファイルの[Python の版の確かめ](#preflight)のコマンド
+  - `README.md` の Maintenance と、`README.ja.md` のメンテナンスの節（xlide-mcp の版）
 - [ ] 前の調査と同じ方法で、新しい版を SkillSpector にかける。業務の情報は書かない。
 - [ ] 許可リスト（`hooks/allowed-tools.txt`）の**すべての**ツールについて、新しい版のソースで次の 5 点を確かめ直す。新しいツールは、許可リストに足すまでフックが止める。しかし、既にあるツールの引数や動きの変化は、名前では止まらないので、全ツールを見る。
   1. 読み取り用か書き込み用か（`paths.py` の `require_writable` を呼ぶか）。
