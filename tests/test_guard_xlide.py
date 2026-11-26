@@ -24,10 +24,11 @@ PASS = {"status": "pass", "failures": [], "warnings": []}
 SESSION = "session-1"
 MARKER = "SECRETMARK"
 READ_TOOL = gx.TOOL_PREFIX + "xlide_list_sheets"
+PLUGIN_SERVER = {"name": "plugin:workbook-intake:xlide", "source": "plugin"}
 
 
 def call(path=None, tool=READ_TOOL, agent=gx.ANALYST_AGENT_TYPE, session=SESSION,
-         extra=None, server=None):
+         extra=None, server=PLUGIN_SERVER):
     tool_input = {} if path is None else {"file_path": path}
     tool_input.update(extra or {})
     data = {"session_id": session, "hook_event_name": "PreToolUse", "tool_name": tool,
@@ -147,10 +148,11 @@ class GuardXlideTest(unittest.TestCase):
             data["mcp_server"] = server
             self.assertDenied(data, "not_plugin_server")
 
-    def test_absent_mcp_server_relies_on_prefix(self):
-        data = call(tool=gx.TOOL_PREFIX + "xlide_doctor")
+    def test_absent_mcp_server_is_denied(self):
+        path = self.consented()
+        data = call(path, server=None)
         self.assertNotIn("mcp_server", data)
-        self.assertEqual(gx.decide(data), ("allow", "ok"))
+        self.assertDenied(data, "not_plugin_server")
 
     def test_denies_tool_not_in_allowlist(self):
         path = self.consented()
@@ -269,6 +271,13 @@ class GuardXlideTest(unittest.TestCase):
         os.rmdir(self.intake)
         os.symlink(real, self.intake)
         self.assertDenied(call(os.path.join(self.intake, "b.xlsx")), "intake_dir_invalid")
+
+    def test_intake_dir_with_colon_is_invalid(self):
+        colon = os.path.join(self.home, "a:b")
+        os.mkdir(colon)
+        write_workbook(os.path.join(colon, "b.xlsx"), minimal_parts())
+        os.environ["WORKBOOK_INTAKE_DIR"] = colon
+        self.assertDenied(call(os.path.join(colon, "b.xlsx")), "intake_dir_invalid")
 
     def test_directory_denied(self):
         d = os.path.join(self.intake, "d.xlsx")

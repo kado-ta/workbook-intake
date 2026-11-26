@@ -211,7 +211,8 @@ def resolve_in_intake(path):
     if not os.path.isabs(path):
         return None, "path_not_absolute"
     folder = intake_dir()
-    if not os.path.isabs(folder) or folder == "/" \
+    # xlide splits --root on ":" into several roots.
+    if ":" in folder or not os.path.isabs(folder) or folder == "/" \
             or os.path.islink(folder) or not os.path.isdir(folder) \
             or os.path.realpath(folder) == "/":
         return None, "intake_dir_invalid"

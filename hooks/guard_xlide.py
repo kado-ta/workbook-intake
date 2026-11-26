@@ -82,11 +82,10 @@ def decide_detail(hook_input):
     tool_name = hook_input.get("tool_name")
     if not isinstance(tool_name, str) or not tool_name.startswith(TOOL_PREFIX):
         return "deny", "not_plugin_server", []
-    if "mcp_server" in hook_input:
-        server = hook_input["mcp_server"]
-        if not isinstance(server, dict) or server.get("name") != MCP_SERVER_NAME \
-                or server.get("source") != MCP_SERVER_SOURCE:
-            return "deny", "not_plugin_server", []
+    server = hook_input.get("mcp_server")
+    if not isinstance(server, dict) or server.get("name") != MCP_SERVER_NAME \
+            or server.get("source") != MCP_SERVER_SOURCE:
+        return "deny", "not_plugin_server", []
     if os.environ.get("CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS"):
         return "deny", "agent_teams_enabled", []
     kind = load_allowlist().get(tool_name[len(TOOL_PREFIX):])
