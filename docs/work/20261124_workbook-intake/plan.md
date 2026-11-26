@@ -957,7 +957,7 @@ git commit -m "docs: record manual verification of workbook-intake"
 
 ### Task 12: レビューと PR の準備
 
-- [x] **Step 1: `/review` を実行し、指摘への対応を決める。直したら、全体のテストを実行し直す。** 1 回目の結果と採否は [test-report のレビュー](test-report.md#review-1)。小さな指摘は `be03451` で直した。検査と xlide の読み方の違いなどは、[Task 13](#task-13)〜[Task 15](#task-15) で直す（ユーザーの判断、2026-11-25）。Task 15 の後に、`/review` をもう一度実行してから Step 2 に進む。2 回目の結果と採否は [test-report のレビュー](test-report.md#review-2)。小さな指摘は `fe3b14c`・`e4ad15b`・`25108c0` で直した。残りは [Task 16](#task-16)〜[Task 19](#task-19) で直す（ユーザーの判断、2026-11-25）。Task 19 の後に、`/review` を 3 回目として実行してから Step 2 に進む。3 回目の結果と採否は [test-report のレビュー](test-report.md#review-3)。小さな指摘は `77dd89c`・`1fb2760` で直した。残りは [Task 20](#task-20)〜[Task 24](#task-24) で直す（ユーザーの判断、2026-11-26）。Task 24 の後に、`/review` を 4 回目として実行してから Step 2 に進む。4 回目の結果と採否は [test-report のレビュー](test-report.md#review-4)。小さな指摘は `5d36800` で直した。残りは [Task 25](#task-25)〜[Task 28](#task-28) で直す（ユーザーの判断、2026-11-26）。Task 28 の後に、`/review` を 5 回目として実行してから Step 2 に進む。
+- [x] **Step 1: `/review` を実行し、指摘への対応を決める。直したら、全体のテストを実行し直す。** 1 回目の結果と採否は [test-report のレビュー](test-report.md#review-1)。小さな指摘は `be03451` で直した。検査と xlide の読み方の違いなどは、[Task 13](#task-13)〜[Task 15](#task-15) で直す（ユーザーの判断、2026-11-25）。Task 15 の後に、`/review` をもう一度実行してから Step 2 に進む。2 回目の結果と採否は [test-report のレビュー](test-report.md#review-2)。小さな指摘は `fe3b14c`・`e4ad15b`・`25108c0` で直した。残りは [Task 16](#task-16)〜[Task 19](#task-19) で直す（ユーザーの判断、2026-11-25）。Task 19 の後に、`/review` を 3 回目として実行してから Step 2 に進む。3 回目の結果と採否は [test-report のレビュー](test-report.md#review-3)。小さな指摘は `77dd89c`・`1fb2760` で直した。残りは [Task 20](#task-20)〜[Task 24](#task-24) で直す（ユーザーの判断、2026-11-26）。Task 24 の後に、`/review` を 4 回目として実行してから Step 2 に進む。4 回目の結果と採否は [test-report のレビュー](test-report.md#review-4)。小さな指摘は `5d36800` で直した。残りは [Task 25](#task-25)〜[Task 28](#task-28) で直す（ユーザーの判断、2026-11-26）。Task 28 の後に、`/review` を 5 回目として実行してから Step 2 に進む。5 回目の結果と採否は [test-report のレビュー](test-report.md#review-5)。小さな指摘は `62d094e` で直した。残りは [Task 29](#task-29)〜[Task 32](#task-32) で直す（ユーザーの判断、2026-11-26）。Task 32 の後に、`/review` を 6 回目として実行してから Step 2 に進む。
 - [ ] **Step 2: `/security-review` を実行する（外部からの入力と権限の境界に触れるため）。**
 - [ ] **Step 3: Codex のレビューを行う（必須。ユーザーの指定）。** 人が通常のターミナルで `codex review` と、challenge（変更前と比べた後退と、壊れる入力を挙げてもらう。プロンプトは Claude が書く）を実行する。結果は、CLAUDE.md の Skill routing の手順で読み、test-report に記録してから採否を整理する。直したら、全体のテストを実行し直す。上限は 5 回。
 - [ ] **Step 4: 作業文書を締める。** design.md・plan.md・research・test-report の `status` を `done` にしてコミットする。
@@ -1801,3 +1801,140 @@ git commit -m "docs: record the Seatbelt run after the fourth review fixes"
 ```
 
 その後、[Task 12](#task-12) の Step 1 の続き（5 回目の `/review`）に戻る。
+
+<a name="review5-fixes"></a>
+
+## 5 回目の `/review` の指摘の修正（Task 29〜32）
+
+5 回目の `/review` の結果と採否は [test-report](test-report.md#review-5)。計算エンジンへの道はすべて閉じていた。ほかに、ファイルの中身だけで xlide が多くの時間やメモリを使う形が、残る 17 のツールで見つかった。ユーザーの判断（2026-11-26）:
+
+- D1: 最も重い `xlide_analyze` と、使い道のなくなる `xlide_rules` を外し、`is_regex` が `false` でない呼び出しを拒否する。残りの形は、測った値と一緒に受け入れるリスクと README に書き、runbook に確かめを足す。
+- D2: 固定しない下の依存のことを README に書く。
+- D3: xlide が読めない `.xltx`・`.xltm` を受け付けない。
+- D4: スキルは名前を付けずにエージェントを起動し、README にエージェントのチームを切った前提であることを書く。runbook の、通常のターミナルでのテストの実行は、きれいな複製で行う。
+
+設計は 2026-11-26 の 3 つ目の改訂で直した（[design.md の改訂](design.md#revisions)）。検査の語彙は増やさない。フックの拒否の理由に `regex_not_allowed` を足す。
+
+<a name="task-29"></a>
+
+### Task 29: フック（`xlide_analyze`・`xlide_rules` を外し、正規表現の検索を止める）
+
+**Files:**
+- Modify: `hooks/guard_xlide.py`、`hooks/allowed-tools.txt`、`agents/excel-analyst.md`、`tests/test_guard_xlide.py`、`README.md`、`README.ja.md`、`skills/analyze/SKILL.md`、`docs/runbooks/maintenance.md`
+
+**Interfaces:**
+- `decide_detail` は、`calculate` の確かめのすぐ後に、`tool_input.get("is_regex", False) is not False` なら `("deny", "regex_not_allowed", [])` を返す。値の型は問わない。
+- `hooks/allowed-tools.txt` から `xlide_analyze file` と `xlide_rules nofile` の行を消す。`reviewed-for:` は変えない。
+- `agents/excel-analyst.md` の `tools` から 2 つを消し、読む順の 6 番目を「モジュールの一覧 → 手続きの一覧 → 要るモジュールの本文」にする。
+
+- [ ] **Step 1: ほかに届く道がないことを確かめる**
+
+xlide-mcp 1.2.4 のソースで、残る許可リストのツールのうち、pyvbaanalysis の `analyze_project`（条件付きコンパイルの評価）に届くものと、呼び出し元の文字列を正規表現として使う引数を挙げる。分かっているのは `xlide_analyze` と、`xlide_search_modules` の `is_regex`。ほかにあれば、実装の前に止めて主担当に報告する。
+
+- [ ] **Step 2: 失敗するテストを書く**
+
+```python
+def test_regex_denied(self):            # extra={"is_regex": v} の v = True, "true", 1, None → "regex_not_allowed"（承認と検査の前に止まる）
+def test_regex_false_passes_on(self):   # extra={"is_regex": False} → 今までどおり
+def test_analyze_not_allowed(self):     # tool="xlide_analyze" → "tool_not_allowed"
+def test_rules_not_allowed(self):       # tool="xlide_rules"（file_path なし）→ "tool_not_allowed"
+```
+
+`test_allowlist_format` の期待から `analyze` と `rules` を外す。
+
+- [ ] **Step 3: テストが失敗することを確かめる**
+
+Run: `"$PY" -B -m unittest tests.test_guard_xlide tests.test_skill_and_agent -v`
+Expected: 上の 4 件と、直した `test_allowlist_format` が FAIL（`test_regex_false_passes_on` は PASS の見込み）。
+
+- [ ] **Step 4: 実装する**
+
+- [ ] **Step 5: 文書を直す**
+
+- `README.md`・`README.ja.md`: Troubleshooting に `regex_not_allowed`（「正規表現の検索を求める呼び出し（`is_regex=true`）。xlide は渡された正規表現を時間の上限なしに当てるため」）を足す。使い方の注意 4 に、「VBA の静的な解析と正規表現の検索も使えない（フックが止める）」を足す。
+- `skills/analyze/SKILL.md`: 拒否の理由の一覧に `regex_not_allowed` を足す（`calculation_not_allowed` の次）。
+- `docs/runbooks/maintenance.md`: 許可リストの見直しの 4 点目に、pyvbaanalysis の条件付きコンパイルの評価（`analyze_project`）を足し、1.2.4 で外したツールに `xlide_analyze` を足す。5 点目「1 回の呼び出しの手間が、ファイルの中身に対して線形より速く増えないか（要素ごとに頭から探す、セルごとに導き直す、呼び出し元が渡す正規表現など）」を足す。
+
+- [ ] **Step 6: テストが通ることを確かめ、判定を外すと落ちることを確かめる**
+
+Run: `"$PY" -B -m unittest discover -s tests -t . -v && claude plugin validate . --strict`
+Expected: すべて PASS（sandbox の中では skip あり）、通過。判定を外すと、Step 2 の拒否のテストが FAIL になることを写しで確かめる。
+
+- [ ] **Step 7: コミットする**
+
+1 つ目のコミット（タイトル `fix: remove xlide_analyze and deny regular-expression search`）: `hooks/guard_xlide.py`・`hooks/allowed-tools.txt`・`agents/excel-analyst.md`・`tests/test_guard_xlide.py`。
+2 つ目のコミット（タイトル `docs: describe the tools removed for unbounded resource use`）: `README.md`・`README.ja.md`・`skills/analyze/SKILL.md`・`docs/runbooks/maintenance.md`。
+
+<a name="task-30"></a>
+
+### Task 30: 検査とフック（テンプレートを受け付けない）
+
+**Files:**
+- Modify: `hooks/intake_common.py`、`scripts/check_workbook.py`、`tests/test_check_workbook.py`、`tests/test_guard_xlide.py`、`tests/test_record_consent.py`（拡張子の期待がある所だけ）、`README.md`、`README.ja.md`
+
+**Interfaces:**
+- 2 か所の `SUPPORTED_EXTENSIONS` を `(".xlsx", ".xlsm", ".xlam", ".xlsb")` にする（2 つが同じであることは、既存のテストが確かめる）。
+
+- [ ] **Step 1: 失敗するテストを書く**
+
+```python
+# 検査: test_unsupported_extension_fails の名前の組に ".xltx" と ".xltm" を足す → "unsupported_extension"
+# フックと承認の記録: .xltx と .xltm のファイル → "unsupported_extension"
+```
+
+- [ ] **Step 2: テストが失敗することを確かめ、実装し、通ることを確かめる**
+
+Run: `"$PY" -B -m unittest discover -s tests -t . -v`
+Expected: 実装の前は新しい期待が FAIL、実装の後はすべて PASS（sandbox の中では skip あり）。
+
+- [ ] **Step 3: README を直す**
+
+使い方の 1 の拡張子の一覧から `.xltx`・`.xltm` を外し、「テンプレート（`.xltx`・`.xltm`）は、Excel で `.xlsx` か `.xlsm` に保存し直してから置く（xlide がテンプレートを読めないため）」を足す。
+
+- [ ] **Step 4: コミットする**
+
+1 つ目のコミット（タイトル `fix: stop accepting Excel templates, which xlide cannot read`）: `hooks/intake_common.py`・`scripts/check_workbook.py`・`tests/`。
+2 つ目のコミット（タイトル `docs: ask for templates to be saved as workbooks first`）: `README.md`・`README.ja.md`。
+
+<a name="task-31"></a>
+
+### Task 31: 文書（残る資源のリスク、エージェントのチーム、下の依存、きれいな複製での実行）
+
+**Files:**
+- Modify: `README.md`、`README.ja.md`、`skills/analyze/SKILL.md`、`docs/runbooks/maintenance.md`
+
+- [ ] **Step 1: README の制限（Limitations）に足す**
+
+- 細工したファイルで、xlide が多くの時間やメモリを使いうる。例（[test-report](../work/20261124_workbook-intake/test-report.md#review-5) の測った値）: 長い共有数式を読む、1 行に大量のセルがある、クエリが数千件ある、VBA の行の継続が多い。xlide は sandbox の外で動き、メモリの上限がない。重くなったら Claude Code を止め、xlide のプロセスを終える。最も重い形（計算、VBA の静的な解析、正規表現の検索）はフックが止める。
+- エージェントのチーム（実験的な機能、`CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS`）を切った前提である。有効にすると、ブックを読むエージェントがほかの仲間に直接話しかけられうる。
+- `.mcp.json` が固定するのは xlide-mcp と 4 つの依存だけで、ほかの依存は初回の起動のときの最新を取る（下の依存のセキュリティの修正を受け取るため）。保守（Maintenance）の節の「版を固定している」の文にも同じことを書く。
+
+- [ ] **Step 2: スキルを直す**
+
+`skills/analyze/SKILL.md` の `workbook-intake:excel-analyst` を起動する文に、「名前（name）を付けずに起動する。名前を付けると、エージェントのチームの一員として起動しうるため」を足す。
+
+- [ ] **Step 3: runbook を直す**
+
+`docs/runbooks/maintenance.md` の、通常のターミナルで全体のテストを動かすコマンドを、確かめたコミットのきれいな複製で動かす形にする（追跡していないファイルや `__pycache__` を、sandbox の外で読み込ませないため）。手順: `mktemp -d` で空のディレクトリを作る → `git clone -q --no-local <repo>` でそこに複製する → 複製の中で `git checkout -q <確かめたコミット>` → `WORKBOOK_INTAKE_REQUIRE_SANDBOX=1 "$(xcode-select -p)/usr/bin/python3" -B -m unittest discover -s tests -t . -v`。1 行のコマンドにして書く。
+
+- [ ] **Step 4: 確かめてコミットする**
+
+Run: `"$PY" -B -m unittest discover -s tests -t . && claude plugin validate . --strict`
+Expected: すべて PASS、通過。
+
+コミット（タイトル `docs: record the remaining resource risks, agent teams and unpinned dependencies`）: `README.md`・`README.ja.md`・`skills/analyze/SKILL.md`・`docs/runbooks/maintenance.md`。
+
+<a name="task-32"></a>
+
+### Task 32: 人による実行（メインの会話で行う）
+
+- [ ] **Step 1: 全体のテストを、人がきれいな複製で実行する**
+
+Run（人）: [Task 31](#task-31) の Step 3 で runbook に書いたコマンド（`<repo>` はこのリポジトリ、`<確かめたコミット>` は Task 31 の後の HEAD）
+Expected: すべて PASS、skip なし。結果を test-report に書く。
+
+- [ ] **Step 2: コミットする**
+
+コミット（タイトル `docs: record the Seatbelt run after the fifth review fixes`）: `docs/work/20261124_workbook-intake/test-report.md`。
+
+その後、[Task 12](#task-12) の Step 1 の続き（6 回目の `/review`）に戻る。

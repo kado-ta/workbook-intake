@@ -237,3 +237,31 @@ Seatbelt に関わる 3 つは、Claude の sandbox の中では `sandbox-exec` 
 QA の確かめ（正しい Power Query のブックは `pass` と `power_query`、base64 の途中に `==` を挟んだ zip bomb は `not_zip`、`<!-->` でシートを隠したブックは `strings_not_checked`、全体のテスト、shellcheck、`claude plugin validate . --strict`）は、どれも期待のとおりだった。
 
 各 Task のレビューで先送りにした軽微な指摘のうち、上の表にないものは直さない（主担当の判断）。調査の文書の古い記述（[research-xlide-parsing.md](research-xlide-parsing.md) の 6 節の検査の説明）は、その時点の記録として残す。`total += len(blob)` の位置、`test_manifests.py` の引数の外し方、Task 21 のテストの部品名は、結果を変えない。
+
+<a name="review-5"></a>
+
+### /review（5 回目、`12a9da0`）
+
+4 回目の修正（Task 25〜28）の後に、ブランチ全体をもう一度見た。専門のレビュアー 6 つ、Red Team、Claude の敵対的なパスを出し、4 回目の後の差分と、許可リストに残る 17 のツールを重点にした。Codex のパスは、人が通常のターミナルで実行するため、ここでは飛ばした。Testing・Maintainability・Performance は指摘なし。
+
+計算エンジンへの道は、すべて閉じていた（エンジンを作る 3 か所と、そこに届く xlide の 3 つの呼び出しは、どれもフックか許可リストで止まる）。`calculate` を別の名前で渡す道もなかった。ほかに、ファイルの中身だけで xlide が多くの時間やメモリを使う形が見つかった。敵対的なパスは、xlide の環境（Python 3.15.2）で、本物のツールを呼んで測った。
+
+| 重さ | 場所 | 内容 | 採否 |
+| --- | --- | --- | --- |
+| 重大 | `xlide_analyze` | pyvbaanalysis は `#Const` の文字列の連結を長さの上限なく評価し、1 行ごとに長さが倍になる（Security。主担当が 24 行で確かめた）。入れ子の深さの 2 乗のメモリも使い、8,857 バイトの `.xlsm`（警告は `vba_project` だけ）で 11 秒のうちに 3 GB を超えた（敵対的なパス） | 直す（[Task 29](plan.md#task-29)。`xlide_analyze` と `xlide_rules` を外す） |
+| 重大 | `xlide_search_modules` | `is_regex=true` のとき、渡された正規表現を時間の上限なしに当てる。式の組み方で照合の時間が指数的に伸び、照合の間は xlide 全体が止まる | 直す（[Task 29](plan.md#task-29)。`regex_not_allowed`） |
+| 重大 | `xlide_read_cells` | 共有数式の子をセルごとに親から導き直す。46,716 バイトのブック（警告なし）の 2 万セルで 90 秒・513 MB | 受け入れるリスクに書く（[Task 31](plan.md#task-31)。ユーザーの判断） |
+| 重大 | `xlide_read_cells` | 行のセルを頭から探す。重複した `r` を 10 万個置いた 571 KB のブック（警告なし）で、1 セル約 37 ms（CPU だけ） | 同上 |
+| 重大 | `xlide_list_queries` | クエリの数の 2 乗の時間がかかる（4,000 件で 31 秒） | 同上 |
+| 重大 | `xlide_list_procedures` | 行の継続（`_`）をつなぐ処理が 2 乗の時間になる（20 万行で 3 秒） | 同上 |
+| 重大 | runbook、README、design | 上限なく資源を使う道が、計算エンジンと VBA の展開だけのように読める | 直す（[Task 29](plan.md#task-29)・[Task 31](plan.md#task-31)） |
+| 軽微 | VBA と CFB | `dir` の記録が同じストリームを何度も指す形、フォームのストレージの循環（ソースを読んだだけ） | 受け入れるリスクに書く（[Task 31](plan.md#task-31)） |
+| 軽微 | `hooks/guard_xlide.py` | エージェントのチームが有効なとき、名前を付けて起動したエージェントはチームの一員になり、`SendMessage` が足される。フックは種類の名前でしか見分けない（Red Team。公式ドキュメントによる。入力の形は確かめていない） | 文書とスキルで扱う（[Task 31](plan.md#task-31)） |
+| 軽微 | README、フック、検査 | `.xltx`・`.xltm` を受け付けるが、xlide 1.2.4 は読めない（Red Team） | 直す（[Task 30](plan.md#task-30)） |
+| 軽微 | README | 下の依存（約 25 個）を固定していないことを書いていない（Red Team） | 文書を直す（[Task 31](plan.md#task-31)） |
+| 軽微 | runbook | 通常のターミナルで全体のテストを動かすと、追跡していない `tests/test_*.py` や `__pycache__` も sandbox の外で読み込む（Red Team） | 直す（[Task 31](plan.md#task-31)。きれいな複製で動かす） |
+| 軽微 | `skills/analyze/SKILL.md` | 拒否の理由の一覧に `calculation_not_allowed` がない（State Machines） | 直した（`62d094e`） |
+
+重さは、レビューの規則どおりに付けた（直し方が分かっている敵対的なパスの指摘は重大と数える）。`xlide_read_cells` などの形は、xlide が大きなライブラリで、1 つずつ塞いでも尽きない見込みなので、ユーザーの判断で受け入れるリスクにした。害は Mac が重くなることで、情報が漏れるわけではない。Simplification の助言（`BASH_ENV` のテストの重複、DTD の 2 つのテストを 1 つにまとめる）は採らない。
+
+QA の確かめ（正しい Power Query のブックは `pass` と `power_query`、`calculate=true` の呼び出しはファイルの確かめより前に `calculation_not_allowed`、`xlide_check_cells` は `tool_not_allowed`、全体のテスト、shellcheck、`claude plugin validate . --strict`）は、どれも期待のとおりだった。
