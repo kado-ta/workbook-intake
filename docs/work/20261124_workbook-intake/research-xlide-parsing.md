@@ -172,6 +172,59 @@ pyofficeeditor の読み手は独自の再帰下降のもので（`pyofficeedito
 - VML は正規表現で読む（`shapes.py:327-391`）。Power Query は ElementTree（expat 2.9.0）を使う（`pyopenvba/powerquery/workbook.py:109-113`、`_metadata.py:467-471`）。
 - 検査は、部品を ElementTree の `XMLParser`（expat 2.2.8）に流す（`scripts/check_workbook.py:253-266`）。先頭 4 KiB の中で、BOM と空白の後が `<` でない部品は、XML として読まず、何も数えない（`:148-162,255-259`）。読めない部品は `strings_not_checked` として数える（`:267-272`）。
 
+<a name="xml-syntax"></a>
+
+#### expat との構文の読み方の違い
+
+同じバイト列を、pyofficeeditor の読み手（Python 3.15.2）と検査の expat（Python 3.9.6、expat 2.2.8）に読ませて並べた（2026-11-26）。検査の側は、`_encoding` で符号化を選び、`_new_parser` と `_Collector` をそのまま動かした（`scripts/check_workbook.py:330-339,398-520,589-600`）。`_xml.py` は `pyofficeeditor/_xml.py` のこと。検査の行番号は、この節を書いた時点のもの。
+
+- 違いは 1 つの原因から来る。pyofficeeditor は、コメントの終わりの `-->` を、`<!--` の `<` の位置から探す（`_xml.py:609-610,627-631,717-718`）。そのため、中身が `>` か `->` で始まるコメント（`<!-->`・`<!--->`）は、`<!--` の `--` と重なってその場で閉じ、後ろが要素・属性・文字として読まれる。expat は、次の `-->` までをコメントとして読む。下の表の `strings_not_checked` の 4 行がこれに当たる。
+- 処理命令と CDATA も、`<` の位置から `?>`・`]]>` を探す（`_xml.py:607-608,720-725`）。重なりうるのは `<?>` だけで、expat はこれをエラーにする。`<![CDATA[` の中には `]]>` が現れないので、CDATA は重ならない。
+- 「検査の扱い」は、expat がエラーなく違うものを読む形を `strings_not_checked`、同じに読む形を「なし」とした。expat がエラーにする形は、今の検査で `strings_not_checked` になる（`scripts/check_workbook.py:603-684`）ので表に入れず、表の後に挙げる。
+
+| 構文の例 | pyofficeeditor が読むもの | expat が読むもの | 検査の扱い |
+| --- | --- | --- | --- |
+| `<root><!-->MARKER--></root>` | `<!-->` をコメントとして閉じ、`MARKER-->` を `root` の文字として読む（`_xml.py:627-631,717-719`） | `>MARKER` をコメントとし、`root` の文字は空 | `strings_not_checked` |
+| `<root><!--->MARKER--></root>` | `<!--->` をコメントとして閉じ、`MARKER-->` を `root` の文字として読む（`_xml.py:627-631,717-719`） | `->MARKER` をコメントとし、`root` の文字は空 | `strings_not_checked` |
+| `<sheets><!--><sheet name="MARKER" state="hidden"/>--></sheets>` | `sheet` を要素として、`name` と `state` を属性として読む。`-->` は `sheets` の文字（`_xml.py:717-719,728-729`） | 要素も属性も読まない | `strings_not_checked` |
+| `<!--><root>MARKER</root>--><root>ok</root>` | prolog の `<!-->` をコメントとして閉じ、1 つ目の `root`（文字は `MARKER`）をルート要素とする。残りは epilog として読まない（`_xml.py:609-610,622-624,627-631`） | 1 つ目の `root` までをコメントとし、2 つ目の `root`（文字は `ok`）をルート要素とする | `strings_not_checked` |
+| `<root/><!-->x-->` | ルート要素の後ろは読まない（`_xml.py:624`） | `>x` をコメントとする | なし |
+| `<!-->--><root>x</root>` | `<!-->` で閉じ、`-->` を prolog の文字として読み飛ばす（`_xml.py:602-610`） | `>` をコメントとする。ルート要素は同じ | なし |
+| `<root>MAR<!--x-->KER</root>`、`<root>MAR<?pi x?>KER</root>` | 文字のノードを 2 つ読み、`.text` はつないで `MARKER`（`_xml.py:480-487,717-725`） | 直下の文字をつないで `MARKER`（`scripts/check_workbook.py:499-506`） | なし |
+| `<root><?pi a="?>"?>x</root>` | 最初の `?>` で閉じ、`"?>x` を文字として読む（`_xml.py:723-725`） | 同じ | なし |
+| `<root>MAR<![CDATA[x]]>KER</root>`、`<root><![CDATA[a]]]>b</root>` | 最初の `]]>` で閉じる。`.text` は `MARKER`・`b` で、CDATA は返さない（`_xml.py:487,720-722`） | 同じ所で閉じる。直下の文字のほかに、CDATA の `x`・`a]` も別の値として読む | なし |
+| `<root>&#0000065;&#x000041;</root>`、`<root>&amp;lt;&lt;b&gt;</root>` | `AA`・`&lt;<b>`（`_xml.py:61,110-133`） | 同じ | なし |
+| 値に CRLF・LF・CR・TAB をそのまま含む属性、`&#9;`・`&#10;`・`&#13;` で書いた属性、`<root a="x>y"/>`、`<root a='x"y' b="x'y"/>` | そのままの CRLF は 1 つの空白に、LF・CR・TAB は 1 文字ずつ空白にする。参照で書いたものは文字のまま。`>` と、囲みと違う引用符は値の一部（`_xml.py:157-171,686-694`） | 同じ | なし |
+| 文字の中の CRLF・CR と `&#13;` | CRLF と CR を LF にしてから参照を戻すので、`&#13;` は CR のまま（`_xml.py:220-232`） | 同じ | なし |
+| `<a:b:c x:y:z="1"/>`、`<:a/>`、`<a:/>`、U+00B7 と U+0300 を含む名前 | 名前をそのまま読む。ローカル名は最後の `:` の後ろ（`_xml.py:53-54,174-177`） | 同じ。`_local` も最後の `:` の後ろ（`scripts/check_workbook.py:302-304`） | なし |
+| 終わりのタグの名前の後ろの空白・TAB・改行 | 読み飛ばす（`_xml.py:594-596,706-714`） | 同じ | なし |
+| ルート要素の前後の空白・コメント・処理命令 | prolog と epilog に入れる（`_xml.py:600-624`） | 同じ要素と文字を読む | なし |
+| `<?xml version="1.1"?>`、`<?xml version="2.0"?>` | 処理命令として読み飛ばす（`_xml.py:607-608`）。1.1 でも U+0085・U+2028 は文字のまま | 宣言を受け付け、U+0085・U+2028 も文字のまま読む | なし |
+| UTF-8・UTF-16LE・UTF-16BE の BOM、BOM のない UTF-16（`<\0`・`\0<`）、文字の中の U+FEFF | BOM を落とし、検出した符号化で読む。文字の中の U+FEFF は文字のまま（`_xml.py:65-87,543-547`） | 検査が同じ規則で選んだ符号化で読み、BOM を読み飛ばす（`scripts/check_workbook.py:330-339,589-591`）。U+FEFF は文字のまま | なし |
+
+- 表の 3 行目の形では、今の検査は、隠れた `sheet` の `hidden_sheet` も数えない。`TargetMode="External"` の `Relationship` を同じく隠すと、`external_relationship` も数えない（確かめた）。
+- expat が後ろをコメントとして読めるのは、次の `-->` までに `--` がないときだけで、`--` があればエラーになる（`<root><!-->MARKER<!-- x --></root>` は、2 つ目の `<!--` の `--` でエラー）。
+- expat の `CommentHandler` は、`<!--` と `-->` を除いた中身を渡す。表の `strings_not_checked` の 4 行では、中身が `>` か `->` で始まる（`>MARKER`、`->MARKER`、`><root>MARKER</root>` など）。中身の先頭で見る判定は、「なし」の 2 行（ルート要素の後ろの `<!-->x-->` と、prolog の `<!-->-->`）も数えるが、多めに数えるだけになる。
+
+expat がエラーにする形（今の検査で `strings_not_checked` になる。違いとして扱わない）:
+
+- コメント: 中身に `--` を含むもの（`<!-- a -- b -->`）、`--->` で終わるもの、`<!-->` の後ろに `-->` がないもの（`<root><!-->MARKER</root>`。pyofficeeditor は `MARKER` を文字として読む）。
+- 処理命令: `<?>`（pyofficeeditor は `<?>` で閉じ、後ろを文字として読む。`_xml.py:723-725`）、ターゲットの前に空白があるもの（`<? pi?>`）、要素の中の `<?xml ...?>`、2 つ目の XML 宣言。
+- CDATA: 文字の中の `]]>`（pyofficeeditor は文字として読む）。ルート要素の外の CDATA と、小文字の `<![cdata[` は、pyofficeeditor も拒否する（`_xml.py:617-618,726-727`）。
+- DOCTYPE とほかの宣言: `<!doctype`・`<!DocType`・要素の中の `<!ELEMENT` は、pyofficeeditor も拒否する（`_xml.py:611-618,726-727`）。ルート要素の後ろの `<!doctype x>` は、pyofficeeditor は読まない（`_xml.py:624`）。`<!DOCTYPE` と `<!ENTITY` は、検査が先に `xml_dtd` で不合格にする（`scripts/check_workbook.py:85-89,138-139`）。
+- 参照: `&#X41;`（pyofficeeditor は `&#X41;` のまま残す。`_xml.py:61` の正規表現が小文字の `x` しか見ないので、`:121` の `#X` の分岐には来ない）、`&#0;`・`&#1;`・`&#xD800;`・`&#xFFFE;`（pyofficeeditor はその文字にする。`_xml.py:121-124`）、`&#x110000;`（pyofficeeditor は `.text` を読むときに `ValueError`）、裸の `&`、`&a:b;`、`;` のない `&#65`（pyofficeeditor は文字のまま残す）、コメントで分けた `&am<!---->p;`（pyofficeeditor は `&amp;` の 5 文字として読む）。`&unknown;` は、pyofficeeditor も `.text` を読むときに拒否する（`_xml.py:125-131`）。
+- 属性: 値の中の `<` と裸の `&`、間に空白のない属性、同じ名前の属性の重複（pyofficeeditor は確かめない。`_xml.py:672-694`）。引用符のない値と、値のない属性は、pyofficeeditor も拒否する（`_xml.py:682-687`）。
+- 名前: 数字や `-` で始まる名前、`"` や `<` を含む名前（pyofficeeditor は受け付ける。`_xml.py:53-54`）。U+00A0・U+1680・U+2000・U+3000・U+0085・U+2028・FF を含む名前は、pyofficeeditor も拒否する（名前は Python の `\s` で切れ、`_skip_space` は空白・TAB・CR・LF しか飛ばさない。`_xml.py:53-54,594-596,665-670`）。
+- 終わりのタグ: 大文字小文字や接頭辞が違うもの、名前の後ろの U+00A0、属性を持つものは、pyofficeeditor も拒否する（`_xml.py:706-714`）。
+- 閉じていない要素とタグは、pyofficeeditor も拒否する（`_xml.py:655,676-677,699-701`）。
+- ルート要素の前後: 最初の `<` より前の文字、prolog のコメントの後の文字、ルート要素の後ろの文字と 2 つ目の要素、XML 宣言の前の空白（pyofficeeditor は prolog として読み飛ばすか、epilog に入れる。`_xml.py:600-606,624`）。
+- XML 宣言: `standalone='maybe'`、`version` のないもの、擬似属性の間に空白のないもの、`<?XML`（pyofficeeditor は処理命令として読み飛ばす。`_xml.py:607-608`）。
+- 文字: 2 つ目の BOM（pyofficeeditor は prolog で読み飛ばす）、U+FFFE・U+0001・NUL（pyofficeeditor は文字として読む）。
+
+pyofficeeditor が拒否し、expat が読む形（xlide はその部品を読めないので、違いとして扱わない）:
+
+- 宣言の `encoding` の族が、先頭のバイトから選んだ符号化と違うもの（UTF-8 の中身に `encoding="ISO-8859-1"` や `encoding="UTF-16"`。`_xml.py:549-555`）。検査は、`ParserCreate(encoding=...)` で宣言を上書きして読む（`scripts/check_workbook.py:589-591`）。
+
 <a name="opc"></a>
 
 ## OPC
