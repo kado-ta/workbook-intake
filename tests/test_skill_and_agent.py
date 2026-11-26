@@ -85,6 +85,15 @@ class SkillTest(unittest.TestCase):
         self.assertNotIn(
             "Stop instead if Claude Code was started with `--agent-teams`", self.text)
 
+    def test_skill_stops_on_team_parameters(self):
+        paragraphs = self.text.split("\n\n")
+        signal = [i for i, p in enumerate(paragraphs) if "`team_name`" in p]
+        step1 = [i for i, p in enumerate(paragraphs) if p.startswith("## Step 1")]
+        self.assertTrue(signal)
+        self.assertTrue(step1)
+        self.assertLess(signal[0], step1[0])
+        self.assertIn("Troubleshooting", paragraphs[signal[0]])
+
     def test_file_name_not_in_shell_command(self):
         self.assertNotIn("realpath", self.text)
         self.assertNotIn("<file name>\"", self.text)
