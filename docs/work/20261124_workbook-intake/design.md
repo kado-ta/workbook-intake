@@ -29,6 +29,7 @@ created: 2026-11-24
 - 2026-11-26: 3 回目の `/review` で、検査（Command Line Tools の Python 3.9）と xlide（uvx が選ぶ Python、調べたのは 3.15.2）の標準ライブラリの違いと、pyofficeeditor の独自の XML の読み手と expat の違いで、検査を外せると分かった（[test-report](test-report.md#review-3)）。Power Query の部品の中の zip は、pyopenvba の止まる所をまねるのをやめ、Excel が書かない形をすべて不合格にする（[検査](#checker)）。pyofficeeditor と expat で読み方が違う XML の構文は `strings_not_checked` にする。xlide の Python は 3.15 に固定し（[xlide の定義](#xlide-def)）、フックの bash は `-p` で動かす（[フック](#hook)）。Power Query の中の文字列（M のコード、クエリ名）は確かめないことを、文書で正しく書く（ユーザーの判断）。
 - 2026-11-26: 4 回目の `/review` で、数式の計算（`xlide_read_cells` の `calculate=true` と `xlide_evaluate_formula`）が、小さなブックからでも上限なくメモリを使うと分かった（[test-report](test-report.md#review-4)）。[フック](#hook)は計算を求める呼び出しを拒否し、`xlide_evaluate_formula` を許可リストから外す。`xlide_check_cells` も、エラーのチェックの中でファイルの数式を計算エンジンで評価すると Task 25 のレビューで分かったので、外す（主担当の判断。D1 の範囲）。`--python 3.15` が固定するのはマイナー版だけであることと、実際の版を確かめる手順を書き（[xlide の定義](#xlide-def)・[更新と保守](#maintenance)）、検査が Command Line Tools の expat に頼ることを[受け入れるリスク](#risks)に足した（ユーザーの判断）。
 - 2026-11-26: 5 回目の `/review` で、計算エンジンのほかにも、ファイルの中身だけで xlide が多くの時間やメモリを使う形が見つかった（[test-report](test-report.md#review-5)）。最も重い `xlide_analyze`（VBA の静的な解析）と `xlide_rules` を許可リストから外し、[フック](#hook)は正規表現の検索（`is_regex`）を拒否する。残りの形は[受け入れるリスク](#risks)に書く。xlide が読めない `.xltx`・`.xltm` は受け付けない（[検査](#checker)）。固定しない下の依存、エージェントのチーム、通常のターミナルでテストを動かすときの作業ツリーのことを、README と runbook に書く（ユーザーの判断）。
+- 2026-11-26: 6 回目の `/review` の後（[test-report](test-report.md#review-6)）。[フック](#hook)は、検索の文字列（`query`）が 256 文字を超える呼び出しと、エージェントのチームが有効な環境（`CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS` が空でない）での呼び出しを拒否する。matcher は、プラグインの xlide のすべてのツールに当たる形に広げる（ユーザーの判断）。
 
 <a name="intent"></a>
 
@@ -346,16 +347,18 @@ workbook-intake/
 
 ### フック（`hooks/hooks.json`・`hooks/guard-xlide.sh`）
 
-- matcher は `mcp__.*__xlide_.*`。xlide のツール名はすべて `xlide_` で始まるので、どの名前で定義された xlide にも当たる。`onFailure: "block"`、timeout は 30 秒。
+- matcher は `mcp__plugin_workbook-intake_xlide__.*|mcp__.*__xlide_.*`（2026-11-26 に前半を足した）。後半は、どの名前で定義された xlide にも当たる（xlide のツール名はすべて `xlide_` で始まる）。前半は、プラグインの xlide のツールなら、名前が `xlide_` で始まらなくても当たる。後の版で名前の前提が崩れても、許可リストにないツールとして止まる。`onFailure: "block"`、timeout は 30 秒。
 - macOS の `/bin/bash` 3.2 と python3 で動かす。入力を読めないときは拒否する（fail closed）。
 - bash は `-p` で起動する（2026-11-26 に足した）。環境の `BASH_ENV` のファイルと、環境から渡された関数を読まないため（bash 3.2 で確かめた）。シェルの中では PATH を `/usr/bin:/bin` に固定する。
 - 拒否の理由は、固定の文と、固定の語彙（拒否の理由、検査の不合格と警告の語彙）だけにする。引数やファイル由来の文字列を入れない。
 - 判定の順:
   1. ツール名が `mcp__plugin_workbook-intake_xlide__` で始まらない → 拒否。プラグイン以外で定義された xlide は使わせない。
+     - フックの環境の `CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS` が空でない → `agent_teams_enabled` で拒否（2026-11-26、6 回目の `/review` の後のユーザーの判断）。チームの一員は、名前を付けて起動されたサブエージェントと同じ `agent_type` を持ち、`SendMessage` が必ず足されるので、呼び出し元の判定で見分けられない。
   2. ツール名が許可リストにない → 拒否。xlide の更新で増えたツールも、許可リストに足すまで止まる。
   3. 入力の `agent_type` が `workbook-intake:excel-analyst` でない → 拒否。
      - 入力の引数が計算を求める（`calculate` があり、値が `false` でない）→ `calculation_not_allowed` で拒否（2026-11-26、4 回目の `/review` の後のユーザーの判断）。xlide の計算エンジンは、`SEQUENCE` などの配列を上限なく作るので、小さなブックからでもメモリを使い切りうる。数式の書き方（`LET`・`LAMBDA`・名前の定義）で見分けを迂回できるので、検査では見分けない。
      - 入力の引数が正規表現の検索を求める（`is_regex` があり、値が `false` でない）→ `regex_not_allowed` で拒否（2026-11-26、5 回目の `/review` の後のユーザーの判断）。xlide は渡された正規表現を、時間の上限なしにモジュールの全行に当てる。式の組み方によっては、照合の時間が文字数に対して指数的に伸び、照合の間は xlide 全体が止まる。文字列の検索は残す。
+     - 入力の `query` が 256 文字を超える文字列 → `query_too_long` で拒否（2026-11-26、6 回目の `/review` の後のユーザーの判断）。大文字小文字を区別しない検索の手間は、本文の長さと `query` の長さの積で増える。VBA の名前は 255 文字までなので、ふつうの検索は止まらない。
   4. `file_path` がある → 絶対パスであること、`realpath` が受け取り用フォルダの `realpath` の中であること、通常のファイルであること、拡張子が対象であることを確かめる。`file_path` が正規形であること（前後に空白がない、制御文字がない、`realpath` と NFC で一致する）も確かめ、違えば `path_not_canonical` で拒否する。xlide は前後の空白を取ってから開くので、末尾に空白のある名前のシンボリックリンクで、検査したものと別のファイルを読ませられるため（2026-11-25）。次に、このセッションで、そのファイル（`realpath` と中身の SHA-256 が同じもの）に[入力の確認](#consent)の承認が記録されているかを確かめる。そのうえで、検査を `sandbox-exec -f check_workbook.sb` で実行する。
      - 検査の時間の上限（20 秒）はフックの中で決め、超えたら拒否する。Claude Code の timeout で時間切れになると、呼び出しは止まらないため。
      - 承認がない・不合格・検査できない・時間切れ → 拒否。
@@ -512,7 +515,7 @@ README に書くこと:
 - 入力の確認は、AskUserQuestion の画面を人が見て答えることに頼る。ほかのプラグインの PreToolUse のフックや、SDK のホストが答えを埋めると、人の画面を通らずに承認が記録されうる（推測）。ローカルの設定は信頼の範囲とする（2026-11-25）。
 - 検査は Command Line Tools の Python 3.9.6 で動き、XML を読むのはその expat 2.2.8（2019 年の版）である。検査が乗っ取られると、Seatbelt は書き込み・通信・ほかのプログラムの実行を止めるが、「合格」と出力することは止められない。expat に渡す前に文字コードを厳密に戻し、DTD は解析の前に不合格にし、名前空間を処理せず、1 部品を 32 MB までに絞って、届く面を狭くしている。届く既知の脆弱性は見つかっていない（2026-11-26、4 回目の `/review`）。別の Python を使うと、標準の Python だけで動かすという前提が崩れるので、Apple の更新に頼る（ユーザーの判断）。
 - ファイルの中身だけで、xlide が多くの時間やメモリを使う形が残る（2026-11-26、5 回目の `/review`。ユーザーの判断）。xlide は sandbox の外で、メモリの上限なしに動くので、Mac が重くなり、ほかのアプリが落ちうる。情報が漏れるわけではない。確かめた形: 長い共有数式を `xlide_read_cells` で読む（46 KB のブック、2 万セルで 90 秒・513 MB。警告なし）、1 行に重複したセルを大量に置く（CPU だけ）、クエリを数千件置いて `xlide_list_queries` を呼ぶ（4,000 件で 31 秒、件数の 2 乗で増える）、VBA の行の継続を大量に置く、VBA の `dir` の記録と CFB のストレージの重なり（ソースを読んだだけ）。xlide は大きなライブラリで、1 つずつ塞いでも尽きない見込みなので、最も重い形（`xlide_analyze`、正規表現の検索、計算）だけを止め、残りは README に書く。重くなったら、Claude Code を止めて xlide のプロセスを終える。
-- エージェントのチーム（実験的な機能）を有効にすると、名前を付けて起動したサブエージェントはチームの一員になり、`SendMessage` が必ず足される（公式ドキュメント）。フックは呼び出し元をエージェントの種類の名前でしか見分けないので、チームの一員も xlide を呼べ、ほかの仲間に直接話しかけられる。スキルは名前を付けずに起動し、README にチームを切った前提であることを書く（2026-11-26。チームの一員の入力の形は確かめていない）。
+- エージェントのチーム（実験的な機能）を有効にすると、名前を付けて起動したサブエージェントはチームの一員になり、`SendMessage` が必ず足される（公式ドキュメント）。フックは呼び出し元をエージェントの種類の名前でしか見分けないので、チームの一員も xlide を呼べ、ほかの仲間に直接話しかけられる。スキルは名前を付けずに起動し、README にチームを切った前提であることを書く（2026-11-26。チームの一員の入力の形は確かめていない）。6 回目の `/review` の後に、フックが `CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS` を見て拒否するようにした。この変数がフックの環境に届かない設定の仕方があれば、その場合は文書の前提だけが残る。
 - `.mcp.json` が固定するのは xlide-mcp と 4 つの依存だけで、ほかの約 25 個（pydantic・starlette・cryptography など）は、uvx が環境を作るときの最新を取る。下の依存のセキュリティの修正を受け取るため（[更新と保守](#maintenance)）。これらは sandbox の外で、ブックを読むプロセスの中で動く。README に書く（2026-11-26）。
 - xlide は `uvx` を PATH から探して起動する。PATH に sandbox から書ける場所が先にあると、そこに置かれた `uvx` が sandbox の外で動く。絶対パスにすると、uv の入れ方ごとに場所が違い、使えなくなる。フックのシェルは PATH を `/usr/bin:/bin` に固定した（2026-11-25）。
 
@@ -560,7 +563,7 @@ README に書くこと:
 ## 完了条件
 
 - 検査とフックのテストが通る。shellcheck が通る。
-- 計算を求める呼び出し（`calculate` が `false` でない `xlide_read_cells`）と、許可リストにない `xlide_evaluate_formula`・`xlide_check_cells` は、フックが止める。自動のテストで確かめる（2026-11-26 に足した）。正規表現の検索（`is_regex` が `false` でない）と、許可リストにない `xlide_analyze`・`xlide_rules` も同じく止める（2026-11-26、5 回目の `/review` の後に足した）。
+- 計算を求める呼び出し（`calculate` が `false` でない `xlide_read_cells`）と、許可リストにない `xlide_evaluate_formula`・`xlide_check_cells` は、フックが止める。自動のテストで確かめる（2026-11-26 に足した）。正規表現の検索（`is_regex` が `false` でない）と、許可リストにない `xlide_analyze`・`xlide_rules` も同じく止める（2026-11-26、5 回目の `/review` の後に足した）。256 文字を超える `query`、エージェントのチームが有効な環境での呼び出し、名前が `xlide_` で始まらないプラグインの xlide のツールも止める（2026-11-26、6 回目の `/review` の後に足した）。
 - 検査と xlide の読み方の違いを突くファイル（[research-xlide-parsing.md](research-xlide-parsing.md) で確かめた形）は、検査で不合格になるか、xlide が読むものと同じ警告か「文字列は未検査」の警告になる。自動のテストで確かめ、主な形は xlide 1.2.4 の読み手とも読み比べる（2026-11-25 に足した）。3 回目の `/review` で見つかった形（`<!-->` のコメント、base64 の途中の `=`、Unicode の新しい数字の部品名、メタデータの節の DTD）も、Python 3.15 の xlide と読み比べる（2026-11-26 に足した）。
 - 実機で、次を確かめる。
   - メインの会話から xlide のツールを呼ぶと、止まる。

@@ -957,7 +957,7 @@ git commit -m "docs: record manual verification of workbook-intake"
 
 ### Task 12: レビューと PR の準備
 
-- [x] **Step 1: `/review` を実行し、指摘への対応を決める。直したら、全体のテストを実行し直す。** 1 回目の結果と採否は [test-report のレビュー](test-report.md#review-1)。小さな指摘は `be03451` で直した。検査と xlide の読み方の違いなどは、[Task 13](#task-13)〜[Task 15](#task-15) で直す（ユーザーの判断、2026-11-25）。Task 15 の後に、`/review` をもう一度実行してから Step 2 に進む。2 回目の結果と採否は [test-report のレビュー](test-report.md#review-2)。小さな指摘は `fe3b14c`・`e4ad15b`・`25108c0` で直した。残りは [Task 16](#task-16)〜[Task 19](#task-19) で直す（ユーザーの判断、2026-11-25）。Task 19 の後に、`/review` を 3 回目として実行してから Step 2 に進む。3 回目の結果と採否は [test-report のレビュー](test-report.md#review-3)。小さな指摘は `77dd89c`・`1fb2760` で直した。残りは [Task 20](#task-20)〜[Task 24](#task-24) で直す（ユーザーの判断、2026-11-26）。Task 24 の後に、`/review` を 4 回目として実行してから Step 2 に進む。4 回目の結果と採否は [test-report のレビュー](test-report.md#review-4)。小さな指摘は `5d36800` で直した。残りは [Task 25](#task-25)〜[Task 28](#task-28) で直す（ユーザーの判断、2026-11-26）。Task 28 の後に、`/review` を 5 回目として実行してから Step 2 に進む。5 回目の結果と採否は [test-report のレビュー](test-report.md#review-5)。小さな指摘は `62d094e` で直した。残りは [Task 29](#task-29)〜[Task 32](#task-32) で直す（ユーザーの判断、2026-11-26）。Task 32 の後に、`/review` を 6 回目として実行してから Step 2 に進む。
+- [x] **Step 1: `/review` を実行し、指摘への対応を決める。直したら、全体のテストを実行し直す。** 1 回目の結果と採否は [test-report のレビュー](test-report.md#review-1)。小さな指摘は `be03451` で直した。検査と xlide の読み方の違いなどは、[Task 13](#task-13)〜[Task 15](#task-15) で直す（ユーザーの判断、2026-11-25）。Task 15 の後に、`/review` をもう一度実行してから Step 2 に進む。2 回目の結果と採否は [test-report のレビュー](test-report.md#review-2)。小さな指摘は `fe3b14c`・`e4ad15b`・`25108c0` で直した。残りは [Task 16](#task-16)〜[Task 19](#task-19) で直す（ユーザーの判断、2026-11-25）。Task 19 の後に、`/review` を 3 回目として実行してから Step 2 に進む。3 回目の結果と採否は [test-report のレビュー](test-report.md#review-3)。小さな指摘は `77dd89c`・`1fb2760` で直した。残りは [Task 20](#task-20)〜[Task 24](#task-24) で直す（ユーザーの判断、2026-11-26）。Task 24 の後に、`/review` を 4 回目として実行してから Step 2 に進む。4 回目の結果と採否は [test-report のレビュー](test-report.md#review-4)。小さな指摘は `5d36800` で直した。残りは [Task 25](#task-25)〜[Task 28](#task-28) で直す（ユーザーの判断、2026-11-26）。Task 28 の後に、`/review` を 5 回目として実行してから Step 2 に進む。5 回目の結果と採否は [test-report のレビュー](test-report.md#review-5)。小さな指摘は `62d094e` で直した。残りは [Task 29](#task-29)〜[Task 32](#task-32) で直す（ユーザーの判断、2026-11-26）。Task 32 の後に、`/review` を 6 回目として実行してから Step 2 に進む。6 回目の結果と採否は [test-report のレビュー](test-report.md#review-6)。文書とエージェントの説明の指摘は `1954697` で直した。残りは [Task 33](#task-33)・[Task 34](#task-34) で直す（ユーザーの判断、2026-11-26）。Task 34 の後に、`/review` を 7 回目として実行してから Step 2 に進む。
 - [ ] **Step 2: `/security-review` を実行する（外部からの入力と権限の境界に触れるため）。**
 - [ ] **Step 3: Codex のレビューを行う（必須。ユーザーの指定）。** 人が通常のターミナルで `codex review` と、challenge（変更前と比べた後退と、壊れる入力を挙げてもらう。プロンプトは Claude が書く）を実行する。結果は、CLAUDE.md の Skill routing の手順で読み、test-report に記録してから採否を整理する。直したら、全体のテストを実行し直す。上限は 5 回。
 - [ ] **Step 4: 作業文書を締める。** design.md・plan.md・research・test-report の `status` を `done` にしてコミットする。
@@ -1938,3 +1938,74 @@ Expected: すべて PASS、skip なし。結果を test-report に書く。
 コミット（タイトル `docs: record the Seatbelt run after the fifth review fixes`）: `docs/work/20261124_workbook-intake/test-report.md`。
 
 その後、[Task 12](#task-12) の Step 1 の続き（6 回目の `/review`）に戻る。
+
+<a name="review6-fixes"></a>
+
+## 6 回目の `/review` の指摘の修正（Task 33・34）
+
+6 回目の `/review` の結果と採否は [test-report](test-report.md#review-6)。フックや承認を迂回する道は見つからなかった。文書とエージェントの説明の指摘は `1954697` で直した。ユーザーの判断（2026-11-26）:
+
+- D1: 検索の文字列（`query`）が 256 文字を超える呼び出しを、フックで拒否する。
+- D2: エージェントのチームが有効な環境（`CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS` が空でない）での呼び出しを、フックで拒否する。
+- D3: フックの matcher を、プラグインの xlide のすべてのツールに当たる形に広げる。
+
+設計は 2026-11-26 の 4 つ目の改訂で直した（[design.md の改訂](design.md#revisions)）。検査の語彙は増やさない。フックの拒否の理由に `query_too_long` と `agent_teams_enabled` を足す。
+
+<a name="task-33"></a>
+
+### Task 33: フック（検索の文字列の長さ、エージェントのチーム、matcher）
+
+**Files:**
+- Modify: `hooks/guard_xlide.py`、`hooks/hooks.json`、`tests/test_guard_xlide.py`、`README.md`、`README.ja.md`、`skills/analyze/SKILL.md`、`docs/runbooks/maintenance.md`
+
+**Interfaces:**
+- `MAX_QUERY_CHARS = 256` を `hooks/guard_xlide.py` に置く。`decide_detail` は、`is_regex` の確かめのすぐ後に、`tool_input.get("query")` が文字列で、長さが `MAX_QUERY_CHARS` を超えるなら `("deny", "query_too_long", [])` を返す。文字列でない値は xlide の引数の確かめに任せる。
+- `decide_detail` は、ツール名の接頭辞と server の確かめのすぐ後（許可リストの前）に、`os.environ.get("CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS")` が空でなければ `("deny", "agent_teams_enabled", [])` を返す。
+- `hooks/hooks.json` の PreToolUse の matcher を `mcp__plugin_workbook-intake_xlide__.*|mcp__.*__xlide_.*` にする。
+
+- [ ] **Step 1: 仕様を公式ドキュメントで確かめる**
+
+Claude Code の公式ドキュメント（hooks と settings）で、(a) matcher が正規表現で、`|` による選択が効くこと、(b) settings の `env` とシェルの環境変数が、フックのプロセスの環境に渡ること、を確かめ、出典を報告に書く。(b) が確かめられなければ、README に「この確かめは、フックに渡る環境だけを見る」と書く。
+
+- [ ] **Step 2: 失敗するテストを書く**
+
+```python
+def test_query_too_long_denied(self):          # extra={"query": "a" * 257} → "query_too_long"（承認と検査の前に止まる）
+def test_query_at_limit_passes_on(self):       # extra={"query": "a" * 256} → 今までどおり
+def test_agent_teams_denied(self):             # 環境に CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS="1" → "agent_teams_enabled"
+def test_agent_teams_empty_passes_on(self):    # 同じ変数が "" か無い → 今までどおり
+def test_matcher_covers_plugin_tools(self):    # hooks.json の matcher が "mcp__plugin_workbook-intake_xlide__read_workbook" と "mcp__other__xlide_doctor" に全体一致し、"mcp__other__read" に一致しない
+```
+
+`ManifestTest` の matcher の固定も新しい値にする。
+
+- [ ] **Step 3: テストが失敗することを確かめ、実装し、通ることを確かめる**
+
+Run: `"$PY" -B -m unittest discover -s tests -t . -v && claude plugin validate . --strict`
+Expected: 実装の前は新しいテストが FAIL、実装の後はすべて PASS（sandbox の中では skip あり）、通過。判定を 1 つずつ外すと、対応するテストが FAIL になることを写しで確かめる。
+
+- [ ] **Step 4: 文書を直す**
+
+- `README.md`・`README.ja.md`: Troubleshooting に `agent_teams_enabled`（「エージェントのチームが有効（`CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS`）。切ってから使う」）と `query_too_long`（「検索の文字列が 256 文字を超える」）を足す。制限のエージェントのチームの行を、フックが止めることに合わせて直す。
+- `skills/analyze/SKILL.md`: 拒否の理由の一覧に 2 つを足す。
+- `docs/runbooks/maintenance.md`: 許可リストの見直しの 5 点目に、「呼び出し元の引数の大きさで、手間が掛け算にならないか（1.2.4 の `query` は 256 文字までに止めた）」を足す。
+
+- [ ] **Step 5: コミットする**
+
+1 つ目のコミット（タイトル `fix: deny long search queries and agent teams, and widen the guard matcher`）: `hooks/guard_xlide.py`・`hooks/hooks.json`・`tests/test_guard_xlide.py`。
+2 つ目のコミット（タイトル `docs: describe the new guard refusals`）: `README.md`・`README.ja.md`・`skills/analyze/SKILL.md`・`docs/runbooks/maintenance.md`。
+
+<a name="task-34"></a>
+
+### Task 34: 人による実行（メインの会話で行う）
+
+- [ ] **Step 1: 全体のテストを、人がきれいな複製で実行する**
+
+Run（人）: runbook の通常のターミナルのコマンド（`<確かめたコミット>` は Task 33 の後の HEAD の完全な SHA）
+Expected: すべて PASS、skip なし。結果を test-report に書く。
+
+- [ ] **Step 2: コミットする**
+
+コミット（タイトル `docs: record the Seatbelt run after the sixth review fixes`）: `docs/work/20261124_workbook-intake/test-report.md`。
+
+その後、[Task 12](#task-12) の Step 1 の続き（7 回目の `/review`）に戻る。
