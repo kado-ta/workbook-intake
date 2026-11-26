@@ -59,7 +59,7 @@ GitHub から入れてください。手元の作業用コピーをマーケッ�
 | | すべてのプロジェクトで使う | 1 つのプロジェクトで使う |
 | --- | --- | --- |
 | プラグインの範囲 | `user`（`claude plugin install` の既定） | `local` |
-| 設定を書くファイル | `~/.claude/settings.json` | プロジェクトのフォルダの `.claude/settings.local.json` |
+| 設定を書くファイル | `~/.claude/settings.json` | プロジェクトのフォルダの `.claude/settings.local.json`（または `.claude/settings.json`） |
 
 プロジェクトの settings は、そのプロジェクトで起動したセッションにだけ効きます。プラグインが有効なのに必須の設定がないプロジェクトでは、スキルは最初の確かめで止まります。ただし、スキルを使わずに頼めば、Claude は受取用フォルダを読めます（[制限](#limitations)）。
 
@@ -100,7 +100,7 @@ GitHub から入れてください。手元の作業用コピーをマーケッ�
    claude plugin install workbook-intake@workbook-intake --scope local
    ```
 
-3. [必須の設定](#required-settings)を、そのプロジェクトのフォルダの `.claude/settings.local.json` に足します。代わりにプロジェクトの `.claude/settings.json` に書くと、そのプロジェクトで作業する全員に効きます。
+3. [必須の設定](#required-settings)を、そのプロジェクトのフォルダの `.claude/settings.local.json` に足します。プロジェクトの `.claude/settings.json` に書いても、このプロジェクトで起動したセッションには同じように効きます。違いは共有されるかどうかです。`.claude/settings.local.json` は自分だけのものです（手で作ったときは `.gitignore` に足してください）。`.claude/settings.json` はコミットすると、そのプロジェクトで作業する全員に効きます。
 
 <a name="pin"></a>
 
@@ -129,7 +129,7 @@ GitHub から入れてください。手元の作業用コピーをマーケッ�
 
 ### 必須の設定
 
-選んだ方法の settings のファイル（`~/.claude/settings.json` か、プロジェクトの `.claude/settings.local.json`）に、両方を足します。今の settings に足してください（置き換えないでください）。sandbox は既定で無効なので、`"enabled": true` も必須に含まれます。Claude の Bash と Read ツールが、受取用フォルダを読めなくなります。xlide とフックは sandbox の外で動くので、読めます。probe では `denyRead` だけだと Read ツールが読めたので、両方が要ります。sandbox が Bash による受取用フォルダの読み取りを拒否しないと、スキルは止まります。
+選んだ方法の settings のファイル（`~/.claude/settings.json` か、プロジェクトの `.claude/settings.local.json` か `.claude/settings.json`）に、両方を足します。今の settings に足してください（置き換えないでください）。sandbox は既定で無効なので、`"enabled": true` も必須に含まれます。Claude の Bash と Read ツールが、受取用フォルダを読めなくなります。xlide とフックは sandbox の外で動くので、読めます。probe では `denyRead` だけだと Read ツールが読めたので、両方が要ります。sandbox が Bash による受取用フォルダの読み取りを拒否しないと、スキルは止まります。
 
 ```json
 {
@@ -169,7 +169,7 @@ GitHub から入れてください。手元の作業用コピーをマーケッ�
    claude
    ```
 
-2. 選んだ方法の settings のファイル（`~/.claude/settings.json` か、プロジェクトの `.claude/settings.local.json`）で、2 つの拒否をそのフォルダに変えます。ほかのキーはそのまま残します。変えた後の必須の設定は、次のとおりです。
+2. 選んだ方法の settings のファイル（`~/.claude/settings.json` か、プロジェクトの `.claude/settings.local.json` か `.claude/settings.json`）で、2 つの拒否をそのフォルダに変えます。ほかのキーはそのまま残します。変えた後の必須の設定は、次のとおりです。
 
    ```json
    {

@@ -55,7 +55,7 @@ A plugin cannot ship settings, so you add the [required settings](#required-sett
 | | Every project | One project |
 | --- | --- | --- |
 | Plugin scope | `user` (the default of `claude plugin install`) | `local` |
-| Settings file | `~/.claude/settings.json` | `.claude/settings.local.json` in the project folder |
+| Settings file | `~/.claude/settings.json` | `.claude/settings.local.json` (or `.claude/settings.json`) in the project folder |
 
 Project settings apply only to sessions started in that project. In a project where the plugin is enabled but the required settings are missing, the skill stops at its first checks, but Claude can still read the intake folder when asked directly, without the skill (see [Limitations](#limitations)).
 
@@ -96,7 +96,7 @@ Project settings apply only to sessions started in that project. In a project wh
    claude plugin install workbook-intake@workbook-intake --scope local
    ```
 
-3. Add the [required settings](#required-settings) to `.claude/settings.local.json` in that project folder. Writing them to `.claude/settings.json` in the project instead applies them to everyone who works in the project.
+3. Add the [required settings](#required-settings) to `.claude/settings.local.json` in that project folder. Writing them to the project's `.claude/settings.json` works the same for sessions started in this project. The difference is who gets them: `.claude/settings.local.json` is for you only (if you create it by hand, add it to `.gitignore`), while `.claude/settings.json`, once committed, applies to everyone who works in the project.
 
 <a name="pin"></a>
 
@@ -125,7 +125,7 @@ Then run the `claude plugin install` command of the way you chose. See [plugin m
 
 ### Required settings
 
-Add both to the settings file of the way you chose (`~/.claude/settings.json` or the project's `.claude/settings.local.json`). Add them to your existing settings; do not replace what is there. The sandbox is off by default, so `"enabled": true` is part of the requirement. They stop Claude's Bash and Read tool from reading the intake folder. xlide and the hooks run outside the sandbox and can still read it. In a probe, `denyRead` alone still let the Read tool read, so both are needed. The skill stops unless the sandbox refuses Bash's read of the folder.
+Add both to the settings file of the way you chose (`~/.claude/settings.json`, or the project's `.claude/settings.local.json` or `.claude/settings.json`). Add them to your existing settings; do not replace what is there. The sandbox is off by default, so `"enabled": true` is part of the requirement. They stop Claude's Bash and Read tool from reading the intake folder. xlide and the hooks run outside the sandbox and can still read it. In a probe, `denyRead` alone still let the Read tool read, so both are needed. The skill stops unless the sandbox refuses Bash's read of the folder.
 
 ```json
 {
@@ -165,7 +165,7 @@ For example, to use `~/received`:
    claude
    ```
 
-2. In the settings file of the way you chose (`~/.claude/settings.json` or the project's `.claude/settings.local.json`), point the two deny settings at that folder. Keep your other keys. The required settings then read:
+2. In the settings file of the way you chose (`~/.claude/settings.json`, or the project's `.claude/settings.local.json` or `.claude/settings.json`), point the two deny settings at that folder. Keep your other keys. The required settings then read:
 
    ```json
    {
