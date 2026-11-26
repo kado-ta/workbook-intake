@@ -113,7 +113,7 @@ claude plugin install workbook-intake@workbook-intake
 
 プロジェクトが、同じ `uvx` のコマンドで `xlide` を定義していると、使われるのは片方だけで、プラグインのものは重複として外されます（Claude Code 2.1.331 で確認）。プロジェクトのほうは `"disabledMcpjsonServers": ["xlide"]` で無効にします。
 
-別のフォルダを使うときは、Claude Code を起動する環境で `WORKBOOK_INTAKE_DIR` を設定し、2 つの拒否の設定も同じフォルダに変えます。2 つの設定は、絶対パスの書き方が違います。`sandbox.filesystem.denyRead` は `/abs/path` と書きますが、`Read(...)` の権限の規則は先頭に斜線を 2 つ付けて `Read(//abs/path/**)` と書きます（斜線が 1 つだと、設定ファイルの場所からの相対になります）。ホームフォルダの下なら、どちらも `~/...` と書けます。
+別のフォルダを使うときは、Claude Code を起動する環境で `WORKBOOK_INTAKE_DIR` を設定し、2 つの拒否の設定も同じフォルダに変えます。2 つの設定は、絶対パスの書き方が違います。`sandbox.filesystem.denyRead` は `/abs/path` と書きますが、`Read(...)` の権限の規則は先頭に斜線を 2 つ付けて `Read(//abs/path/**)` と書きます（斜線が 1 つだと、設定ファイルの場所からの相対になります）。ホームフォルダの下なら、どちらも `~/...` と書けます。フォルダのパスに `:` は使えません。xlide が複数のフォルダに分けてしまうため、フックは `intake_dir_invalid` で拒否します。
 
 <a name="usage"></a>
 
@@ -208,7 +208,7 @@ Google スプレッドシートは直接読みません。`.xlsx` でダウン�
 | `question_mismatch` | 固定の質問と違う |
 | `not_confirmed` | 答えが「確認した」「続ける」ではない |
 | `path_not_absolute` | パスが絶対パスではない |
-| `intake_dir_invalid` | 受け取り用フォルダがない、シンボリックリンク、または `/` |
+| `intake_dir_invalid` | 受け取り用フォルダがない、シンボリックリンク、`/`、またはパスに `:` を含む |
 | `outside_intake` | ファイルが受け取り用フォルダの外にある |
 | `not_regular_file` | 通常のファイルではない |
 | `unsupported_extension` | 対象外の拡張子 |
@@ -223,7 +223,7 @@ xlide を守るフックの拒否（`workbook-intake: <理由>`。必要なら�
 
 | 理由 | 意味 |
 | --- | --- |
-| `not_plugin_server` | このプラグインの xlide のツールではない（プロジェクトの xlide など） |
+| `not_plugin_server` | このプラグインの xlide のツールではない（プロジェクトの xlide など）、または Claude Code がサーバーの由来を渡していない（古い版） |
 | `tool_not_allowed` | 許可リスト（`hooks/allowed-tools.txt`）にないツール |
 | `wrong_caller` | 呼び出し元が `workbook-intake:excel-analyst` ではない。スキルの最初の確かめでは、メインの会話からのこの拒否が 1 回返るのが正常 |
 | `unexpected_path_argument` | `file_path` 以外にパスらしい引数がある |

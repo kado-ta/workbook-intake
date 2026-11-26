@@ -109,7 +109,7 @@ I wrote the `failIfUnavailable` and `denyWrite` forms from the documented key na
 
 If a project defines its own `xlide` server with the same `uvx` command, Claude Code uses one of them only, and the plugin's is dropped as a duplicate (observed with Claude Code 2.1.331). Disable the project's with `"disabledMcpjsonServers": ["xlide"]`.
 
-To use another intake folder, set `WORKBOOK_INTAKE_DIR` in the environment that starts Claude Code, and change both deny settings to the same folder. The two settings write absolute paths differently: `sandbox.filesystem.denyRead` takes `/abs/path`, while a `Read(...)` permission rule needs two leading slashes, `Read(//abs/path/**)` (a single leading slash is relative to the settings file). A path under your home folder can be written `~/...` in both.
+To use another intake folder, set `WORKBOOK_INTAKE_DIR` in the environment that starts Claude Code, and change both deny settings to the same folder. The two settings write absolute paths differently: `sandbox.filesystem.denyRead` takes `/abs/path`, while a `Read(...)` permission rule needs two leading slashes, `Read(//abs/path/**)` (a single leading slash is relative to the settings file). A path under your home folder can be written `~/...` in both. The folder path cannot contain a colon (`:`), because xlide splits it into several folders; the hooks refuse it as `intake_dir_invalid`.
 
 <a name="usage"></a>
 
@@ -204,7 +204,7 @@ Consent hook lines (`workbook-intake: consent=...`, `warnings_ack=...`). The lin
 | `question_mismatch` | The question was not the fixed one |
 | `not_confirmed` | The answer was not "Confirmed" or "Continue" |
 | `path_not_absolute` | The path was not absolute |
-| `intake_dir_invalid` | The intake folder is missing, a symlink, or `/` |
+| `intake_dir_invalid` | The intake folder is missing, a symlink, `/`, or its path contains a colon |
 | `outside_intake` | The file is outside the intake folder |
 | `not_regular_file` | Not a regular file |
 | `unsupported_extension` | Extension not supported |
@@ -219,7 +219,7 @@ Guard hook denials (`workbook-intake: <reason>`, with failure or warning codes i
 
 | Reason | Meaning |
 | --- | --- |
-| `not_plugin_server` | The tool is not from this plugin's xlide (for example the project's own xlide) |
+| `not_plugin_server` | The tool is not from this plugin's xlide (for example the project's own xlide), or Claude Code did not pass the server origin (an older version) |
 | `tool_not_allowed` | The tool is not on the allowlist (`hooks/allowed-tools.txt`) |
 | `wrong_caller` | The caller is not `workbook-intake:excel-analyst`. The skill's first check expects this refusal once, from the main conversation |
 | `unexpected_path_argument` | A path-like argument other than `file_path` |
