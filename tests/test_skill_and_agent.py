@@ -93,7 +93,8 @@ class SkillTest(unittest.TestCase):
         self.assertLess(folder[0], read[0])
         self.assertLess(read[0], step1[0])
         self.assertIn("denied by your permission settings", paragraphs[read[0]])
-        self.assertIn('point to README "Configuration" and stop', paragraphs[read[0]])
+        self.assertIn('point to README "Required settings" (under "Install") and stop',
+                      paragraphs[read[0]])
 
     def test_skill_hook_check_uses_prefix(self):
         paragraphs = self.text.split("\n\n")
