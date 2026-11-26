@@ -13,7 +13,6 @@ xlide_list_queries file
 xlide_read_query file
 xlide_list_sheets file
 xlide_read_cells file
-xlide_check_cells file
 xlide_page_setup file
 xlide_doctor nofile
 xlide_rules nofile

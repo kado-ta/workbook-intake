@@ -168,6 +168,11 @@ class GuardXlideTest(unittest.TestCase):
         path = self.consented()
         self.assertEqual(gx.decide(call(path, extra={"calculate": False})), ("allow", "ok"))
 
+    def test_check_cells_not_allowed(self):
+        path = self.consented()
+        self.assertDenied(call(path, tool=gx.TOOL_PREFIX + "xlide_check_cells"),
+                          "tool_not_allowed")
+
     def test_evaluate_formula_not_allowed(self):
         path = self.consented()
         self.assertDenied(call(path, tool=gx.TOOL_PREFIX + "xlide_evaluate_formula"),
@@ -493,7 +498,7 @@ class ManifestTest(unittest.TestCase):
             "project_info", "validate_project", "list_modules", "read_module",
             "list_procedures", "search_modules", "analyze", "list_references", "list_forms",
             "read_form", "list_queries", "read_query", "list_sheets", "read_cells",
-            "check_cells", "page_setup"), "file")
+            "page_setup"), "file")
         expected.update({"doctor": "nofile", "rules": "nofile"})
         self.assertEqual(tools, {"xlide_" + k: v for k, v in expected.items()})
 
