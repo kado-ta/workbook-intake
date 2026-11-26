@@ -52,6 +52,10 @@ created: 2026-11-25
 | 2026-11-26、`2988832` | Claude Code の Bash（sandbox の中） | `"$(xcode-select -p)/usr/bin/python3" -B -m unittest discover -s tests -t .` | 351 件、OK、skip 23 |
 | 2026-11-26、`2988832` | 同上 | `shellcheck hooks/*.sh scripts/*.sh dev/probe/workbook-intake/hooks/*.sh` | 指摘なし |
 | 2026-11-26、`2988832` | 同上 | `claude plugin validate . --strict` | 通過 |
+| 2026-11-26、`e10660f` | 人、通常のターミナル（確かめたコミットのきれいな複製。完全な SHA で取り出した） | [runbook のコマンド](../../runbooks/maintenance.md) | 354 件、すべて OK、skip なし。8 回目の `/review` の修正（[Task 37・38](plan.md#review8-fixes)）の後。スキルの Step 0 で Agent ツールの `name`・`team_name` 引数を見て止まること、`--agent-teams` の文を消したこと、README の承認の記録の説明のテストを含む |
+| 2026-11-26、`e10660f` | Claude Code の Bash（sandbox の中） | `"$(xcode-select -p)/usr/bin/python3" -B -m unittest discover -s tests -t .` | 354 件、OK、skip 23 |
+| 2026-11-26、`e10660f` | 同上 | `shellcheck hooks/*.sh scripts/*.sh dev/probe/workbook-intake/hooks/*.sh` | 指摘なし |
+| 2026-11-26、`e10660f` | 同上 | `claude plugin validate . --strict` | 通過 |
 
 `719943d` から `d093bcb` までに、Seatbelt・フック・検査のコードとそのテスト（`hooks/`、`scripts/check_workbook.*`、`tests/test_sandbox_profile.py`、`tests/test_guard_xlide.py`、`tests/test_record_consent.py`、`tests/test_check_workbook.py`）は変わっていない（`git diff --stat` で確かめた）。そのため、`d093bcb` では人による Seatbelt 付きの実行をやり直していない。`f88e6dd` では、1 回目の `/review` を受けて検査とフックを直したので（[Task 13〜15](plan.md#task-13)）、やり直した。CI（Linux と macOS）の結果は、PR を作った後に足す。
 
