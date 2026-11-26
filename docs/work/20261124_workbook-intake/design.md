@@ -27,7 +27,7 @@ created: 2026-11-24
 - 2026-11-25: `/review` で、検査（標準ライブラリの `zipfile` と expat）と xlide（pyofficeeditor の独自の zip と XML の読み手など、4 通りの読み手）が、同じファイルを違う形で読むことが分かった。検査には綺麗に見せて、xlide には別の部品や属性を読ませられる（[research-xlide-parsing.md](research-xlide-parsing.md)）。[検査](#checker)を、読み手が食い違わない zip の形だけを通し、XML の部品を名前ではなく中身で選び、名前空間を外したローカル名で見る形に変えた。[フック](#hook)は、正規形でないパスを拒否する。[前提の確認](#doctor)は、python3 の持ち主も確かめる。
 - 2026-11-25: 2 回目の `/review` で、検査の大きさの上限が外側の zip にしか効かないと分かった。xlide（pyopenvba）は、Power Query の部品の中にあるもう 1 段の zip を、宣言の大きさまで展開する。[検査](#checker)は、その中の zip も同じ上限で数え、展開の合計の上限を 1 GB から 256 MB に下げる（xlide は XML の約 31 倍のメモリを使うため。計測は [test-report](test-report.md#review-2)）。[検査の Seatbelt](#sandbox-profile) は、ほかのプロセスの情報も読ませない。VBA の展開、すべてのスコープの `disableAllHooks`、ほかのプラグインのフック、`uvx` を PATH から探すことを、[受け入れるリスク](#risks)に足した（ユーザーの判断）。
 - 2026-11-26: 3 回目の `/review` で、検査（Command Line Tools の Python 3.9）と xlide（uvx が選ぶ Python、調べたのは 3.15.2）の標準ライブラリの違いと、pyofficeeditor の独自の XML の読み手と expat の違いで、検査を外せると分かった（[test-report](test-report.md#review-3)）。Power Query の部品の中の zip は、pyopenvba の止まる所をまねるのをやめ、Excel が書かない形をすべて不合格にする（[検査](#checker)）。pyofficeeditor と expat で読み方が違う XML の構文は `strings_not_checked` にする。xlide の Python は 3.15 に固定し（[xlide の定義](#xlide-def)）、フックの bash は `-p` で動かす（[フック](#hook)）。Power Query の中の文字列（M のコード、クエリ名）は確かめないことを、文書で正しく書く（ユーザーの判断）。
-- 2026-11-26: 4 回目の `/review` で、数式の計算（`xlide_read_cells` の `calculate=true` と `xlide_evaluate_formula`）が、小さなブックからでも上限なくメモリを使うと分かった（[test-report](test-report.md#review-4)）。[フック](#hook)は計算を求める呼び出しを拒否し、`xlide_evaluate_formula` を許可リストから外す。`--python 3.15` が固定するのはマイナー版だけであることと、実際の版を確かめる手順を書き（[xlide の定義](#xlide-def)・[更新と保守](#maintenance)）、検査が Command Line Tools の expat に頼ることを[受け入れるリスク](#risks)に足した（ユーザーの判断）。
+- 2026-11-26: 4 回目の `/review` で、数式の計算（`xlide_read_cells` の `calculate=true` と `xlide_evaluate_formula`）が、小さなブックからでも上限なくメモリを使うと分かった（[test-report](test-report.md#review-4)）。[フック](#hook)は計算を求める呼び出しを拒否し、`xlide_evaluate_formula` を許可リストから外す。`xlide_check_cells` も、エラーのチェックの中でファイルの数式を計算エンジンで評価すると Task 25 のレビューで分かったので、外す（主担当の判断。D1 の範囲）。`--python 3.15` が固定するのはマイナー版だけであることと、実際の版を確かめる手順を書き（[xlide の定義](#xlide-def)・[更新と保守](#maintenance)）、検査が Command Line Tools の expat に頼ることを[受け入れるリスク](#risks)に足した（ユーザーの判断）。
 
 <a name="intent"></a>
 
@@ -444,7 +444,7 @@ README に書くこと:
      - 一方で、要約を受け取るメインの会話のほかのツール（Bash・Web の取得など）を誘導されるおそれは残る。
   4. 読んだ値の正確さ。
      - セルの値は、Excel が最後に保存したときの計算結果である。
-     - 再計算（`calculate=true`）と `xlide_evaluate_formula` は、上限なくメモリを使いうるので、フックが止める（2026-11-26）。
+     - 再計算（`calculate=true`）、`xlide_evaluate_formula`、`xlide_check_cells`（エラーのチェック）は、上限なくメモリを使いうるので、フックが止める（2026-11-26）。
      - 古い `.xls` は、macOS では読めない。
      - Claude の読み違いもありうる。顧客に出す数字などは、Excel で照らし合わせる。
 - ウイルス対策のスキャンはしない。使う人の端末のウイルス対策に任せる。
