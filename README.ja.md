@@ -37,12 +37,12 @@
 
 <a name="requirements"></a>
 
-## Requirements（必要なもの）
+## 必要なもの
 
 - macOS（検査に Seatbelt の `sandbox-exec` を使います）。
 - Command Line Tools（`xcode-select --install`。`python3` のため）。
 - [uv](https://docs.astral.sh/uv/)（`uvx`）。
-- Claude Code 2.1.295 以上（フックの `onFailure` のため）。`plugin.json` の `engines` で宣言していますが、Claude Code が `engines` を読むのは 2.1.323 以降なので、それより古い版では強制されません。マーケットプレイスをコミットの SHA で固定する（Install を見てください）には、2.1.324 以上が要ります。
+- Claude Code 2.1.295 以上（フックの `onFailure` のため）。`plugin.json` の `engines` で宣言していますが、Claude Code が `engines` を読むのは 2.1.323 以降なので、それより古い版では強制されません。マーケットプレイスをコミットの SHA で固定する（[インストール](#install)を見てください）には、2.1.324 以上が要ります。
 - xlide は Python 3.15 で動きます。手元になければ、uv が初回の起動で取得します（取得できない環境では xlide のツールが見えません）。固定するのはマイナー版（3.15）だけです。uv が管理する 3.15 があればそれを、なければ PATH の `python3.15` を使います。
 - 初回は、`uvx` が Python と固定した版のパッケージを取得するので、通信が要り、時間がかかります。
 
@@ -50,7 +50,7 @@
 
 <a name="install"></a>
 
-## Install（入れ方）
+## インストール
 
 GitHub から入れてください。手元の作業用コピーをマーケットプレイスにして入れないでください。プラグインがそのフォルダの中でそのまま動き、そこで動く sandbox 付きのセッションから書き換えられうるためです。
 
@@ -193,20 +193,20 @@ GitHub から入れてください。手元の作業用コピーをマーケッ�
 
 <a name="usage"></a>
 
-## Usage（使い方）
+## 使い方
 
 1. ファイルを受取用フォルダに置きます（`.xlsx`・`.xlsm`・`.xlam`・`.xlsb`。100 MiB まで）。テンプレート（`.xltx`・`.xltm`）は、xlide が読めないため受け付けません。Excel で `.xlsx` か `.xlsm` に保存し直してから置いてください。
 2. ファイルの名前を示して、解析を頼みます。例: 「`sales.xlsx` を /workbook-intake:analyze で解析して」。Claude はフォルダの中を一覧できないので、名前を示してください。
 3. スキルが、固定の質問を出します。入力の確認と、検査に警告があるときだけの、警告の確認です。「確認した」「続ける」を選ぶと、フックが記録します。記録が効くのは、このセッションと、そのファイルの同じ中身だけです。
 4. 読み取り専用のサブエージェント `workbook-intake:excel-analyst` が、xlide でブックを読み、要約を返します。
 
-スキルは始まるとき（手順 2 で、何かを尋ねる前に）、まず受取用フォルダの中の存在しないファイル名（`workbook-intake-read-check.xlsx`）を Read で 1 回呼び、Claude Code が権限の設定を理由に拒否したときだけ進みます（`Read(...)` の deny が設定されていることの確かめです）。そのあと、メインの会話から `xlide_doctor` を 1 回呼び、フックが動いていることを確かめます。フックはこの呼び出しを `workbook-intake: wrong_caller` で拒否します。この拒否は正常です。`xlide_doctor` の許可の確認が出たときは、フックが動いていません。「いいえ」を選んでください（許可する選択肢や、今後確認しない選択肢は選ばないでください）。この拒否のほかの結果（結果が返った、許可しなかった、ほかの理由で拒否された）では、スキルは止まります（[Troubleshooting](#troubleshooting) を見てください）。同じところで、Agent ツールに `name` か `team_name` の引数があるときも、スキルは止まります（エージェントのチームが有効です）。
+スキルは始まるとき（手順 2 で、何かを尋ねる前に）、まず受取用フォルダの中の存在しないファイル名（`workbook-intake-read-check.xlsx`）を Read で 1 回呼び、Claude Code が権限の設定を理由に拒否したときだけ進みます（`Read(...)` の deny が設定されていることの確かめです）。そのあと、メインの会話から `xlide_doctor` を 1 回呼び、フックが動いていることを確かめます。フックはこの呼び出しを `workbook-intake: wrong_caller` で拒否します。この拒否は正常です。`xlide_doctor` の許可の確認が出たときは、フックが動いていません。「いいえ」を選んでください（許可する選択肢や、今後確認しない選択肢は選ばないでください）。この拒否のほかの結果（結果が返った、許可しなかった、ほかの理由で拒否された）では、スキルは止まります（[トラブルシューティング](#troubleshooting) を見てください）。同じところで、Agent ツールに `name` か `team_name` の引数があるときも、スキルは止まります（エージェントのチームが有効です）。
 
 Google スプレッドシートは直接読みません。`.xlsx` でダウンロードして受取用フォルダに置いてください（Apps Script は含まれず、Google 独自の関数は Excel と同じには動かないことがあります）。claude.ai の Google Sheets のコネクタは、このプラグインの守りの外です。
 
 <a name="checks"></a>
 
-## Checks（検査）
+## 入力ファイルチェック
 
 検査は、Seatbelt の中で動く Python のスクリプトです。出すのは固定のコードだけで、ファイル由来の文字列は出しません。
 
@@ -246,7 +246,7 @@ Google スプレッドシートは直接読みません。`.xlsx` でダウン�
 
 <a name="limitations"></a>
 
-## Limitations（制限）
+## 制限
 
 - 文字列の検査は見逃すことがあり、誤検知もあります。ウイルス対策ではありません。ウイルス対策は、使う人の端末のものに任せてください。
 - 検査のあと、読むまでにファイルが差し替えられることがあります。受取用フォルダは sandbox の書き込みの範囲の外ですが、sandbox の外のもの（人や、ほかのアプリ）は差し替えられます。`denyWrite` を使ってください。
@@ -275,7 +275,7 @@ Google スプレッドシートは直接読みません。`.xlsx` でダウン�
 
 <a name="troubleshooting"></a>
 
-## Troubleshooting（困ったとき）
+## トラブルシューティング
 
 入力の確認のフックが返す文（`workbook-intake: consent=...`、`warnings_ack=...`）。記録できたときは `consent=recorded; check=<状態>; failures=...; warnings=...` か `warnings_ack=recorded` です。記録されなかったときの `reason=` は次のとおりです。
 
@@ -329,7 +329,7 @@ xlide を守るフックの拒否（`workbook-intake: <理由>`。必要なら�
 
 <a name="maintenance"></a>
 
-## Maintenance（保守）
+## メンテナンス
 
 作者は、プライベートの時間が許す範囲で保守します。定期的な更新も、Issue や PR への返事も、約束はしません。
 
@@ -340,8 +340,8 @@ xlide を守るフックの拒否（`workbook-intake: <理由>`。必要なら�
 
 <a name="license"></a>
 
-## License（ライセンス）
+## ライセンス
 
-MIT。[LICENSE](LICENSE) を見てください。
+MIT ライセンスです。[LICENSE](LICENSE) ファイルを見てください。
 
 [xlide-mcp](https://github.com/WilliamSmithEdward/xlide_mcp) の作者と、その土台のライブラリの作者に感謝します。どれも MIT です。このリポジトリには含まれず、サーバーの起動時に `uvx` が PyPI から取得します。
