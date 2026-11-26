@@ -87,7 +87,7 @@ created: 2026-11-25
 - 拒否の理由は「README の Troubleshooting を参照」と示すが、Claude は README の場所を知らず、`~/.claude/plugins` を探そうとした。人が止めた。
 - uvx が起動できずに xlide の接続に失敗すると、Claude Code はその失敗をしばらく覚えていて、再接続しない（Claude の表示では約 15 分）。
 - 同じセッションで、一度「続ける」を選んだファイルは、後で「やめる」を選んでも、前の警告の確認の記録が残る（記録は追記のみのため。設計からの推論で、この確認では試していない）。スキルは「やめる」で止まるので、スキルを通る使い方では読まれない。
-- チームが有効なときだけ見えるツール（2026-11-26、[Task 37](plan.md#task-37)）: Claude Code 2.1.332 の本体を、起動せずに固定の文字列（`TeamCreate`、`TeamDelete`、`CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS`、`"--agent-teams"`、`team_name`）で探した。チームの判定は `CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS` か `process.argv.includes("--agent-teams")` に、機能の切り替え（`tengu_amber_flint`、既定は有効）を重ねたものだった。`TeamCreate`・`TeamDelete` は、ツールの定義にはなく、警告を省く名前の一覧（`Frame`・`BashOutput` などと並ぶ）にだけあった（UTF-16 でも探した）。この判定で変わるのは、Agent ツールの `name`・`team_name`・`mode` と、ExitPlanMode の `launchSwarm`・`teammateCount` の引数（切れているときはスキーマから外す）、SendMessage の入力の形、添付と説明の文だった。チームが切れているセッションのツールの一覧（後から読み込むツールの一覧を含む）にも、`TeamCreate`・`TeamDelete` はなく、Agent ツールに `name` はなかった。ツールの手がかりは確かめられなかったので、スキルの文を消し、同じ判定で外される Agent ツールの `name`・`team_name` の引数を手がかりにした（ユーザーの判断 D4）。
+- チームが有効なときだけ見えるツール（2026-11-26、[Task 37](plan.md#task-37)）: Claude Code 2.1.332 の本体を、起動せずに固定の文字列（`TeamCreate`、`TeamDelete`、`CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS`、`"--agent-teams"`、`team_name`）で探した。チームの判定は `CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS` か `process.argv.includes("--agent-teams")` に、機能の切り替え（`tengu_amber_flint`、既定は有効）を重ねたものだった。`TeamCreate`・`TeamDelete` は、ツールの定義にはなく、警告を省く名前の一覧（`Frame`・`BashOutput` などと並ぶ）にだけあった（UTF-16 でも探した）。調べた範囲（この判定を取り込むモジュールの 53 か所の呼び出し。別名で書き出した先や、環境変数を直接読むほかの箇所はたどっていない）では、この判定で変わるのは、Agent ツールの `name`・`team_name`・`mode` と、ExitPlanMode の `launchSwarm`・`teammateCount` の引数（切れているときはスキーマから外す）、SendMessage の入力の形、添付、TaskCreate・TaskList などの説明の文だった。実際に見たのは、チームが切れている側だけ（サブエージェントとして動いた、このセッションのツールの一覧。後から読み込むツールの一覧を含む）で、`TeamCreate`・`TeamDelete` はなく、Agent ツールに `name` はなかった。チームが有効な側で引数が残ることは、コードを読んで推したもので、動かしては確かめていない。ツールの手がかりは確かめられなかったので、スキルの文を消し、同じ判定で外される Agent ツールの `name`・`team_name` の引数を手がかりにした（ユーザーの判断 D4）。
 
 <a name="reviews"></a>
 
@@ -330,7 +330,7 @@ QA の確かめ（正しいブックは `pass`、チームの変数があると 
 
 | 重さ | 場所 | 内容 | 採否 |
 | --- | --- | --- | --- |
-| 軽微 | スキル | Step 5 の「`--agent-teams` で起動されているなら止まる」は、モデルが起動の引数を見られないので、何もしない（Red Team と敵対的なパスの両方） | 直す。チームが有効なときだけ見えるツールを手がかりにする（[Task 37](plan.md#task-37)） |
+| 軽微 | スキル | Step 5 の「`--agent-teams` で起動されているなら止まる」は、モデルが起動の引数を見られないので、何もしない（Red Team と敵対的なパスの両方） | 直す。チームが有効なときだけ見えるツールを手がかりにする（[Task 37](plan.md#task-37)）（D4 で Agent ツールの引数に変えた。[実機での確認](#manual)） |
 | 軽微 | `hooks/intake_common.py`、README | 承認の記録（ファイルの実際のパスと SHA-256）は、プラグインのデータの置き場所に、プラグインを外すまで残る。README に書いていない（Red Team） | README に書く（[Task 38](plan.md#task-38)） |
 | 重大 | README | Troubleshooting に、最初の確かめで止まったときの説明がない。`wrong_caller` の行に、確かめでは正常と書いていない（主担当と敵対的なパス） | 直した（`9a01971`） |
 | 重大 | README | `pgrep` の手順が PID を 1 つと見ていた。uvx と、それが起動する Python の両方が当たる（敵対的なパス） | 直した（`9a01971`） |
