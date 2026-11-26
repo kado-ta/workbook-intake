@@ -33,6 +33,7 @@
 4. セルの値は、Excel が最後に保存したときの計算結果です。再計算・数式の評価・セルのエラー検査・VBA の静的な解析・正規表現の検索はできません（フックが止めます）。Claude の読み違いもあります。人に出す数字は Excel で照らし合わせてください。
 5. ファイルを Anthropic に送ってよいかは、所属の規程や契約で決まります。プラグインは、あなたに確かめて答えを記録するだけで、中身の判断はできません。
 6. 確認の答えは、`${CLAUDE_PLUGIN_DATA}/consents/`（`~/.claude/plugins/data/<id>/consents/`。`<id>` はプラグインの識別子の、英数字・`_`・`-` 以外の文字を `-` に置き換えたものです）に、セッションごとに `<セッション ID の SHA-256>.jsonl` というファイルで、平文のまま残ります。各行には、確認を求めたファイルの実際のパス（パスには取引先の名前が入ることがあります）と中身の SHA-256 が入ります。入力の確認の行には、さらに検査の結果と、不合格と警告のコードが入り、警告の確認の行には、さらに警告のコードが入ります。プラグインにこれらを消す処理はありません。Claude Code は、プラグインを最後に入れていた場所から外すときにこのフォルダを消しますが、`--keep-data` を付けた場合は残ります（ほかにも残る場合があります。[plugin uninstall](https://code.claude.com/docs/en/plugins/cli-reference.md#plugin-uninstall) を見てください）。それより前に消すときは、プラグインを使っている Claude Code のセッションがないことを確かめてから、`consents` フォルダを削除してください。フォルダがなくても、次の確認のときに作り直されます。次の分析では、ファイルの確認をもう一度求められます。
+7. 守られるのは、受け取り用フォルダの中のファイルだけです。フォルダの外のコピー（ダウンロード先、メールの添付）とハードリンクは守られず、Claude は別の経路から読めます。コピーではなく、ファイルをフォルダに移してください。
 
 <a name="requirements"></a>
 
@@ -111,7 +112,7 @@ claude plugin install workbook-intake@workbook-intake
 
 `failIfUnavailable` と `denyWrite` の書き方は、動かして確かめた例ではなく、ドキュメントにあるキー名から書いたものです。これらのキーは、[settings の一覧](https://code.claude.com/docs/en/settings-reference.md)（`sandbox.filesystem.denyRead`・`sandbox.filesystem.denyWrite`・`sandbox.failIfUnavailable`・`sandbox.allowUnsandboxedCommands`）と[sandboxing](https://code.claude.com/docs/en/sandboxing.md)にあります。
 
-プロジェクトが、同じ `uvx` のコマンドで `xlide` を定義していると、使われるのは片方だけで、プラグインのものは重複として外されます（Claude Code 2.1.331 で確認）。プロジェクトのほうは `"disabledMcpjsonServers": ["xlide"]` で無効にします。
+プロジェクトが、同じ `uvx` のコマンドで `xlide` を定義していると、使われるのは片方だけで、プラグインのものは重複として外されます（Claude Code 2.1.331 で確認）。プロジェクトのほうは `"disabledMcpjsonServers": ["xlide"]` で無効にします。プラグインが有効な範囲では、サブエージェント（アナリスト）以外からの xlide の呼び出しは、プロジェクト自身の xlide サーバーへの呼び出しを含めて、フックがすべて拒否します。
 
 別のフォルダを使うときは、Claude Code を起動する環境で `WORKBOOK_INTAKE_DIR` を設定し、2 つの拒否の設定も同じフォルダに変えます。2 つの設定は、絶対パスの書き方が違います。`sandbox.filesystem.denyRead` は `/abs/path` と書きますが、`Read(...)` の権限の規則は先頭に斜線を 2 つ付けて `Read(//abs/path/**)` と書きます（斜線が 1 つだと、設定ファイルの場所からの相対になります）。ホームフォルダの下なら、どちらも `~/...` と書けます。フォルダのパスに `:` は使えません。xlide が複数のフォルダに分けてしまうため、フックは `intake_dir_invalid` で拒否します。
 
@@ -119,7 +120,7 @@ claude plugin install workbook-intake@workbook-intake
 
 ## Usage（使い方）
 
-1. ファイルを受け取り用フォルダに置きます（`.xlsx`・`.xlsm`・`.xlam`・`.xlsb`。100 MB まで）。テンプレート（`.xltx`・`.xltm`）は、xlide が読めないため受け付けません。Excel で `.xlsx` か `.xlsm` に保存し直してから置いてください。
+1. ファイルを受け取り用フォルダに置きます（`.xlsx`・`.xlsm`・`.xlam`・`.xlsb`。100 MiB まで）。テンプレート（`.xltx`・`.xltm`）は、xlide が読めないため受け付けません。Excel で `.xlsx` か `.xlsm` に保存し直してから置いてください。
 2. ファイルの名前を示して、解析を頼みます。例: 「`sales.xlsx` を /workbook-intake:analyze で解析して」。Claude はフォルダの中を一覧できないので、名前を示してください。
 3. スキルが、固定の質問を出します。入力の確認と、検査に警告があるときだけの、警告の確認です。「確認した」「続ける」を選ぶと、フックが記録します。記録が効くのは、このセッションと、そのファイルの同じ中身だけです。
 4. 読み取り専用のサブエージェント `workbook-intake:excel-analyst` が、xlide でブックを読み、要約を返します。
@@ -139,13 +140,13 @@ Google スプレッドシートは直接読みません。`.xlsx` でダウン�
 | コード | 意味 |
 | --- | --- |
 | `unsupported_extension` | 対象の拡張子ではない |
-| `file_too_large` | 100 MB を超える |
+| `file_too_large` | 100 MiB を超える |
 | `encrypted` | 暗号化されている |
-| `not_zip` | zip として開けない、または読み手によって読み方が変わりうる zip の形（注釈、前置きのデータ、エントリの隙間や重なり、ZIP64、中央ディレクトリと食い違うローカルヘッダー、Unicode Path の extra、フラグの 5・6 ビット、長さや CRC が中央ディレクトリと違う部品のデータ）。または、Power Query の部品の中の zip が壊れている（正規の形でない base64、節や部品の長さの食い違い） |
-| `too_many_parts` | 部品が 10,000 を超える |
+| `not_zip` | zip として開けない、または読み手によって読み方が変わりうる zip の形（注釈、前置きのデータ、エントリの隙間や重なり、ZIP64、中央ディレクトリと食い違うローカルヘッダー、Unicode Path の extra、フラグの 5・6 ビット、長さや CRC が中央ディレクトリと違う部品のデータ）。または、Power Query の部品の中の zip が壊れている（Base64 の文字の外の文字がある、パディングの位置が違う、復号できない長さである、または節や部品の長さが食い違う） |
+| `too_many_parts` | 外側のパッケージの部品が 10,000 を超える。Power Query の部品の中の zip には部品の数の上限はなく、展開の合計と圧縮率の上限で大きさを抑える |
 | `unsafe_part_name` | 部品名に `..`・絶対パス・`\`・ドライブ名（`C:` など）・NUL・空のセグメント・`.` のセグメント・中身のあるディレクトリ名がある、文字コードの印と合わない名前がある、または大文字小文字だけが違う名前が重なる |
-| `uncompressed_too_large` | 展開の合計が 256 MB を超える（Power Query の部品の中の zip を含む）。または、名前が `customXml/item*.xml` の部品（`item1.xml`・`itemProps1.xml` など）が 32 MB を超える |
-| `compression_ratio_too_high` | 1 つの部品（Power Query の部品の中の zip の部品を含む）が 100 倍を超えて圧縮されている |
+| `uncompressed_too_large` | 展開の合計が 256 MiB を超える（Power Query の部品の中の zip を含む）。または、名前が `customXml/item*.xml` の部品（`item1.xml`・`itemProps1.xml` など）が 32 MiB を超える |
+| `compression_ratio_too_high` | 1 つの部品（Power Query の部品の中の zip の部品を含む）が 100 倍を超えて圧縮されている。100 KiB 以下の部品には、この上限を使わない |
 | `xml_dtd` | 部品に `<!DOCTYPE` か `<!ENTITY` がある。XML に限らずすべての部品を探し、Power Query の部品の中身（中の zip の部品とメタデータ）も探すので、SVG の画像や、HTML を書き出すマクロでも出ることがある |
 
 警告のコード（確認してから続けます）:
@@ -156,7 +157,7 @@ Google スプレッドシートは直接読みません。`.xlsx` でダウン�
 | `external_link` | 外部のブックへのリンクがある |
 | `data_connection` | データ接続がある |
 | `external_relationship` | ファイルの外を指す関係がある |
-| `power_query` | Power Query（DataMashup）がある。クエリの中の文字列（M のコード、クエリ名、説明）は確かめない |
+| `power_query` | どれかの部品に `DataMashup` の印がある（Power Query の意味）。クエリの中の文字列（M のコード、クエリ名、説明）は確かめない |
 | `embedded_object` | 埋め込みのオブジェクトがある |
 | `activex` | ActiveX がある |
 | `hidden_sheet` | 非表示のシートがある |
@@ -176,7 +177,7 @@ Google スプレッドシートは直接読みません。`.xlsx` でダウン�
 - 検査のあと、読むまでにファイルが差し替えられることがあります。受け取り用フォルダは sandbox の書き込みの範囲の外ですが、sandbox の外のもの（人や、ほかのアプリ）は差し替えられます。`denyWrite` を使ってください。
 - 推奨設定がない環境では、スキルを通らない使い方（ほかのスキルや、Bash で読むよう直接頼むこと）で、受け取り用フォルダを読めます。`doctor.sh` はスキルの中でしか動きません。
 - `disableAllHooks` は、どのスコープの設定（リポジトリの `.claude/settings.json` を含む）でもフックを止められます（管理設定のフックは除く）。プラグインのフックも止まる見込みです（推測で、確かめていません）。管理設定の `allowManagedHooksOnly` も、自分で入れたプラグインのフックを止めます。そのときも、プラグインの xlide のサーバーは読み込まれます。止まると、メインの会話から xlide を呼べ、入力の確認も検査も効きません。止まっている環境では使わないでください。
-- 検査は、Command Line Tools の Python 3.9.6 と、その expat 2.2.8 で動きます。Seatbelt は、乗っ取られた検査の書き込み・通信・実行を止めますが、判定そのものは守りません。文字コードの厳密な復号、DTD の拒否、1 部品 32 MB の上限で、届く面を狭くしています。
+- 検査は、Command Line Tools の Python 3.9.6 と、その expat 2.2.8 で動きます。Seatbelt は、乗っ取られた検査の書き込み・通信・実行を止めますが、判定そのものは守りません。文字コードの厳密な復号、DTD の拒否、1 部品 32 MiB の上限で、届く面を狭くしています。
 - VBA のソースは、xlide が上限なしに展開します。マクロのブック（`vba_project` の警告）は、メモリを多く使うことがあります。
 - 細工したファイルで、許可しているツールを通して、xlide が多くの時間やメモリを使うことがまだありえます。例（測った値は[テストレポート](docs/work/20261124_workbook-intake/test-report.md#review-5)にあります）: 長い共有数式を読む、1 行に大量のセルがある、クエリが数千件ある、VBA の行の継続が多い。xlide は sandbox の外で動き、メモリの上限がありません。重くなったら Claude Code を止め、通常のターミナルで xlide のプロセスを終えてください（sandbox の中のコマンドからは見えません）。`pgrep -fl 'xlide-mcp.*--read-only'` でプロセスを一覧し（uvx と、それが起動する Python の両方が出ます）、出た PID をすべて `kill` で止めます。最も重い形（計算、VBA の静的な解析、正規表現の検索）はフックが止めます。
 - エージェントのチーム（実験的な機能、`CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS`）は切ってください。有効にすると、ブックを読むエージェントがほかの仲間に直接話しかけられることがあるため、この変数が空でない値（`0` を含む）を持つ間は、フックがすべての xlide の呼び出しを止めます（`agent_teams_enabled`）。この確かめは、フックのプロセスに渡る環境だけを見ます。起動の引数 `--agent-teams` でもエージェントのチームは有効になり、そのときフックは見分けられません。その代わりに、スキルは、Agent ツールに `name` か `team_name` の引数があると止まります。Claude Code は、エージェントのチームが有効な間だけ、これらの引数を足します（Claude Code 2.1.332 の本体を読んで確かめました）。`--agent-teams` を付けて Claude Code を起動しないでください。
@@ -212,7 +213,7 @@ Google スプレッドシートは直接読みません。`.xlsx` でダウン�
 | `outside_intake` | ファイルが受け取り用フォルダの外にある |
 | `not_regular_file` | 通常のファイルではない |
 | `unsupported_extension` | 対象外の拡張子 |
-| `file_too_large` | 100 MB を超える |
+| `file_too_large` | 100 MiB を超える |
 | `path_not_canonical` | パスが実体のパスと違う、または前後に空白か制御文字がある |
 | `file_changed` | 検査のあいだにファイルが変わった |
 | `consent_store_unavailable` | 記録を書けない（プラグインのデータの置き場所がない、または記録を最後まで書けなかった） |

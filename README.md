@@ -29,6 +29,7 @@ Files you let Claude read are sent to Anthropic as model input, and may also sta
 4. Cell values are the results Excel saved last. Recalculation, formula evaluation, cell error checks, static analysis of VBA and regular-expression search are not available (the hook blocks them). Claude can also misread. Check figures you pass on against Excel.
 5. Whether you may send a file to Anthropic depends on your organization's rules and contracts. The plugin only asks you and records the answer. It cannot judge the content.
 6. Your confirmations are recorded in `${CLAUDE_PLUGIN_DATA}/consents/` (`~/.claude/plugins/data/<id>/consents/`, where `<id>` is the plugin identifier with every character other than a letter, digit, `_` or `-` replaced by `-`), one `<SHA-256 of the session ID>.jsonl` file per session, in plain text. Each line holds the real path of the file you were asked about (the path can contain a business partner's name) and its SHA-256. A line for an input confirmation also holds the check status and the failure and warning codes; a line for a warning confirmation also holds the warning codes. Nothing in the plugin deletes these files. Claude Code deletes the folder when you uninstall the plugin from the last place it is installed, unless you use `--keep-data` (it also stays in a few other cases; see [plugin uninstall](https://code.claude.com/docs/en/plugins/cli-reference.md#plugin-uninstall)). To delete them earlier, remove the `consents` folder while no Claude Code session is using the plugin. A missing folder is created again on the next confirmation, and the next analysis asks you to confirm the file again.
+7. Only the file in the intake folder is protected. A copy outside the folder (a download location, an email attachment) and a hard link to the file are not protected: Claude can read them through other paths. Move the file into the folder instead of copying it.
 
 <a name="requirements"></a>
 
@@ -107,7 +108,7 @@ Recommended:
 
 I wrote the `failIfUnavailable` and `denyWrite` forms from the documented key names, not from a tested example. These sandbox keys are listed in the [settings reference](https://code.claude.com/docs/en/settings-reference.md) (`sandbox.filesystem.denyRead`, `sandbox.filesystem.denyWrite`, `sandbox.failIfUnavailable`, `sandbox.allowUnsandboxedCommands`) and in [sandboxing](https://code.claude.com/docs/en/sandboxing.md).
 
-If a project defines its own `xlide` server with the same `uvx` command, Claude Code uses one of them only, and the plugin's is dropped as a duplicate (observed with Claude Code 2.1.331). Disable the project's with `"disabledMcpjsonServers": ["xlide"]`.
+If a project defines its own `xlide` server with the same `uvx` command, Claude Code uses one of them only, and the plugin's is dropped as a duplicate (observed with Claude Code 2.1.331). Disable the project's with `"disabledMcpjsonServers": ["xlide"]`. While the plugin is enabled, the hook denies every call to xlide that does not come from the analyst subagent, including calls to a project's own xlide server.
 
 To use another intake folder, set `WORKBOOK_INTAKE_DIR` in the environment that starts Claude Code, and change both deny settings to the same folder. The two settings write absolute paths differently: `sandbox.filesystem.denyRead` takes `/abs/path`, while a `Read(...)` permission rule needs two leading slashes, `Read(//abs/path/**)` (a single leading slash is relative to the settings file). A path under your home folder can be written `~/...` in both. The folder path cannot contain a colon (`:`), because xlide splits it into several folders; the hooks refuse it as `intake_dir_invalid`.
 
@@ -115,7 +116,7 @@ To use another intake folder, set `WORKBOOK_INTAKE_DIR` in the environment that 
 
 ## Usage
 
-1. Put the file in the intake folder (`.xlsx`, `.xlsm`, `.xlam`, `.xlsb`; up to 100 MB). Templates (`.xltx`, `.xltm`) are not accepted because xlide cannot read them: save them as `.xlsx` or `.xlsm` in Excel first, then put the saved file in the folder.
+1. Put the file in the intake folder (`.xlsx`, `.xlsm`, `.xlam`, `.xlsb`; up to 100 MiB). Templates (`.xltx`, `.xltm`) are not accepted because xlide cannot read them: save them as `.xlsx` or `.xlsm` in Excel first, then put the saved file in the folder.
 2. Ask Claude to analyze it by file name, for example "Analyze `sales.xlsx` with /workbook-intake:analyze". Claude cannot list the folder, so name the file.
 3. The skill shows two fixed questions: the input confirmation, and, only if the check reported warnings, a warning confirmation. Answering "Confirmed" or "Continue" is recorded by a hook. The record is valid for this session and this file content only.
 4. The read-only subagent `workbook-intake:excel-analyst` reads the workbook with xlide and returns a summary.
@@ -135,13 +136,13 @@ Failure codes (the file is not read):
 | Code | Meaning |
 | --- | --- |
 | `unsupported_extension` | Extension is not one of the supported ones |
-| `file_too_large` | Over 100 MB |
+| `file_too_large` | Over 100 MiB |
 | `encrypted` | Password-protected package |
-| `not_zip` | Cannot be opened as a zip, or the ZIP layout could be read differently by different readers (an archive comment, prefix data, gaps or overlaps between entries, ZIP64 records, local headers that disagree with the central directory, a Unicode Path extra, flag bits 5 or 6, part data whose length or CRC differs from the central directory), or the zip inside a Power Query part is broken (non-canonical base64, section or part lengths that do not add up) |
-| `too_many_parts` | More than 10,000 parts |
+| `not_zip` | Cannot be opened as a zip, or the ZIP layout could be read differently by different readers (an archive comment, prefix data, gaps or overlaps between entries, ZIP64 records, local headers that disagree with the central directory, a Unicode Path extra, flag bits 5 or 6, part data whose length or CRC differs from the central directory), or the zip inside a Power Query part is broken (the Base64 text has a character outside the Base64 alphabet, padding in the wrong place, or a length that cannot be decoded; or section or part lengths do not add up) |
+| `too_many_parts` | More than 10,000 parts in the outer package. The zip inside a Power Query part has no part-count limit; its size is limited by the total size limit and the compression ratio limit |
 | `unsafe_part_name` | A part name has `..` or an absolute path, `\`, a drive letter (such as `C:`), NUL, an empty segment, a `.` segment, a directory name with content, or a name that disagrees with the UTF-8 flag, or two names differ only in letter case |
-| `uncompressed_too_large` | Expands to more than 256 MB in total (including the zip inside a Power Query part), or a part named `customXml/item*.xml` (such as `item1.xml` or `itemProps1.xml`) is over 32 MB |
-| `compression_ratio_too_high` | One part (including a part of the zip inside a Power Query part) compresses by more than 100 times |
+| `uncompressed_too_large` | Expands to more than 256 MiB in total (including the zip inside a Power Query part), or a part named `customXml/item*.xml` (such as `item1.xml` or `itemProps1.xml`) is over 32 MiB |
+| `compression_ratio_too_high` | One part (including a part of the zip inside a Power Query part) compresses by more than 100 times. A part of 100 KiB or less is not subject to this limit |
 | `xml_dtd` | A part has `<!DOCTYPE` or `<!ENTITY`. Every part is searched, not only XML, and so is the content of a Power Query part (the parts of the zip inside it and its metadata), so an SVG image or a macro that writes HTML can cause it |
 
 Warning codes (you must confirm before the analysis continues):
@@ -152,7 +153,7 @@ Warning codes (you must confirm before the analysis continues):
 | `external_link` | Links to external workbooks |
 | `data_connection` | Contains data connections |
 | `external_relationship` | A relationship points outside the file |
-| `power_query` | Contains Power Query (DataMashup). Strings inside the queries (M code, query names, descriptions) are not checked |
+| `power_query` | A part contains the `DataMashup` marker, which means Power Query. Strings inside the queries (M code, query names, descriptions) are not checked |
 | `embedded_object` | Contains embedded objects |
 | `activex` | Contains ActiveX controls |
 | `hidden_sheet` | A hidden sheet exists |
@@ -172,7 +173,7 @@ Check statuses: `pass`, `fail`, `error` (output outside the vocabulary or unexpe
 - The file can change between the check and the read. The intake folder is outside the sandbox's write range, but processes outside the sandbox (you, other apps) can still replace files. Use `denyWrite`.
 - Without the recommended settings, use outside the skill (other skills, or asking Claude directly to read the file with Bash) can still read the intake folder. `doctor.sh` runs only inside the skill.
 - `disableAllHooks` can turn off hooks from a settings file at any scope, including the repository's `.claude/settings.json` (hooks from managed settings are exempt). Plugin hooks are expected to be turned off too (inferred, not verified). The managed setting `allowManagedHooksOnly` also drops the hooks of plugins you installed yourself, while the plugin's xlide server still loads. When they are off, the main conversation can call xlide, and neither the input confirmation nor the check runs. Do not use the plugin in such an environment.
-- The check runs on the Command Line Tools Python 3.9.6, with its expat 2.2.8. Seatbelt stops a hijacked check from writing, using the network, or running programs, but it does not protect the verdict itself. Strict decoding of the character encoding, rejection of DTDs, and a 32 MB limit per part narrow what can reach the parser.
+- The check runs on the Command Line Tools Python 3.9.6, with its expat 2.2.8. Seatbelt stops a hijacked check from writing, using the network, or running programs, but it does not protect the verdict itself. Strict decoding of the character encoding, rejection of DTDs, and a 32 MiB limit per part narrow what can reach the parser.
 - xlide expands VBA source with no size limit. A workbook with macros (the `vba_project` warning) can use a lot of memory.
 - A crafted file can still make xlide use a lot of time or memory through the tools that stay allowed. Examples (measured values are in the [test report](docs/work/20261124_workbook-intake/test-report.md#review-5)): reading a long shared formula, a row with a huge number of cells, thousands of queries, many VBA line continuations. xlide runs outside the sandbox and has no memory limit. If things get heavy, stop Claude Code and end the xlide process from a normal terminal (commands inside the sandbox cannot see it): list the processes with `pgrep -fl 'xlide-mcp.*--read-only'` (uvx and the Python it starts both match) and stop every listed PID with `kill`. The heaviest shapes (calculation, static analysis of VBA, regular-expression search) are blocked by the hook.
 - Claude Code's experimental agent teams (`CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS`) must be off. When they are on, the agent that reads the workbook can message other teammates directly, so the hook blocks every xlide call while the variable has a non-empty value, `0` included (`agent_teams_enabled`). This check sees only the environment passed to the hook process. The start flag `--agent-teams` also enables agent teams, and the hook cannot see it. The skill stops instead when its Agent tool has a `name` or `team_name` parameter, which Claude Code adds only while agent teams are on (found by reading the Claude Code 2.1.332 binary). Do not start Claude Code with that flag.
@@ -208,7 +209,7 @@ Consent hook lines (`workbook-intake: consent=...`, `warnings_ack=...`). The lin
 | `outside_intake` | The file is outside the intake folder |
 | `not_regular_file` | Not a regular file |
 | `unsupported_extension` | Extension not supported |
-| `file_too_large` | Over 100 MB |
+| `file_too_large` | Over 100 MiB |
 | `path_not_canonical` | The path is not its own real path, or has surrounding whitespace or control characters |
 | `file_changed` | The file changed while it was being checked |
 | `consent_store_unavailable` | The record cannot be written (plugin data directory missing, or the record could not be written in full) |
