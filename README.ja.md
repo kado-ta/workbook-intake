@@ -30,7 +30,7 @@
 1. ファイルの中のものは何でも読めます。コメント、名前の定義、VBA、Power Query、外部リンクのパスなどです。非表示のシートや保護は、隠す仕組みとして働きません。個人情報（氏名・住所・生年月日・収入・借入など）が入ったファイルは、そのまま送ることになります。
 2. 会話の記録は手元に平文で残ります（`~/.claude/projects/<project>/*.jsonl`。既定で 30 日。`cleanupPeriodDays` で変えられます）。
 3. 顧客や取引先から受け取ったファイルに、Claude を誘導する文（プロンプトインジェクション）が入っていることがあります。xlide は読み取り専用で動き、解析するサブエージェントは Bash も Web も持ちません。ただし、要約を受け取るメインの会話は自分のツールを持っており、誘導されるおそれは残ります。
-4. セルの値は、Excel が最後に保存したときの計算結果です。再計算（`calculate=true`）は Excel とは別の計算エンジンを使うので、結果が違うことがあります。Claude の読み違いもあります。人に出す数字は Excel で照らし合わせてください。
+4. セルの値は、Excel が最後に保存したときの計算結果です。再計算はできません（フックが止めます）。Claude の読み違いもあります。人に出す数字は Excel で照らし合わせてください。
 5. ファイルを Anthropic に送ってよいかは、所属の規程や契約で決まります。プラグインは、あなたに確かめて答えを記録するだけで、中身の判断はできません。
 
 <a name="requirements"></a>
@@ -217,6 +217,7 @@ xlide を守るフックの拒否（`workbook-intake: <理由>`。必要なら�
 | `tool_not_allowed` | 許可リスト（`hooks/allowed-tools.txt`）にないツール |
 | `wrong_caller` | 呼び出し元が `workbook-intake:excel-analyst` ではない |
 | `unexpected_path_argument` | `file_path` 以外にパスらしい引数がある |
+| `calculation_not_allowed` | 計算を求める呼び出し（`calculate=true` など）。xlide の計算エンジンは上限なくメモリを使いうるため |
 | `missing_file_path` | ツールに `file_path` が要る |
 | `bad_input` | フックの入力を読めない |
 | `outside_intake`・`path_not_absolute`・`intake_dir_invalid`・`not_regular_file`・`unsupported_extension`・`file_too_large` | 上の表と同じ |
