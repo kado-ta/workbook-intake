@@ -87,11 +87,12 @@ claude plugin install workbook-intake@workbook-intake
 
 プラグインは settings を配れないので、`~/.claude/settings.json` に自分で書きます。
 
-必須（両方）。Claude の Bash と Read ツールが、受け取り用フォルダを読めなくなります。xlide とフックは sandbox の外で動くので、読めます。probe では `denyRead` だけだと Read ツールが読めたので、両方が要ります。Bash から受け取り用フォルダを一覧できると、スキルは止まります。
+必須（両方）。今の settings に足してください（置き換えないでください）。sandbox は既定で無効なので、`"enabled": true` も必須に含まれます。Claude の Bash と Read ツールが、受け取り用フォルダを読めなくなります。xlide とフックは sandbox の外で動くので、読めます。probe では `denyRead` だけだと Read ツールが読めたので、両方が要ります。sandbox が Bash による受け取り用フォルダの読み取りを拒否しないと、スキルは止まります。
 
 ```json
 {
   "sandbox": {
+    "enabled": true,
     "filesystem": {
       "denyRead": ["~/workbook-intake"]
     }
@@ -247,7 +248,7 @@ xlide を守るフックの拒否（`workbook-intake: <理由>`。必要なら�
 
 スキルが最初の確かめで止まり、`xlide_doctor` の結果が返ったか、許可の確認が出たときは、このセッションで xlide を守るフックが動いていません。どの設定ファイルでも `disableAllHooks` が設定されているとき、または管理設定の `allowManagedHooksOnly` が有効なときに、フックは止まります（[制限](#limitations)を見てください）。フックが動くまで、このプラグインを使わないでください。ほかの理由で拒否されたときは、上の表を見てください。スキルが最初の確かめで、Agent ツールに `name` か `team_name` の引数があるために止まったときは、エージェントのチームが有効です。`CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS` を外すか空にし、`--agent-teams` を付けずに、Claude Code を起動し直してください。スキルは、Agent ツールの定義が見えないときも止まります。そのセッションでは、どのみちサブエージェントを起動できません。
 
-`doctor.sh` の項目: `macos`（macOS ではない）、`uvx`（uv が PATH にない）、`python3`（Command Line Tools がない、またはその python が root の持ち物でない）、`sandbox_exec`（`/usr/bin/sandbox-exec` がない）、`intake_dir_protected`（Bash から受け取り用フォルダを一覧できる。必須の設定がないか、sandbox が切れている）。xlide のツールが見えないときは、uv がない、初回の取得に失敗した、プロジェクトの `xlide` にプラグインのものが外された、のどれかです（[設定](#configuration)を見てください）。
+`doctor.sh` の項目: `macos`（macOS ではない）、`uvx`（uv が PATH にない）、`python3`（Command Line Tools がない、またはその python が root の持ち物でない）、`sandbox_exec`（`/usr/bin/sandbox-exec` がない）、`intake_dir_protected`（Bash による受け取り用フォルダの一覧を sandbox が拒否しなかった。必須の設定がない、sandbox が無効、フォルダがない）。xlide のツールが見えないときは、uv がない、初回の取得に失敗した、プロジェクトの `xlide` にプラグインのものが外された、のどれかです（[設定](#configuration)を見てください）。
 
 <a name="maintenance"></a>
 

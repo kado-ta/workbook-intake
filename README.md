@@ -83,11 +83,12 @@ Create the intake folder: `mkdir -p ~/workbook-intake`.
 
 Settings cannot be shipped by a plugin, so you set them yourself in `~/.claude/settings.json`.
 
-Required (both). They stop Claude's Bash and Read tool from reading the intake folder. xlide and the hooks run outside the sandbox and can still read it. In a probe, `denyRead` alone still let the Read tool read, so both are needed. The skill stops when Bash can list the folder.
+Required (both). Add them to your existing settings; do not replace what is there. The sandbox is off by default, so `"enabled": true` is part of the requirement. They stop Claude's Bash and Read tool from reading the intake folder. xlide and the hooks run outside the sandbox and can still read it. In a probe, `denyRead` alone still let the Read tool read, so both are needed. The skill stops unless the sandbox refuses Bash's read of the folder.
 
 ```json
 {
   "sandbox": {
+    "enabled": true,
     "filesystem": {
       "denyRead": ["~/workbook-intake"]
     }
@@ -243,7 +244,7 @@ If a hook denies a call, the skill stops and tells you why. It does not try to r
 
 If the skill stops at its first check because `xlide_doctor` returned a result or a permission prompt appeared, the guard hook is not running in this session. Hooks are off when `disableAllHooks` is set in any settings file, or when the managed setting `allowManagedHooksOnly` is on (see [Limitations](#limitations)). Do not use the plugin until the hook runs. If the check was refused with another reason, see the table above. If the skill stops at its first check because its Agent tool has a `name` or `team_name` parameter, agent teams are on: unset `CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS` or leave it empty, do not pass `--agent-teams`, and start Claude Code again. The skill also stops if it cannot see its Agent tool's definition; the subagent cannot be started in that session anyway.
 
-`doctor.sh` items: `macos` (not macOS), `uvx` (uv not on PATH), `python3` (Command Line Tools missing, or its installation is not owned by root), `sandbox_exec` (`/usr/bin/sandbox-exec` missing), `intake_dir_protected` (Bash can list the intake folder: the required settings are missing or the sandbox is off). If the xlide tools are not visible, uv may be missing, the first-run download failed, or a project's own `xlide` dropped the plugin's (see [Configuration](#configuration)).
+`doctor.sh` items: `macos` (not macOS), `uvx` (uv not on PATH), `python3` (Command Line Tools missing, or its installation is not owned by root), `sandbox_exec` (`/usr/bin/sandbox-exec` missing), `intake_dir_protected` (the sandbox did not refuse Bash's listing of the intake folder: the required settings are missing, the sandbox is off, or the folder does not exist). If the xlide tools are not visible, uv may be missing, the first-run download failed, or a project's own `xlide` dropped the plugin's (see [Configuration](#configuration)).
 
 <a name="maintenance"></a>
 

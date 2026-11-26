@@ -1,4 +1,5 @@
 import importlib.util
+import json
 import re
 import unittest
 from pathlib import Path
@@ -64,6 +65,15 @@ class ReadmeTest(unittest.TestCase):
             self.assertIn("~/.claude/plugins/data/", text, name)
             self.assertIn("SHA-256", text, name)
             self.assertIn("--keep-data", text, name)
+
+    def test_required_settings_enable_sandbox(self):
+        for name, text in (("README.md", EN), ("README.ja.md", JA)):
+            start = text.index("## Configuration")
+            blocks = re.findall(r"```json\n(.*?)\n```", text[start:], flags=re.S)
+            settings = json.loads(blocks[0])
+            self.assertIs(settings["sandbox"]["enabled"], True, name)
+            self.assertTrue(settings["sandbox"]["filesystem"]["denyRead"], name)
+            self.assertTrue(settings["permissions"]["deny"], name)
 
     def test_maintenance_links_runbook(self):
         self.assertIn(RUNBOOK, EN)
