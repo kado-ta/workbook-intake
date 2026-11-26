@@ -80,6 +80,15 @@ claude plugin install workbook-intake@workbook-intake
 
 そのあと `claude plugin install workbook-intake@workbook-intake` を実行します。書き方は[公式ドキュメント](https://code.claude.com/docs/en/plugins/marketplace-reference.md#marketplace-sources)を見てください。
 
+`claude plugin install` は、既定では `user` の範囲、つまりすべてのプロジェクトでプラグインを有効にします。1 つのプロジェクトだけで使うなら、そのプロジェクトで `--scope local` を付けて入れます。
+
+```sh
+cd <使うプロジェクト>
+claude plugin install workbook-intake@workbook-intake --scope local
+```
+
+このときは、必須の設定もそのプロジェクトの settings に書きます（[設定](#configuration)を見てください）。
+
 <a name="configuration"></a>
 
 ## Configuration（設定）

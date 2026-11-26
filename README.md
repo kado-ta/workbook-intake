@@ -76,6 +76,15 @@ Recommended: pin the marketplace to a commit you reviewed, and keep auto-update 
 
 Then run `claude plugin install workbook-intake@workbook-intake`. See [plugin marketplace sources](https://code.claude.com/docs/en/plugins/marketplace-reference.md#marketplace-sources).
 
+`claude plugin install` enables the plugin in the `user` scope by default, which means every project. To use it in one project only, run the install in that project with `--scope local`:
+
+```sh
+cd <your project>
+claude plugin install workbook-intake@workbook-intake --scope local
+```
+
+The required settings then go in that project's settings; see [Configuration](#configuration).
+
 <a name="configuration"></a>
 
 ## Configuration
