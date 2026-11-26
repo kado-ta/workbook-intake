@@ -1,0 +1,15 @@
+version: 2
+updates:
+  # deps/requirements.txt mirrors the pins in .mcp.json (Dependabot cannot read uvx args).
+  - package-ecosystem: "pip"
+    directory: "/deps"
+    schedule:
+      interval: "weekly"
+    groups:
+      xlide:
+        patterns:
+          - "*"
+  - package-ecosystem: "github-actions"
+    directory: "/"
+    schedule:
+      interval: "weekly"

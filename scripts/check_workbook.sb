@@ -1,0 +1,51 @@
+(version 1)
+; Seatbelt profile for running scripts/check_workbook.py on a workbook received from outside.
+; Parameters (sandbox-exec -D, all realpaths):
+;   PYTHON_HOME  the python3 installation (e.g. .../Python3.framework/Versions/3.9)
+;   SELF         the checker script (check_workbook.py)
+;   TARGET       the workbook to check
+; The checker parses untrusted archives. If it were ever subverted, this profile limits
+; what it can read and removes every way out: no writes, no network, no other programs,
+; no services. When several rules match one operation, the later rule wins.
+(allow default)
+(deny network*)
+
+; Nothing may be written, except the null device.
+(deny file-write*)
+(allow file-write* (literal "/dev/null"))
+; Hard links and clones are separate operations from file-write*.
+(deny file-link file-clone)
+
+; Only python3 may run (the sandbox-exec target and what it launches under PYTHON_HOME).
+(deny process-exec*)
+(allow process-exec (subpath (param "PYTHON_HOME")))
+(deny process-fork)
+
+; No launchd, LaunchServices or Keychain services, no Apple Events, and signals
+; only within this sandbox.
+(deny mach-lookup)
+(deny appleevent-send)
+(deny signal)
+(allow signal (target same-sandbox))
+
+; No information about other processes, such as their arguments (sysctl kern.procargs2).
+(deny process-info*)
+(allow process-info* (target self))
+(deny sysctl-read (sysctl-name-prefix "kern.procargs"))
+
+; Reading file contents is denied by default (metadata such as stat is not blocked).
+; Allowed: what Python needs to start (the root directory, which libignition opens at
+; startup, system libraries, locale data, the timezone database, the python3
+; installation, /dev/urandom for hash seeding), plus the checker itself and the workbook.
+(deny file-read-data)
+(allow file-read-data
+  (literal "/")
+  (subpath "/System")
+  (subpath "/usr/lib")
+  (subpath "/usr/share")
+  (subpath "/private/var/db/timezone")
+  (subpath (param "PYTHON_HOME"))
+  (literal "/dev/urandom")
+  (literal "/dev/null")
+  (literal (param "SELF"))
+  (literal (param "TARGET")))
