@@ -349,3 +349,26 @@ QA の確かめ（正しいブックは `pass`、チームの変数があると 
 - 付録: Seatbelt のプロファイルが IPC と IOKit を止めていない（Red Team、確からしさ 4/10）。
 
 QA の確かめ（メインの会話からの `xlide_doctor` は `wrong_caller`、チームの変数があると `agent_teams_enabled`、サブエージェントからの `xlide_doctor` は許可、全体のテスト、shellcheck、`claude plugin validate . --strict`。直した後にも全体のテスト・shellcheck・検証をやり直した）は、どれも期待のとおりだった。
+
+<a name="security-review"></a>
+
+### /security-review（`006b035`）
+
+8 回目の修正（Task 37〜39）の後に、`origin/main` からのブランチ全体を見た（[Task 12](plan.md#task-12) の Step 2）。`/security-review` は `origin/HEAD` を前提にするので、手元で `git remote set-head origin main` を設定してから実行した。
+
+確からしさ 0.8 以上の指摘はなかった。洗い出しのサブエージェントが確かめた道と、それを止めているところ:
+
+| 確かめた道 | 止めているところ |
+| --- | --- |
+| アナリスト以外（メインの会話、ほかのサブエージェント、プラグイン以外の xlide）からの呼び出し | matcher が両方の接頭辞を覆う。ガードが接頭辞・サーバー・`agent_type` で拒否し、例外と失敗のときも拒否する |
+| ほかの引数で 2 つ目のパスを渡す | xlide 1.2.4 の許可リストのツールで、パスの引数は `file_path` だけ（ソースで確かめた）。パスに見える名前の引数を拒否する。xlide の `--root` も効く |
+| シンボリックリンク、`..`、前後の空白、制御文字、NFD のパス | 実際のパスが受け取り用フォルダの下にあり、正規形と一致することを求める。承認は SHA-256 も一致させる |
+| モデルが作れる入力で承認を作る | 承認は `tool_response.answers` だけから読み、質問の全体を厳密に比べる。記録は `ensure_ascii` の JSON で、`O_NOFOLLOW` で開く |
+| 承認の後に中身を変える | 承認の記録と同じパスと SHA-256、検査のやり直し、警告の一覧の一致を求める。ガードと xlide の間の差し替えは、受け入れるリスク |
+| 計算・正規表現・`query` の制限を外す | `is not False` で比べる。これらはサービス拒否の対策で、このレビューの対象外 |
+| 乗っ取られた検査から中身を漏らす | シェルを通さず、空の環境と root 所有の Python で、Seatbelt の中で動かす。出力は 64 KB までで、固定の語彙だけを使う。偽の `pass` は受け入れるリスク |
+| 検査と xlide の zip・XML の読み方の違い（XXE、隠れた部品） | 決まった 1 つの zip の形だけを通し、DTD を拒否する。残るのは警告の見落としで、文字列の確かめの限界として書いている |
+| フックのシェルの環境 | `/bin/bash -p` と `PATH=/usr/bin:/bin` |
+| CI と開発用の probe | CI は `pull_request`、`contents: read`、`persist-credentials: false`。probe は別のマーケットプレイスで、配布するプラグインからは読み込まれない |
+
+洗い出しの結果が 0 件だったので、誤検知を除くための確かめは行っていない。
