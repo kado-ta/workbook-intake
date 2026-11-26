@@ -211,7 +211,7 @@ Consent hook lines (`workbook-intake: consent=...`, `warnings_ack=...`). The lin
 | `file_too_large` | Over 100 MB |
 | `path_not_canonical` | The path is not its own real path, or has surrounding whitespace or control characters |
 | `file_changed` | The file changed while it was being checked |
-| `consent_store_unavailable` | The record cannot be written (plugin data directory missing) |
+| `consent_store_unavailable` | The record cannot be written (plugin data directory missing, or the record could not be written in full) |
 | `no_consent` | No input confirmation was recorded for this file content |
 | `internal_error` | Unexpected hook error |
 

@@ -215,7 +215,7 @@ Google スプレッドシートは直接読みません。`.xlsx` でダウン�
 | `file_too_large` | 100 MB を超える |
 | `path_not_canonical` | パスが実体のパスと違う、または前後に空白か制御文字がある |
 | `file_changed` | 検査のあいだにファイルが変わった |
-| `consent_store_unavailable` | 記録を書けない（プラグインのデータの置き場所がない） |
+| `consent_store_unavailable` | 記録を書けない（プラグインのデータの置き場所がない、または記録を最後まで書けなかった） |
 | `no_consent` | このファイルの中身に、入力の確認の記録がない |
 | `internal_error` | フックの想定外のエラー |
 
