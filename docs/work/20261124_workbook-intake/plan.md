@@ -957,7 +957,7 @@ git commit -m "docs: record manual verification of workbook-intake"
 
 ### Task 12: レビューと PR の準備
 
-- [x] **Step 1: `/review` を実行し、指摘への対応を決める。直したら、全体のテストを実行し直す。** 1 回目の結果と採否は [test-report のレビュー](test-report.md#review-1)。小さな指摘は `be03451` で直した。検査と xlide の読み方の違いなどは、[Task 13](#task-13)〜[Task 15](#task-15) で直す（ユーザーの判断、2026-11-25）。Task 15 の後に、`/review` をもう一度実行してから Step 2 に進む。2 回目の結果と採否は [test-report のレビュー](test-report.md#review-2)。小さな指摘は `fe3b14c`・`e4ad15b`・`25108c0` で直した。残りは [Task 16](#task-16)〜[Task 19](#task-19) で直す（ユーザーの判断、2026-11-25）。Task 19 の後に、`/review` を 3 回目として実行してから Step 2 に進む。3 回目の結果と採否は [test-report のレビュー](test-report.md#review-3)。小さな指摘は `77dd89c`・`1fb2760` で直した。残りは [Task 20](#task-20)〜[Task 24](#task-24) で直す（ユーザーの判断、2026-11-26）。Task 24 の後に、`/review` を 4 回目として実行してから Step 2 に進む。4 回目の結果と採否は [test-report のレビュー](test-report.md#review-4)。小さな指摘は `5d36800` で直した。残りは [Task 25](#task-25)〜[Task 28](#task-28) で直す（ユーザーの判断、2026-11-26）。Task 28 の後に、`/review` を 5 回目として実行してから Step 2 に進む。5 回目の結果と採否は [test-report のレビュー](test-report.md#review-5)。小さな指摘は `62d094e` で直した。残りは [Task 29](#task-29)〜[Task 32](#task-32) で直す（ユーザーの判断、2026-11-26）。Task 32 の後に、`/review` を 6 回目として実行してから Step 2 に進む。6 回目の結果と採否は [test-report のレビュー](test-report.md#review-6)。文書とエージェントの説明の指摘は `1954697` で直した。残りは [Task 33](#task-33)・[Task 34](#task-34) で直す（ユーザーの判断、2026-11-26）。Task 34 の後に、`/review` を 7 回目として実行してから Step 2 に進む。
+- [x] **Step 1: `/review` を実行し、指摘への対応を決める。直したら、全体のテストを実行し直す。** 1 回目の結果と採否は [test-report のレビュー](test-report.md#review-1)。小さな指摘は `be03451` で直した。検査と xlide の読み方の違いなどは、[Task 13](#task-13)〜[Task 15](#task-15) で直す（ユーザーの判断、2026-11-25）。Task 15 の後に、`/review` をもう一度実行してから Step 2 に進む。2 回目の結果と採否は [test-report のレビュー](test-report.md#review-2)。小さな指摘は `fe3b14c`・`e4ad15b`・`25108c0` で直した。残りは [Task 16](#task-16)〜[Task 19](#task-19) で直す（ユーザーの判断、2026-11-25）。Task 19 の後に、`/review` を 3 回目として実行してから Step 2 に進む。3 回目の結果と採否は [test-report のレビュー](test-report.md#review-3)。小さな指摘は `77dd89c`・`1fb2760` で直した。残りは [Task 20](#task-20)〜[Task 24](#task-24) で直す（ユーザーの判断、2026-11-26）。Task 24 の後に、`/review` を 4 回目として実行してから Step 2 に進む。4 回目の結果と採否は [test-report のレビュー](test-report.md#review-4)。小さな指摘は `5d36800` で直した。残りは [Task 25](#task-25)〜[Task 28](#task-28) で直す（ユーザーの判断、2026-11-26）。Task 28 の後に、`/review` を 5 回目として実行してから Step 2 に進む。5 回目の結果と採否は [test-report のレビュー](test-report.md#review-5)。小さな指摘は `62d094e` で直した。残りは [Task 29](#task-29)〜[Task 32](#task-32) で直す（ユーザーの判断、2026-11-26）。Task 32 の後に、`/review` を 6 回目として実行してから Step 2 に進む。6 回目の結果と採否は [test-report のレビュー](test-report.md#review-6)。文書とエージェントの説明の指摘は `1954697` で直した。残りは [Task 33](#task-33)・[Task 34](#task-34) で直す（ユーザーの判断、2026-11-26）。Task 34 の後に、`/review` を 7 回目として実行してから Step 2 に進む。7 回目の結果と採否は [test-report のレビュー](test-report.md#review-7)。言い回しの指摘は `054a81e` で直した。残りは [Task 35](#task-35)・[Task 36](#task-36) で直す（ユーザーの判断、2026-11-26）。Task 36 の後に、`/review` を 8 回目として実行してから Step 2 に進む。
 - [ ] **Step 2: `/security-review` を実行する（外部からの入力と権限の境界に触れるため）。**
 - [ ] **Step 3: Codex のレビューを行う（必須。ユーザーの指定）。** 人が通常のターミナルで `codex review` と、challenge（変更前と比べた後退と、壊れる入力を挙げてもらう。プロンプトは Claude が書く）を実行する。結果は、CLAUDE.md の Skill routing の手順で読み、test-report に記録してから採否を整理する。直したら、全体のテストを実行し直す。上限は 5 回。
 - [ ] **Step 4: 作業文書を締める。** design.md・plan.md・research・test-report の `status` を `done` にしてコミットする。
@@ -2009,3 +2009,70 @@ Expected: すべて PASS、skip なし。結果を test-report に書く。
 コミット（タイトル `docs: record the Seatbelt run after the sixth review fixes`）: `docs/work/20261124_workbook-intake/test-report.md`。
 
 その後、[Task 12](#task-12) の Step 1 の続き（7 回目の `/review`）に戻る。
+
+<a name="review7-fixes"></a>
+
+## 7 回目の `/review` の指摘の修正（Task 35・36）
+
+7 回目の `/review` の結果と採否は [test-report](test-report.md#review-7)。言い回しの指摘は `054a81e` で直した。ユーザーの判断（2026-11-26）:
+
+- D1: 起動の引数 `--agent-teams` でもチームが有効になり、フックは見分けられないことを、README・design・スキルに書く。
+- D2: スキルの最初に、メインの会話から `xlide_doctor` を呼び、フックが `wrong_caller` で拒否したときだけ先に進む手順を足す。
+- D3: ほかのフックが `updatedInput` で入力を書き換えうることを、受け入れるリスクに書く。
+- D4: チームの拒否の位置を固定するテストと、matcher のテストの照合の仕方を直す。
+
+設計は 2026-11-26 の 5 つ目の改訂で直した（[design.md の改訂](design.md#revisions)）。
+
+<a name="task-35"></a>
+
+### Task 35: スキルの確かめの手順、文書、テスト
+
+**Files:**
+- Modify: `skills/analyze/SKILL.md`、`README.md`、`README.ja.md`、`tests/test_guard_xlide.py`、`tests/test_skill_and_agent.py`
+
+**Interfaces:**
+- `skills/analyze/SKILL.md` の最初の手順（今の Step 0 の `doctor.sh` の後）に、フックが動いていることの確かめを足す。メインの会話から `mcp__plugin_workbook-intake_xlide__xlide_doctor` を引数なしで 1 回呼ぶ。`workbook-intake: wrong_caller` の拒否が返ったときだけ次に進む。結果が返った、許可の確認が出た（出たら「許可しない」を選ぶよう人に頼む）、ほかの `workbook-intake:` の理由で拒否された、のどれかなら、README の Troubleshooting を示して止まる。「xlide のツールを自分で呼ばない」の文は、この 1 回の確かめを除く、と書き直す。
+- 同じスキルの、サブエージェントを起動する文に、「Claude Code が `--agent-teams` で起動されているなら止まる」を足す。
+
+- [ ] **Step 1: 失敗するテストを書く**
+
+```python
+# tests/test_guard_xlide.py
+def test_agent_teams_denied_for_any_tool(self):   # 変数 "1" のとき、xlide_doctor（file_path なし）と許可リストにない xlide_analyze（agent=None）も "agent_teams_enabled"
+# test_matcher_covers_plugin_tools の否定の確かめを re.search にする（Claude Code は先頭と末尾を固定しない）
+# tests/test_skill_and_agent.py
+def test_skill_checks_the_guard_first(self):      # SKILL.md の本文に "xlide_doctor" と "wrong_caller" があり、その段落がサブエージェントを起動する段落より前にある
+```
+
+- [ ] **Step 2: テストが失敗することを確かめ、実装し、通ることを確かめる**
+
+Run: `"$PY" -B -m unittest discover -s tests -t . -v && claude plugin validate . --strict`
+Expected: 実装の前は新しいテストが FAIL（matcher の書き換えは今のコードで PASS の見込み）、実装の後はすべて PASS（sandbox の中では skip あり）、通過。チームの確かめを `_decide_file` に動かした写しで、`test_agent_teams_denied_for_any_tool` が FAIL になることを確かめる。
+
+- [ ] **Step 3: README を直す**
+
+`README.md`・`README.ja.md` の制限に足す。
+
+- エージェントのチームの行に、「起動の引数 `--agent-teams` でも有効になり、そのときフックは見分けられない。この引数で起動しない」を足す。
+- 「PreToolUse のフックは並行して動き、ほかのプラグインやユーザーのフックは `updatedInput` で入力を書き換えられる。ガードが許可した後で書き換えられると、承認や検査を通らない入力で xlide が動きうる（受け取り用フォルダの外は xlide 自身が止める）。入力を書き換えるフックを入れない」を足す。
+- 使い方に、スキルが最初に `xlide_doctor` を 1 回呼び、拒否されることを確かめる（拒否が出るのは正常）ことを足す。
+
+- [ ] **Step 4: コミットする**
+
+1 つ目のコミット（タイトル `feat: check that the guard runs before the analysis starts`）: `skills/analyze/SKILL.md`・`tests/test_skill_and_agent.py`・`tests/test_guard_xlide.py`。
+2 つ目のコミット（タイトル `docs: describe the guard check, agent-teams flag and input rewriting hooks`）: `README.md`・`README.ja.md`。
+
+<a name="task-36"></a>
+
+### Task 36: 人による実行（メインの会話で行う）
+
+- [ ] **Step 1: 全体のテストを、人がきれいな複製で実行する**
+
+Run（人）: runbook の通常のターミナルのコマンド（`<確かめたコミット>` は Task 35 の後の HEAD の完全な SHA）
+Expected: すべて PASS、skip なし。結果を test-report に書く。
+
+- [ ] **Step 2: コミットする**
+
+コミット（タイトル `docs: record the Seatbelt run after the seventh review fixes`）: `docs/work/20261124_workbook-intake/test-report.md`。
+
+その後、[Task 12](#task-12) の Step 1 の続き（8 回目の `/review`）に戻る。

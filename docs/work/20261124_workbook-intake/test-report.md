@@ -296,3 +296,23 @@ QA の確かめ（正しい Power Query のブックは `pass` と `power_query`
 重さは、レビューの規則どおりに付けた（直し方が分かっている敵対的なパスの指摘は重大と数える）。どれも、今の版で検査や承認を迂回する道ではない。
 
 QA の確かめ（正しいブックは `pass`、`is_regex=true` の検索はファイルの確かめより前に `regex_not_allowed`、同じ中身を `.xltx` と名付けたファイルは `unsupported_extension`、全体のテスト、shellcheck、`claude plugin validate . --strict`）は、どれも期待のとおりだった。
+
+<a name="review-7"></a>
+
+### /review（7 回目、`3efdd91`）
+
+6 回目の修正（Task 33・34）の後に、ブランチ全体をもう一度見た。専門のレビュアー 6 つ、Red Team、Claude の敵対的なパスを出し、6 回目の後の差分を重点にした。Codex のパスは、人が通常のターミナルで実行するため、ここでは飛ばした。専門のレビュアーは、Testing の確からしさの低い 1 件（文字列でない `query`。xlide の引数は文字列の型なので、付録に回した）のほかは指摘なし。
+
+| 重さ | 場所 | 内容 | 採否 |
+| --- | --- | --- | --- |
+| 中 | `hooks/guard_xlide.py` | Claude Code は、起動の引数 `--agent-teams` でもチームを有効にし、そのとき `CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS` は入らない。フックはこの起動の仕方を見分けない（敵対的なパスが、入っている Claude Code 2.1.332 の本体で確かめた） | 文書で扱う（[Task 35](plan.md#task-35)。この引数で起動しない、と書く） |
+| 中 | README、スキル | 管理設定の `allowManagedHooksOnly` は、自分で入れたプラグインのフックを止めるが、xlide のサーバーは読み込まれる。README は `disableAllHooks` しか書いていなかった（Red Team） | README は直した（`054a81e`）。スキルの最初に、フックが動いていることの確かめを足す（[Task 35](plan.md#task-35)） |
+| 軽微 | `hooks/guard_xlide.py` | ほかのフックが `updatedInput` で入力を書き換えると、ガードの判定を後から外せる（敵対的なパス。公式ドキュメントによる） | 受け入れるリスクに書く（[Task 35](plan.md#task-35)） |
+| 重大 | `tests/test_guard_xlide.py` | matcher のテストは `re.fullmatch` で確かめるが、Claude Code は先頭と末尾を固定しない | 直す（[Task 35](plan.md#task-35)） |
+| 軽微 | `tests/test_guard_xlide.py` | チームの拒否の位置（許可リストより前）を固定するテストがない（Task 33 のレビュー） | 直す（[Task 35](plan.md#task-35)） |
+| 重大 | README | uv が選ぶ Python 本体の場所を、sandbox から書かせない対象に書いていない。`pkill -f xlide-mcp` が広すぎる（敵対的なパス） | 直した（`054a81e`） |
+| 軽微 | README、runbook、design | 「変数が設定されている」と「空でない値」の違い、runbook の数え方、設計の図の古い matcher（Task 33 のレビュー） | 直した（`054a81e`） |
+
+重さは、レビューの規則どおりに付けた（直し方が分かっている敵対的なパスの指摘は重大と数える）。付録: 会話の記録に残ったブックの中身を後のセッションが読める、という Red Team の指摘（確からしさ 4/10）は、README の注意 2 に記録が残ることを書いているので、採らない。
+
+QA の確かめ（正しいブックは `pass`、チームの変数があると `xlide_doctor` も `agent_teams_enabled`、257 文字の `query` は `query_too_long`、変数がなければ `xlide_doctor` は許可、全体のテスト、shellcheck、`claude plugin validate . --strict`）は、どれも期待のとおりだった。
