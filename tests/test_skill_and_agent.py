@@ -81,6 +81,26 @@ class SkillTest(unittest.TestCase):
         self.assertLess(check[0], step1[0])
         self.assertLess(check[0], start[0])
 
+    def test_skill_checks_read_deny(self):
+        paragraphs = self.text.split("\n\n")
+        folder = [i for i, p in enumerate(paragraphs) if "`folder <path>`" in p]
+        read = [i for i, p in enumerate(paragraphs)
+                if "workbook-intake-read-check.xlsx" in p]
+        step1 = [i for i, p in enumerate(paragraphs) if p.startswith("## Step 1")]
+        self.assertTrue(folder)
+        self.assertTrue(read)
+        self.assertTrue(step1)
+        self.assertLess(folder[0], read[0])
+        self.assertLess(read[0], step1[0])
+        self.assertIn("denied by your permission settings", paragraphs[read[0]])
+        self.assertIn("stop", paragraphs[read[0]])
+
+    def test_skill_hook_check_uses_prefix(self):
+        paragraphs = self.text.split("\n\n")
+        check = [p for p in paragraphs if "xlide_doctor" in p and "wrong_caller" in p]
+        self.assertTrue(check)
+        self.assertIn("starts with `workbook-intake: wrong_caller`", check[0])
+
     def test_skill_does_not_rely_on_start_flags(self):
         self.assertNotIn(
             "Stop instead if Claude Code was started with `--agent-teams`", self.text)
