@@ -122,7 +122,7 @@ claude plugin install workbook-intake@workbook-intake
 3. スキルが、固定の質問を出します。入力の確認と、検査に警告があるときだけの、警告の確認です。「確認した」「続ける」を選ぶと、フックが記録します。記録が効くのは、このセッションと、そのファイルの同じ中身だけです。
 4. 読み取り専用のサブエージェント `workbook-intake:excel-analyst` が、xlide でブックを読み、要約を返します。
 
-手順 1 の前に、スキルはメインの会話から `xlide_doctor` を 1 回呼び、フックが動いていることを確かめます。フックはこの呼び出しを `workbook-intake: wrong_caller` で拒否します。この拒否は正常です。結果が返ったとき、または許可の確認が出たとき（「許可しない」を選んでください）は、フックが動いていないので、スキルは止まります。
+スキルは始まるとき（手順 2 で、何かを尋ねる前に）、メインの会話から `xlide_doctor` を 1 回呼び、フックが動いていることを確かめます。フックはこの呼び出しを `workbook-intake: wrong_caller` で拒否します。この拒否は正常です。`xlide_doctor` の許可の確認が出たときは、フックが動いていません。「いいえ」を選んでください（許可する選択肢や、今後確認しない選択肢は選ばないでください）。この拒否のほかの結果（結果が返った、許可しなかった、ほかの理由で拒否された）では、スキルは止まります（[Troubleshooting](#troubleshooting) を見てください）。
 
 Google スプレッドシートは直接読みません。`.xlsx` でダウンロードして受け取り用フォルダに置いてください（Apps Script は含まれず、Google 独自の関数は Excel と同じには動かないことがあります）。claude.ai の Google Sheets のコネクタは、このプラグインの守りの外です。
 
@@ -176,7 +176,7 @@ Google スプレッドシートは直接読みません。`.xlsx` でダウン�
 - `disableAllHooks` は、どのスコープの設定（リポジトリの `.claude/settings.json` を含む）でもフックを止められます（管理設定のフックは除く）。プラグインのフックも止まる見込みです（推測で、確かめていません）。管理設定の `allowManagedHooksOnly` も、自分で入れたプラグインのフックを止めます。そのときも、プラグインの xlide のサーバーは読み込まれます。止まると、メインの会話から xlide を呼べ、入力の確認も検査も効きません。止まっている環境では使わないでください。
 - 検査は、Command Line Tools の Python 3.9.6 と、その expat 2.2.8 で動きます。Seatbelt は、乗っ取られた検査の書き込み・通信・実行を止めますが、判定そのものは守りません。文字コードの厳密な復号、DTD の拒否、1 部品 32 MB の上限で、届く面を狭くしています。
 - VBA のソースは、xlide が上限なしに展開します。マクロのブック（`vba_project` の警告）は、メモリを多く使うことがあります。
-- 細工したファイルで、許可しているツールを通して、xlide が多くの時間やメモリを使うことがまだありえます。例（測った値は[テストレポート](docs/work/20261124_workbook-intake/test-report.md#review-5)にあります）: 長い共有数式を読む、1 行に大量のセルがある、クエリが数千件ある、VBA の行の継続が多い。xlide は sandbox の外で動き、メモリの上限がありません。重くなったら Claude Code を止め、通常のターミナルで xlide のプロセスを終えてください（sandbox の中のコマンドからは見えません）。`pgrep -fl 'xlide-mcp.*--read-only'` で探し、その PID を `kill` で止めます。最も重い形（計算、VBA の静的な解析、正規表現の検索）はフックが止めます。
+- 細工したファイルで、許可しているツールを通して、xlide が多くの時間やメモリを使うことがまだありえます。例（測った値は[テストレポート](docs/work/20261124_workbook-intake/test-report.md#review-5)にあります）: 長い共有数式を読む、1 行に大量のセルがある、クエリが数千件ある、VBA の行の継続が多い。xlide は sandbox の外で動き、メモリの上限がありません。重くなったら Claude Code を止め、通常のターミナルで xlide のプロセスを終えてください（sandbox の中のコマンドからは見えません）。`pgrep -fl 'xlide-mcp.*--read-only'` でプロセスを一覧し（uvx と、それが起動する Python の両方が出ます）、出た PID をすべて `kill` で止めます。最も重い形（計算、VBA の静的な解析、正規表現の検索）はフックが止めます。
 - エージェントのチーム（実験的な機能、`CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS`）は切ってください。有効にすると、ブックを読むエージェントがほかの仲間に直接話しかけられることがあるため、この変数が空でない値（`0` を含む）を持つ間は、フックがすべての xlide の呼び出しを止めます（`agent_teams_enabled`）。この確かめは、フックのプロセスに渡る環境だけを見ます。起動の引数 `--agent-teams` でもエージェントのチームは有効になり、そのときフックは見分けられません。この引数で Claude Code を起動しないでください。
 - `.mcp.json` が固定するのは xlide-mcp と 4 つの依存だけです。ほかの依存は、uv が環境を作るときに解決します。後の起動で作り直すこともあるので、新しい版はどの起動でも入りえます（下の依存のセキュリティの修正を受け取るため）。
 - 入力の確認は、AskUserQuestion の画面に人が答えることに頼ります。ほかのプラグインのフックや SDK のホストが答えを埋める環境では、人の確認なしに承認が記録されることがあります。
@@ -223,7 +223,7 @@ xlide を守るフックの拒否（`workbook-intake: <理由>`。必要なら�
 | --- | --- |
 | `not_plugin_server` | このプラグインの xlide のツールではない（プロジェクトの xlide など） |
 | `tool_not_allowed` | 許可リスト（`hooks/allowed-tools.txt`）にないツール |
-| `wrong_caller` | 呼び出し元が `workbook-intake:excel-analyst` ではない |
+| `wrong_caller` | 呼び出し元が `workbook-intake:excel-analyst` ではない。スキルの最初の確かめでは、メインの会話からのこの拒否が 1 回返るのが正常 |
 | `unexpected_path_argument` | `file_path` 以外にパスらしい引数がある |
 | `calculation_not_allowed` | 計算を求める呼び出し（`calculate=true` など）。xlide の計算エンジンは上限なくメモリを使いうるため |
 | `regex_not_allowed` | 正規表現の検索を求める呼び出し（`is_regex=true`）。xlide は渡された正規表現を時間の上限なしに当てるため |
@@ -243,6 +243,8 @@ xlide を守るフックの拒否（`workbook-intake: <理由>`。必要なら�
 | `internal_error` | フックの想定外のエラー |
 
 フックが拒否したら、スキルは止まって理由を伝えます。別の方法でファイルを読もうとはしません。
+
+スキルが最初の確かめで止まり、`xlide_doctor` の結果が返ったか、許可の確認が出たときは、このセッションで xlide を守るフックが動いていません。どの設定ファイルでも `disableAllHooks` が設定されているとき、または管理設定の `allowManagedHooksOnly` が有効なときに、フックは止まります（[制限](#limitations)を見てください）。フックが動くまで、このプラグインを使わないでください。ほかの理由で拒否されたときは、上の表を見てください。
 
 `doctor.sh` の項目: `macos`（macOS ではない）、`uvx`（uv が PATH にない）、`python3`（Command Line Tools がない、またはその python が root の持ち物でない）、`sandbox_exec`（`/usr/bin/sandbox-exec` がない）、`intake_dir_protected`（Bash から受け取り用フォルダを一覧できる。必須の設定がないか、sandbox が切れている）。xlide のツールが見えないときは、uv がない、初回の取得に失敗した、プロジェクトの `xlide` にプラグインのものが外された、のどれかです（[設定](#configuration)を見てください）。
 
