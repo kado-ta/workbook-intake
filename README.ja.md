@@ -195,6 +195,7 @@ Google スプレッドシートは直接読みません。`.xlsx` でダウン�
 - xlide は `uvx` を PATH から探して起動します。PATH の先頭に、sandbox から書ける場所を置かないでください。
 - xlide は、uv のキャッシュ（`~/.cache/uv`、または `UV_CACHE_DIR`）から、sandbox の外で動きます。sandbox のコマンドからそこへ書けないようにしてください。sandbox の書き込みの許可に入れず、`~` で起動するセッションでは `denyWrite` に足します。そこで書き換えられたコードは、次に xlide が起動したときに、あなたの権限で動きます。`--python 3.15` で uv が選ぶ Python（`uv python find 3.15` で確かめられます）も同じで、キャッシュの外にあることがあります。
 - macOS だけです。xlide の Windows 向けの live 系のツールは使いません。
+- スキルは Read の deny を `workbook-intake-read-check.xlsx` という 1 つの名前で確かめるので、フォルダより狭い deny（例: `Read(~/workbook-intake/**/*.xlsx)`）は、正しい規則と見分けられません。規則は、[設定](#configuration)のとおりフォルダ全体に書いてください。
 - 守りの対象外: このプラグインなしで xlide を使う人、Google Sheets のコネクタ。
 
 <a name="troubleshooting"></a>
@@ -247,7 +248,7 @@ xlide を守るフックの拒否（`workbook-intake: <理由>`。必要なら�
 
 フックが拒否したら、スキルは止まって理由を伝えます。別の方法でファイルを読もうとはしません。
 
-スキルが最初の確かめで止まり、`xlide_doctor` の結果が返ったか、許可の確認が出たときは、このセッションで xlide を守るフックが動いていません。どの設定ファイルでも `disableAllHooks` が設定されているとき、または管理設定の `allowManagedHooksOnly` が有効なときに、フックは止まります（[制限](#limitations)を見てください）。フックが動くまで、このプラグインを使わないでください。ほかの理由で拒否されたときは、上の表を見てください。スキルが Read の確かめで止まったときは、受け取り用フォルダへの `Read(...)` の deny がないか、フォルダに当たっていません。[設定](#configuration)のとおりに足してください（別のフォルダなら `Read(//abs/path/**)` の形）。その Read の許可の確認が出たときは、許可しないでください。スキルが最初の確かめで、Agent ツールに `name` か `team_name` の引数があるために止まったときは、エージェントのチームが有効です。`CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS` を外すか空にし、`--agent-teams` を付けずに、Claude Code を起動し直してください。スキルは、Agent ツールの定義が見えないときも止まります。そのセッションでは、どのみちサブエージェントを起動できません。
+スキルが最初の確かめで止まり、`xlide_doctor` の結果が返ったか、許可の確認が出たときは、このセッションで xlide を守るフックが動いていません。どの設定ファイルでも `disableAllHooks` が設定されているとき、または管理設定の `allowManagedHooksOnly` が有効なときに、フックは止まります（[制限](#limitations)を見てください）。フックが動くまで、このプラグインを使わないでください。ほかの理由で拒否されたときは、上の表を見てください。スキルが Read の確かめで止まったときは、受け取り用フォルダへの `Read(...)` の deny がないか、フォルダに当たっていません。[設定](#configuration)のとおりに足してください（別のフォルダなら `Read(//abs/path/**)` の形）。その Read の許可の確認が出たときは、許可しないでください。Read をセッション全体で止めている（例: `--disallowedTools Read`）ときも、Read の確かめは deny の拒否を返さないので、スキルは止まります。Read を止めずに、[設定](#configuration)の deny を足して起動してください。スキルが最初の確かめで、Agent ツールに `name` か `team_name` の引数があるために止まったときは、エージェントのチームが有効です。`CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS` を外すか空にし、`--agent-teams` を付けずに、Claude Code を起動し直してください。スキルは、Agent ツールの定義が見えないときも止まります。そのセッションでは、どのみちサブエージェントを起動できません。
 
 `doctor.sh` の項目: `macos`（macOS ではない）、`uvx`（uv が PATH にない）、`python3`（Command Line Tools がない、またはその python が root の持ち物でない）、`sandbox_exec`（`/usr/bin/sandbox-exec` がない）、`intake_dir_protected`（Bash による受け取り用フォルダの一覧を sandbox が拒否しなかった。必須の設定がない、sandbox が無効、フォルダがない）。xlide のツールが見えないときは、uv がない、初回の取得に失敗した、プロジェクトの `xlide` にプラグインのものが外された、のどれかです（[設定](#configuration)を見てください）。
 
