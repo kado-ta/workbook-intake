@@ -359,7 +359,7 @@ workbook-intake/
      - 承認がない・不合格・検査できない・時間切れ → 拒否。
      - 検査に警告があり、このセッションで、そのファイル（同じ `realpath` と SHA-256）に警告の確認の承認が記録されていない → 拒否。
   5. すべて通れば、`permissionDecision: "allow"` を返す（確認を省く）。
-- 許可リストは、Excel の解析に要る読み取り用ツールだけにする。Access 用（`xlide_access_catalog` など）、Windows 専用（`xlide_live_*` など）、外部のプロセスを動かすもの（`xlide_git_changes`）は除く。`xlide_list_shapes` も除く（2026-11-25。ユーザーの判断）。このツールだけが xlide 自身の寛容な読み手（不正なバイトを置き換えて読み、`xl/workbook.xml` を決め打ちの名前で読む）を使い、厳密に読む検査と食い違うため。`xlide_evaluate_formula` も除く（2026-11-26。ユーザーの判断）。渡された数式をそのまま計算するので、上の計算の拒否と同じ理由になる。`file_path` を取らないツール（`xlide_doctor` など）は、1〜3 を通れば許可する。
+- 許可リストは、Excel の解析に要る読み取り用ツールだけにする。Access 用（`xlide_access_catalog` など）、Windows 専用（`xlide_live_*` など）、外部のプロセスを動かすもの（`xlide_git_changes`）は除く。`xlide_list_shapes` も除く（2026-11-25。ユーザーの判断）。このツールだけが xlide 自身の寛容な読み手（不正なバイトを置き換えて読み、`xl/workbook.xml` を決め打ちの名前で読む）を使い、厳密に読む検査と食い違うため。`xlide_evaluate_formula` も除く（2026-11-26。ユーザーの判断）。渡された数式をそのまま計算するので、上の計算の拒否と同じ理由になる。`xlide_check_cells` も同じ理由で除く（2026-11-26）。そのエラー検査は、ファイルの数式をエンジンで評価する。`file_path` を取らないツール（`xlide_doctor` など）は、1〜3 を通れば許可する。
 
 <a name="consent"></a>
 
@@ -555,7 +555,7 @@ README に書くこと:
 ## 完了条件
 
 - 検査とフックのテストが通る。shellcheck が通る。
-- 計算を求める呼び出し（`calculate` が `false` でない `xlide_read_cells`）と `xlide_evaluate_formula` は、フックが止める。自動のテストで確かめる（2026-11-26 に足した）。
+- 計算を求める呼び出し（`calculate` が `false` でない `xlide_read_cells`）と、許可リストにない `xlide_evaluate_formula`・`xlide_check_cells` は、フックが止める。自動のテストで確かめる（2026-11-26 に足した）。
 - 検査と xlide の読み方の違いを突くファイル（[research-xlide-parsing.md](research-xlide-parsing.md) で確かめた形）は、検査で不合格になるか、xlide が読むものと同じ警告か「文字列は未検査」の警告になる。自動のテストで確かめ、主な形は xlide 1.2.4 の読み手とも読み比べる（2026-11-25 に足した）。3 回目の `/review` で見つかった形（`<!-->` のコメント、base64 の途中の `=`、Unicode の新しい数字の部品名、メタデータの節の DTD）も、Python 3.15 の xlide と読み比べる（2026-11-26 に足した）。
 - 実機で、次を確かめる。
   - メインの会話から xlide のツールを呼ぶと、止まる。

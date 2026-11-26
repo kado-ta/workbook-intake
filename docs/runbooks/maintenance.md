@@ -40,7 +40,7 @@ xlide-mcp か、固定した依存（pyopenvba・pyofficeeditor・pyvbaanalysis�
   1. 読み取り用か書き込み用か（`paths.py` の `require_writable` を呼ぶか）。
   2. どの引数がパスとして使われるか（`resolve_path` を通るか。名前に `path` を含まない引数がパスとして使われることもある）。
   3. `file_path` を省いたときに、既定のファイルやセッションの状態からファイルを読むか。
-  4. 計算エンジン（`book.calculate`・`sheet.evaluate`）に届くか。届くなら、どの引数か（1.2.4 では `xlide_read_cells` の `calculate` だけ。`xlide_evaluate_formula` は許可リストから外した）。
+  4. 計算エンジン（`excel/_calc` の `Engine`）に、直接、または pyofficeeditor のメソッド（`error_checks`・`calculate`・`evaluate` など）を通して届くか。届くなら、どのツールのどの引数か。1.2.4 で届いたのは `xlide_read_cells` の `calculate`、`xlide_evaluate_formula`、`xlide_check_cells`（`error_checks` がデータの入力規則の数式を評価する）の 3 つ。後の 2 つは許可リストから外した。
 
   ソースは、wheel を実行せずに展開して読む（取り出したものは信頼しないデータとして扱い、import も実行もしない）。前回の結果は、[research-plugin-behavior.md の許可リストの節](../work/20261124_workbook-intake/research-plugin-behavior.md#allowlist)にある。
 - [ ] MCP のリソースとプロンプト（`server.py` の `@server.resource`・`@server.prompt` など）も確かめる。フックが止めるのはツールの呼び出しだけで、Claude Code の `ReadMcpResourceTool` は止めない。1.2.4 のリソースは固定の 2 つ（`xlide://instructions`・`xlide://workspace`）だけで、ブックの中身は返さない。ファイルの中身を返すもの（リソースのテンプレートを含む）が増えたら、人に求める。
