@@ -35,6 +35,11 @@ created: 2026-11-25
 | 2026-11-26、`794058e` | Claude Code の Bash（sandbox の中） | `"$(xcode-select -p)/usr/bin/python3" -B -m unittest discover -s tests -t .` | 328 件、OK、skip 23。3 回目の `/review` の修正（[Task 20〜23](plan.md#review3-fixes)）の後 |
 | 2026-11-26、`794058e` | 同上 | `shellcheck hooks/*.sh scripts/*.sh dev/probe/workbook-intake/hooks/*.sh` | 指摘なし |
 | 2026-11-26、`794058e` | 同上 | `claude plugin validate . --strict` | 通過 |
+| 2026-11-26、`1e9e08c` | 人、通常のターミナル | `WORKBOOK_INTAKE_REQUIRE_SANDBOX=1 "$(xcode-select -p)/usr/bin/python3" -B -m unittest discover -s tests -t . -v` | 338 件、すべて OK、skip なし。4 回目の `/review` の修正（[Task 25〜27](plan.md#review4-fixes)）の後。計算の拒否と、設定どおりの `bash -p` のテストを含む |
+| 2026-11-26、`1e9e08c` | 人、通常のターミナル | [runbook の Python の版の確かめ](../../runbooks/maintenance.md#preflight)の `uvx ... python -c ...` | `3.15.2 expat_2.9.0 17.0.0`。調査のときの値と同じ |
+| 2026-11-26、`1e9e08c` | Claude Code の Bash（sandbox の中） | `"$(xcode-select -p)/usr/bin/python3" -B -m unittest discover -s tests -t .` | 338 件、OK、skip 23 |
+| 2026-11-26、`1e9e08c` | 同上 | `shellcheck hooks/*.sh scripts/*.sh dev/probe/workbook-intake/hooks/*.sh` | 指摘なし |
+| 2026-11-26、`1e9e08c` | 同上 | `claude plugin validate . --strict` | 通過 |
 
 `719943d` から `d093bcb` までに、Seatbelt・フック・検査のコードとそのテスト（`hooks/`、`scripts/check_workbook.*`、`tests/test_sandbox_profile.py`、`tests/test_guard_xlide.py`、`tests/test_record_consent.py`、`tests/test_check_workbook.py`）は変わっていない（`git diff --stat` で確かめた）。そのため、`d093bcb` では人による Seatbelt 付きの実行をやり直していない。`f88e6dd` では、1 回目の `/review` を受けて検査とフックを直したので（[Task 13〜15](plan.md#task-13)）、やり直した。CI（Linux と macOS）の結果は、PR を作った後に足す。
 
