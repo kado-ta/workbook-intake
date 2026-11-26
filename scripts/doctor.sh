@@ -41,13 +41,16 @@ fi
 
 if [ -x /usr/bin/sandbox-exec ]; then report sandbox_exec 0; else report sandbox_exec 1; fi
 
-# Under the recommended sandbox settings Bash cannot list the intake folder. If it can,
-# the settings are missing (or the sandbox is off). A missing folder cannot be listed
-# either; the hooks outside the sandbox check that it exists.
-if ls -A "$intake" >/dev/null 2>&1; then
+# Under the required settings the sandbox refuses Bash's read of the intake folder with
+# "Operation not permitted". Listing it, or failing for another reason (mode bits, a missing
+# folder), means the sandbox is not what stops Bash. The hooks outside the sandbox check that
+# the folder exists.
+if ls_err="$(LC_ALL=C ls -A "$intake" 2>&1 >/dev/null)"; then
   report intake_dir_protected 1
-else
+elif [[ "$ls_err" == *"Operation not permitted"* ]]; then
   report intake_dir_protected 0
+else
+  report intake_dir_protected 1
 fi
 
 # The real path of the intake folder, for the skill to build file paths from. Only
