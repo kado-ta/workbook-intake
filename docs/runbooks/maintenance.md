@@ -64,8 +64,10 @@ xlide-mcp か、固定した依存（pyopenvba・pyofficeeditor・pyvbaanalysis�
 - [ ] 全体のテストを、**通常のターミナル**で動かす（sandbox の中では Seatbelt が入れ子で動かない）。
 
   ```sh
-  cd <repo> && PY="$(xcode-select -p)/usr/bin/python3" && WORKBOOK_INTAKE_REQUIRE_SANDBOX=1 "$PY" -B -m unittest discover -s tests -t . -v
+  D="$(mktemp -d)" && git clone -q --no-local <repo> "$D/repo" && git -C "$D/repo" checkout -q <確かめたコミット> && cd "$D/repo" && WORKBOOK_INTAKE_REQUIRE_SANDBOX=1 "$(xcode-select -p)/usr/bin/python3" -B -m unittest discover -s tests -t . -v
   ```
+
+  確かめたコミットのきれいな複製で動かす。作業ツリーのままだと、追跡していない `tests/test_*.py` や古い `__pycache__` が sandbox の外で読み込まれるため。
 
 - [ ] 実機で確かめる（設計の[完了条件](../work/20261124_workbook-intake/design.md#done)）。メインの会話から xlide を呼ぶと止まる、承認のないファイルは止まる、承認したあとは読める、警告のあるファイルは警告の確認が要る、受け取り用フォルダの外は止まる、書き込み用のツールは止まる、推奨設定のもとで Bash から読めない、など。
 - [ ] `.claude-plugin/plugin.json` の `version` を上げ、タグを付ける。
