@@ -1,6 +1,6 @@
 {
   "name": "workbook-intake",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "Checks Excel workbooks received from outside before xlide-mcp reads them, and runs the analysis through a read-only agent.",
   "author": {
     "name": "kado-ta"
