@@ -124,7 +124,7 @@ claude plugin install workbook-intake@workbook-intake
 3. スキルが、固定の質問を出します。入力の確認と、検査に警告があるときだけの、警告の確認です。「確認した」「続ける」を選ぶと、フックが記録します。記録が効くのは、このセッションと、そのファイルの同じ中身だけです。
 4. 読み取り専用のサブエージェント `workbook-intake:excel-analyst` が、xlide でブックを読み、要約を返します。
 
-スキルは始まるとき（手順 2 で、何かを尋ねる前に）、メインの会話から `xlide_doctor` を 1 回呼び、フックが動いていることを確かめます。フックはこの呼び出しを `workbook-intake: wrong_caller` で拒否します。この拒否は正常です。`xlide_doctor` の許可の確認が出たときは、フックが動いていません。「いいえ」を選んでください（許可する選択肢や、今後確認しない選択肢は選ばないでください）。この拒否のほかの結果（結果が返った、許可しなかった、ほかの理由で拒否された）では、スキルは止まります（[Troubleshooting](#troubleshooting) を見てください）。同じところで、Agent ツールに `name` か `team_name` の引数があるときも、スキルは止まります（エージェントのチームが有効です）。
+スキルは始まるとき（手順 2 で、何かを尋ねる前に）、まず受け取り用フォルダの中の存在しないファイル名（`workbook-intake-read-check.xlsx`）を Read で 1 回呼び、Claude Code が権限の設定を理由に拒否したときだけ進みます（`Read(...)` の deny が設定されていることの確かめです）。そのあと、メインの会話から `xlide_doctor` を 1 回呼び、フックが動いていることを確かめます。フックはこの呼び出しを `workbook-intake: wrong_caller` で拒否します。この拒否は正常です。`xlide_doctor` の許可の確認が出たときは、フックが動いていません。「いいえ」を選んでください（許可する選択肢や、今後確認しない選択肢は選ばないでください）。この拒否のほかの結果（結果が返った、許可しなかった、ほかの理由で拒否された）では、スキルは止まります（[Troubleshooting](#troubleshooting) を見てください）。同じところで、Agent ツールに `name` か `team_name` の引数があるときも、スキルは止まります（エージェントのチームが有効です）。
 
 Google スプレッドシートは直接読みません。`.xlsx` でダウンロードして受け取り用フォルダに置いてください（Apps Script は含まれず、Google 独自の関数は Excel と同じには動かないことがあります）。claude.ai の Google Sheets のコネクタは、このプラグインの守りの外です。
 
@@ -246,7 +246,7 @@ xlide を守るフックの拒否（`workbook-intake: <理由>`。必要なら�
 
 フックが拒否したら、スキルは止まって理由を伝えます。別の方法でファイルを読もうとはしません。
 
-スキルが最初の確かめで止まり、`xlide_doctor` の結果が返ったか、許可の確認が出たときは、このセッションで xlide を守るフックが動いていません。どの設定ファイルでも `disableAllHooks` が設定されているとき、または管理設定の `allowManagedHooksOnly` が有効なときに、フックは止まります（[制限](#limitations)を見てください）。フックが動くまで、このプラグインを使わないでください。ほかの理由で拒否されたときは、上の表を見てください。スキルが最初の確かめで、Agent ツールに `name` か `team_name` の引数があるために止まったときは、エージェントのチームが有効です。`CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS` を外すか空にし、`--agent-teams` を付けずに、Claude Code を起動し直してください。スキルは、Agent ツールの定義が見えないときも止まります。そのセッションでは、どのみちサブエージェントを起動できません。
+スキルが最初の確かめで止まり、`xlide_doctor` の結果が返ったか、許可の確認が出たときは、このセッションで xlide を守るフックが動いていません。どの設定ファイルでも `disableAllHooks` が設定されているとき、または管理設定の `allowManagedHooksOnly` が有効なときに、フックは止まります（[制限](#limitations)を見てください）。フックが動くまで、このプラグインを使わないでください。ほかの理由で拒否されたときは、上の表を見てください。スキルが Read の確かめで止まったときは、受け取り用フォルダへの `Read(...)` の deny がないか、フォルダに当たっていません。[Configuration](#configuration) のとおりに足してください（別のフォルダなら `Read(//abs/path/**)` の形）。その Read の許可の確認が出たときは、許可しないでください。スキルが最初の確かめで、Agent ツールに `name` か `team_name` の引数があるために止まったときは、エージェントのチームが有効です。`CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS` を外すか空にし、`--agent-teams` を付けずに、Claude Code を起動し直してください。スキルは、Agent ツールの定義が見えないときも止まります。そのセッションでは、どのみちサブエージェントを起動できません。
 
 `doctor.sh` の項目: `macos`（macOS ではない）、`uvx`（uv が PATH にない）、`python3`（Command Line Tools がない、またはその python が root の持ち物でない）、`sandbox_exec`（`/usr/bin/sandbox-exec` がない）、`intake_dir_protected`（Bash による受け取り用フォルダの一覧を sandbox が拒否しなかった。必須の設定がない、sandbox が無効、フォルダがない）。xlide のツールが見えないときは、uv がない、初回の取得に失敗した、プロジェクトの `xlide` にプラグインのものが外された、のどれかです（[設定](#configuration)を見てください）。
 

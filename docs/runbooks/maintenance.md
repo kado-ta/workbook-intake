@@ -99,6 +99,7 @@ xlide-mcp か、固定した依存（pyopenvba・pyofficeeditor・pyvbaanalysis�
 
 - [ ] 上の値と 1 つでも違えば、README の対象の記述と、フック・スキルの前提を見直す。違う項目は、使うのをやめて設計を見直す判断を、人に求める。
 - [ ] スキルは、Claude Code がエージェントのチームが有効な間だけ Agent ツールに `name`・`team_name` の引数を足すことに頼る（2026-11-26、2.1.332 の本体で確かめた。`CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS` と `--agent-teams` を見る判定が偽のとき、スキーマから外す）。新しい版でも、チームを切ったセッションの Agent ツールにこれらの引数がなく、有効にしたセッションにはあることを確かめる。ほかの理由で現れる、またはチームが有効でも現れないなら、スキルの Step 0 の確かめを直す。
+- [ ] スキルの Step 0 は、Read ツールが deny の規則を、バイナリの拡張子とファイルの有無より先に確かめることに頼る（2.1.332 の `validateInput` で、"File is in a directory that is denied by your permission settings." が "This tool cannot read binary files" より先）。`.xlsx` がバイナリの拡張子の一覧にあることにも頼る。新しい版でも、deny の規則がある受け取り用フォルダの存在しない `.xlsx` で前者が返り、規則がなければ後者が返ることを確かめる。順序が変わったら、スキルの Read の確かめを直す。
 - [ ] `claude plugin validate . --strict` を通す。
 
 <a name="records"></a>
