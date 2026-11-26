@@ -227,6 +227,10 @@ class RecordConsentTest(unittest.TestCase):
         self.assertEqual(out,
                          "workbook-intake: consent=not_recorded; reason=consent_store_unavailable")
 
+    def test_short_write_is_not_recorded(self):
+        with mock.patch.object(ic.os, "write", return_value=2):
+            self.assertFalse(ic._append(SESSION, {"kind": "consent"}))
+
     def test_nfd_and_nfc_paths_are_same_file(self):
         nfd = unicodedata.normalize("NFD", "ガイド.xlsx")
         nfc = unicodedata.normalize("NFC", "ガイド.xlsx")

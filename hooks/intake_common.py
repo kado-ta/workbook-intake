@@ -321,12 +321,12 @@ def _append(session_id, record):
     try:
         fd = os.open(path, os.O_APPEND | os.O_CREAT | os.O_WRONLY | os.O_NOFOLLOW, 0o600)
         try:
-            os.write(fd, line)
+            written = os.write(fd, line)
         finally:
             os.close(fd)
     except OSError:
         return False
-    return True
+    return written == len(line)
 
 
 def _records(session_id):
