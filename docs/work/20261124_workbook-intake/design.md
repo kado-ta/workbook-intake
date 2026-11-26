@@ -32,6 +32,7 @@ created: 2026-11-24
 - 2026-11-26: 6 回目の `/review` の後（[test-report](test-report.md#review-6)）。[フック](#hook)は、検索の文字列（`query`）が 256 文字を超える呼び出しと、エージェントのチームが有効な環境（`CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS` が空でない）での呼び出しを拒否する。matcher は、プラグインの xlide のすべてのツールに当たる形に広げる（ユーザーの判断）。
 - 2026-11-26: 7 回目の `/review` の後（[test-report](test-report.md#review-7)）。[スキル](#skill)は、最初にメインの会話から `xlide_doctor` を呼び、フックが `wrong_caller` で拒否したときだけ先に進む（フックが動いていることの確かめ）。起動の引数 `--agent-teams` でもチームが有効になりフックは見分けられないこと、ほかのフックが `updatedInput` で入力を書き換えうることを、[受け入れるリスク](#risks)に足す（ユーザーの判断）。
 - 2026-11-26: 8 回目の `/review` の後（[test-report](test-report.md#review-8)）。[スキル](#skill)の「`--agent-teams` で起動されているなら止まる」は、モデルが起動の引数を見られないので何もしない。Claude Code 2.1.332 の本体には、チームが有効なときだけ足されるツールがなかったので、この文を消し、同じ判定で外される Agent ツールの `name`・`team_name` の引数があれば止まる手順に置き換える（ユーザーの判断 D4）。承認の記録（ファイルの実際のパスと SHA-256）がプラグインを外すまで残ることを、README と[受け入れるリスク](#risks)に書く（ユーザーの判断）。
+- 2026-11-26: Codex の 1・2 回目の後（[test-report](test-report.md#codex-1)・[2 回目](test-report.md#codex-2)）。開始時の確かめ（D1）: `doctor.sh` は、一覧の失敗が sandbox の拒否（`Operation not permitted`）であることを求め、スキルは Step 0 で Read ツールの deny も確かめる（[前提の確認](#doctor)・[直接の読み込みを止める](#direct-read)・[スキル](#skill)）。フックは、`:` を含む受け取り用フォルダ（D2）と、`mcp_server` のない入力（D3）を拒否する（[フック](#hook)）。入力の確認から xlide が読むまでの書き換えを、[受け入れるリスク](#risks)に広げた（指摘 4・5・6）。[検査の Seatbelt](#sandbox-profile)の起動の範囲と、[承認の記録](#consent)の順序と中身を、実装に合わせて直した（指摘 35・38）（ユーザーの判断）。
 
 <a name="intent"></a>
 
@@ -284,6 +285,7 @@ workbook-intake/
   - Command Line Tools の python3（`xcode-select -p` の先）がある。その python の場所（`sys.base_prefix` の `realpath`）が root の持ち物である（検査の起動と同じ規則。違えば、フックは毎回 `check_error` で拒否するため）。
   - `/usr/bin/sandbox-exec` がある。
   - Bash（Claude Code の sandbox）から、受け取り用フォルダの中を一覧できない。一覧できたら、[直接の読み込みを止める](#direct-read)の推奨設定が効いていないので、README の設定を示して止まる。sandbox が切られているときも一覧できるので、同じく止まる。
+  - 一覧の失敗は、sandbox の拒否（`LC_ALL=C ls -A` の出力が `Operation not permitted`）のときだけ `ok intake_dir_protected` にする（2026-11-26、Codex の指摘 3、ユーザーの判断 D1）。一覧できた場合のほか、`Permission denied`（フォルダのモードが `0111` など）や `No such file or directory` も `missing` にする。モードで一覧できないだけのフォルダは、sandbox がなくても `ok` になり、名前の分かるファイルは読めてしまうため。
   - xlide のツールが見える（プラグインの MCP サーバーが動いている）。これはスキルが確かめる。
 - 受け取り用フォルダがあること、シンボリックリンクでないことは、sandbox の外で動くフックが確かめ、[入力の確認](#consent)の結果として返す。推奨設定のもとでは、sandbox の中から見えないことがあるため。
 - 足りないものがあれば、何が足りないかと、README のどこを見ればよいかを示して止まる。
@@ -338,7 +340,7 @@ workbook-intake/
 
 - dotfiles の check-vault-note.sb と同じ書き方にする。
   - ネットワークと書き込み（`/dev/null` を除く）を止める。
-  - 起動できるのは python3 だけにする。
+  - 起動できるのは `PYTHON_HOME` の下だけにする（`(deny process-exec*)` の後に `(allow process-exec (subpath (param "PYTHON_HOME")))`。2026-11-26 に直した）。`usr/bin/python3` は framework の Python を起動するので、python3 の 1 つのファイルだけではない。
   - mach-lookup・Apple Events・ほかのプロセスへのシグナルを止める。
   - ほかのプロセスの情報（引数と環境変数）を読ませない（2026-11-25 に足した。今のプロファイルでは `sysctl` の `kern.procargs2` で読めた。[test-report](test-report.md#review-2)）。
 - 読み込みは既定で拒否し、python3 の起動に要る場所と、検査するファイル 1 つだけを許す。値は `sandbox-exec -D` で渡す。
@@ -352,9 +354,10 @@ workbook-intake/
 - matcher は `mcp__plugin_workbook-intake_xlide__.*|mcp__.*__xlide_.*`（2026-11-26 に前半を足した）。後半は、どの名前で定義された xlide にも当たる（xlide のツール名はすべて `xlide_` で始まる）。前半は、プラグインの xlide のツールなら、名前が `xlide_` で始まらなくても当たる。後の版で名前の前提が崩れても、許可リストにないツールとして止まる。`onFailure: "block"`、timeout は 30 秒。
 - macOS の `/bin/bash` 3.2 と python3 で動かす。入力を読めないときは拒否する（fail closed）。
 - bash は `-p` で起動する（2026-11-26 に足した）。環境の `BASH_ENV` のファイルと、環境から渡された関数を読まないため（bash 3.2 で確かめた）。シェルの中では PATH を `/usr/bin:/bin` に固定する。
+- 受け取り用フォルダの設定値（`WORKBOOK_INTAKE_DIR`）に `:` があれば、`file_path` のある呼び出しを `intake_dir_invalid` で拒否する（2026-11-26、Codex の指摘 11、ユーザーの判断 D2）。xlide は `--root` を `:` で複数のルートに分けるので、フックの確かめと xlide の読む範囲がずれるため。
 - 拒否の理由は、固定の文と、固定の語彙（拒否の理由、検査の不合格と警告の語彙）だけにする。引数やファイル由来の文字列を入れない。
 - 判定の順:
-  1. ツール名が `mcp__plugin_workbook-intake_xlide__` で始まらない → 拒否。プラグイン以外で定義された xlide は使わせない。
+  1. ツール名が `mcp__plugin_workbook-intake_xlide__` で始まらない → 拒否。プラグイン以外で定義された xlide は使わせない。入力に `mcp_server` がないとき（名前と由来が、プラグインのサーバーと一致しないときを含む）も `not_plugin_server` で拒否する（2026-11-26、Codex の指摘 12、ユーザーの判断 D3）。サーバーの由来を確かめずに通さないため。
      - フックの環境の `CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS` が空でない → `agent_teams_enabled` で拒否（2026-11-26、6 回目の `/review` の後のユーザーの判断）。チームの一員は、名前を付けて起動されたサブエージェントと同じ `agent_type` を持ち、`SendMessage` が必ず足されるので、呼び出し元の判定で見分けられない。
   2. ツール名が許可リストにない → 拒否。xlide の更新で増えたツールも、許可リストに足すまで止まる。
   3. 入力の `agent_type` が `workbook-intake:excel-analyst` でない → 拒否。
@@ -386,7 +389,8 @@ workbook-intake/
   - 文は、英語と日本語を併記した固定の文に、ファイルの絶対パスと、警告の語彙の並びを含める。
   - 選択肢は「続ける」と「やめる」の 2 つ（固定の文）。
   - フックは、文が、記録した警告の語彙から作った文と一致し、人が選んだ答えが「続ける」のときだけ、警告の確認の承認を記録する。
-- 記録は `${CLAUDE_PLUGIN_DATA}` に置く。中身は、セッション ID、ファイルの `realpath`、中身の SHA-256、検査の結果、警告の確認の承認。この場所はプラグインのデータの置き場所で、dotfiles の環境では sandbox から書けない（ほかの環境は README に書く）。
+- 承認を記録する順序（`record_consent.py`、2026-11-26 に実装に合わせた）: パスを `realpath` にして受け取り用フォルダの中か確かめる → 正規形か確かめる → プラグインのデータの置き場所があるか確かめる → SHA-256 を取る → 検査を実行する → SHA-256 をもう一度取り、違えば `file_changed` → 1 回だけ記録する → 結果を返す。記録を書き切れなかったとき（`os.write` が一部しか書かなかったときを含む）は、記録したと返さず `consent_store_unavailable` にする（2026-11-26、Codex の指摘 15）。
+- 記録は `${CLAUDE_PLUGIN_DATA}/consents/` の `<セッション ID の SHA-256>.jsonl` に置く。セッション ID はファイル名の SHA-256 に使うだけで、行には書かない。行の中身は、種類（`consent` か `warnings_ack`）、ファイルのパス（`realpath` を NFC にしたもの）、中身の SHA-256、検査の結果（`consent` の行。状態・不合格・警告）、警告の語彙（`warnings_ack` の行）。この場所はプラグインのデータの置き場所で、dotfiles の環境では sandbox から書けない（ほかの環境は README に書く）。
 - モデルは質問の文を決められるが、人の答えは決められない。固定の文と一致しない質問や、「確認した」「続ける」以外の答えは記録されない。
 - 承認はセッションの中だけで有効にする。ファイルの中身が変われば（SHA-256 が変われば）、承認し直す。
 - フックの入力を解釈できないときは、記録しない（安全な側に倒す）。
@@ -399,7 +403,8 @@ workbook-intake/
 
 - 方法: Claude Code の sandbox の読み込みの拒否に、受け取り用フォルダを足す（ユーザーの settings。README に書く）。settings の正確な書き方と、Read ツールの deny の規則が sandbox の Bash にも効くかは、[実装の最初に確かめる](#to-verify)。Read ツールは `.xlsx` を読まないが、確かめた結果に合わせて、Read の deny も勧める。
 - sandbox の外で動くもの（フック、xlide）には効かないので、解析の経路は変わらない。人がファイルを置く操作（Finder など）にも効かない。
-- 設定はプラグインから配れない。`doctor.sh` が、Bash から受け取り用フォルダの中を一覧できたら止まる（[前提の確認](#doctor)）。これで、スキルを通る使い方では、設定漏れに気づける。
+- 設定はプラグインから配れない。`doctor.sh` が、Bash から受け取り用フォルダの中を一覧できたら止まる（[前提の確認](#doctor)）。これで、スキルを通る使い方では、設定漏れに気づける。一覧の失敗が sandbox の拒否（`Operation not permitted`）でないときも止まる（2026-11-26、ユーザーの判断 D1）。
+- Read ツールの側も、スキルが Step 0 で確かめる（2026-11-26、ユーザーの判断 D1）。受け取り用フォルダの中の、存在しない `workbook-intake-read-check.xlsx` を Read で 1 回呼び、「denied by your permission settings」の拒否が返ったときだけ進む。Claude Code 2.1.332 の Read ツールは、deny の規則を、バイナリの拡張子の確かめとファイルの有無の確かめ、許可の確認より先に確かめる（本体で確かめた）ので、ファイルがなくても deny の有無が分かる。ほかの結果（バイナリは読めないという拒否、ファイルがない、許可の確認、中身）は、deny の規則がないという意味なので止まる。
 - sandbox の外でコマンドを動かす逃げ道（Bash の `dangerouslyDisableSandbox`）を、settings で使えなくすることも勧める（書き方は確かめる）。`doctor.sh` からは確かめられないので、README に書く。
 - スキルは、フックに拒否されたら、ほかの方法（Bash、ほかのスキル）でファイルを読もうとせず、拒否の理由を人に伝えて止まる。
 - 限界: スキルを通らない使い方（ほかのスキルや、Bash で読むよう直接頼むこと）では、`doctor.sh` は動かない。推奨設定を入れていない環境では、その経路は止まらない（[受け入れるリスク](#risks)）。
@@ -426,7 +431,8 @@ workbook-intake/
 - フックに拒否されたら、ほかの方法でファイルを読もうとせず、拒否の理由を人に伝えて止まる（[直接の読み込みを止める](#direct-read)）。
 - [入力の確認](#consent)の固定の文には、使った結果は自己責任であることも含める。
 - xlide のツールが見えないとき（uv がない、プロジェクトの xlide と重複した、など）は、README の設定を示して止まる。
-- フックが動いていることを、使う前に確かめる（2026-11-26、7 回目の `/review` の後のユーザーの判断）。最初にメインの会話から `xlide_doctor`（ファイルを読まない）を 1 回呼び、`workbook-intake: wrong_caller` の拒否が返ったときだけ先に進む。結果が返った、許可の確認が出た、ほかの理由で拒否された、のどれかなら止まる。管理設定の `allowManagedHooksOnly` や `disableAllHooks` でフックが止まった環境を、理由を問わずに見分けるため。
+- Step 0 では、`doctor.sh` の後に Read ツールの deny を確かめる（2026-11-26、ユーザーの判断 D1。[直接の読み込みを止める](#direct-read)）。
+- フックが動いていることを、使う前に確かめる（2026-11-26、7 回目の `/review` の後のユーザーの判断）。最初にメインの会話から `xlide_doctor`（ファイルを読まない）を 1 回呼び、`workbook-intake: wrong_caller` の拒否が返ったときだけ先に進む。拒否の理由は、`workbook-intake: wrong_caller` で始まっていればよい（2026-11-26 に、全文の一致から、始まりの一致に直した）。結果が返った、許可の確認が出た、ほかの理由で拒否された、のどれかなら止まる。管理設定の `allowManagedHooksOnly` や `disableAllHooks` でフックが止まった環境を、理由を問わずに見分けるため。
 - フックの確かめの後、手順 1 の前に、エージェントのチームが切れていることを確かめる（2026-11-26、ユーザーの判断 D4）。自分の Agent ツールに `name` か `team_name` の引数があれば、README の Troubleshooting を示して止まる。Claude Code 2.1.332 は、`CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS` と `--agent-teams` を見るチームの判定が偽のとき、これらの引数をスキーマから外すため、フックが見分けない `--agent-teams` での起動も分かる。Agent ツールが名前だけの一覧にあるときは定義を読み込んでから見て、引数が見えなければ止まる。
 - 検査の限界を書く: 文字列の検査は見逃しがあること、ウイルス対策ではないこと。
 
@@ -499,7 +505,7 @@ README に書くこと:
 
 ## 受け入れるリスク
 
-- 検査した後、xlide が読むまでに、ファイルを差し替えられる（TOCTOU）。受け取り用フォルダは sandbox の書き込みの範囲の外なので、差し替えられるのは sandbox の外で動くもの（人や、ほかのアプリ）だけ。`~` で起動したセッションでは書けるので、README で sandbox の denyWrite を勧める。
+- 入力の確認を出してから xlide が読むまでの間に、ファイルを差し替えられる（TOCTOU。2026-11-26、Codex の指摘 4・5・6 で、検査の後だけでなく全体に広げた）。次の 3 つの間が含まれる。(1) 確認の質問と答えの間: 承認は、答えの後にフックが取る SHA-256 に付くので、変わった後の中身に付く。(2) 承認の中の検査の間: SHA-256 を取る前後で同じでも、検査がそのバイト列を読んだとは限らない。同じパスの別の版に同じ警告があると、古い警告の確認が新しい版に付くこともある。(3) 検査の後、xlide が読むまで。受け取り用フォルダは sandbox の書き込みの範囲の外なので、差し替えられるのは sandbox の外で動くもの（人や、ほかのアプリ）だけ。`~` で起動したセッションでは書けるので、README で sandbox の denyWrite を勧める。
 - 文字列の検査は見逃す。守りの本体は、サブエージェントの権限を絞ることにある。たとえば、数式で組み立てた文字列（`="ignore "&"previous"` など）は、xlide が計算した値を返すが、検査は数式を計算しないので見ない（2026-11-25、Task 14 のレビューで確かめた）。
 - サブエージェントの要約に、仕込まれた指示が混ざりうる。メインの会話の Bash は、sandbox と権限の確認の下にある。
 - 管理設定でプラグインのフックが止められていると、検査が強制されない。README に書く。
