@@ -37,7 +37,7 @@ class DoctorTest(unittest.TestCase):
     def _fake_ls(self):
         # Stands in for the refusal the sandbox gives under sandbox.filesystem.denyRead.
         path = self.bin / "ls"
-        path.write_text('#!/bin/sh\necho "ls: $*: Operation not permitted" >&2\nexit 1\n')
+        path.write_text('#!/bin/sh\nfor a; do last="$a"; done\necho "ls: $last: Operation not permitted" >&2\nexit 1\n')
         path.chmod(stat.S_IRWXU)
 
     def run_doctor(self):
@@ -141,6 +141,16 @@ class DoctorTest(unittest.TestCase):
         self._fake_uvx()
         os.chmod(self.intake, 0)
         r = self.run_doctor()
+        self.assertEqual(r.returncode, 1, r.stdout)
+        self.assertIn("missing intake_dir_protected", r.stdout)
+
+    def test_path_with_the_phrase_is_not_protected(self):
+        self._fake_uvx()
+        tricky = self.home / "Operation not permitted"
+        tricky.mkdir()
+        self.addCleanup(os.chmod, tricky, 0o700)
+        os.chmod(tricky, 0)
+        r = self._run_env(WORKBOOK_INTAKE_DIR=str(tricky))
         self.assertEqual(r.returncode, 1, r.stdout)
         self.assertIn("missing intake_dir_protected", r.stdout)
 
