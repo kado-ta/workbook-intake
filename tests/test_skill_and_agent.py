@@ -74,8 +74,11 @@ class SkillTest(unittest.TestCase):
                  if "xlide_doctor" in p and "wrong_caller" in p]
         start = [i for i, p in enumerate(paragraphs)
                  if "Start the `workbook-intake:excel-analyst` subagent" in p]
+        step1 = [i for i, p in enumerate(paragraphs) if p.startswith("## Step 1")]
         self.assertTrue(check)
         self.assertTrue(start)
+        self.assertTrue(step1)
+        self.assertLess(check[0], step1[0])
         self.assertLess(check[0], start[0])
 
     def test_file_name_not_in_shell_command(self):
