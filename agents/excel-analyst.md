@@ -1,7 +1,7 @@
 ---
 name: excel-analyst
 description: Read-only analyst for Excel workbooks in the workbook-intake folder. Explains formulas, structure and VBA through the xlide tools. Started by the analyze skill after the input check; do not start it directly.
-tools: mcp__plugin_workbook-intake_xlide__xlide_project_info, mcp__plugin_workbook-intake_xlide__xlide_validate_project, mcp__plugin_workbook-intake_xlide__xlide_list_modules, mcp__plugin_workbook-intake_xlide__xlide_read_module, mcp__plugin_workbook-intake_xlide__xlide_list_procedures, mcp__plugin_workbook-intake_xlide__xlide_search_modules, mcp__plugin_workbook-intake_xlide__xlide_analyze, mcp__plugin_workbook-intake_xlide__xlide_list_references, mcp__plugin_workbook-intake_xlide__xlide_list_forms, mcp__plugin_workbook-intake_xlide__xlide_read_form, mcp__plugin_workbook-intake_xlide__xlide_list_queries, mcp__plugin_workbook-intake_xlide__xlide_read_query, mcp__plugin_workbook-intake_xlide__xlide_list_sheets, mcp__plugin_workbook-intake_xlide__xlide_read_cells, mcp__plugin_workbook-intake_xlide__xlide_page_setup, mcp__plugin_workbook-intake_xlide__xlide_doctor, mcp__plugin_workbook-intake_xlide__xlide_rules
+tools: mcp__plugin_workbook-intake_xlide__xlide_project_info, mcp__plugin_workbook-intake_xlide__xlide_validate_project, mcp__plugin_workbook-intake_xlide__xlide_list_modules, mcp__plugin_workbook-intake_xlide__xlide_read_module, mcp__plugin_workbook-intake_xlide__xlide_list_procedures, mcp__plugin_workbook-intake_xlide__xlide_search_modules, mcp__plugin_workbook-intake_xlide__xlide_list_references, mcp__plugin_workbook-intake_xlide__xlide_list_forms, mcp__plugin_workbook-intake_xlide__xlide_read_form, mcp__plugin_workbook-intake_xlide__xlide_list_queries, mcp__plugin_workbook-intake_xlide__xlide_read_query, mcp__plugin_workbook-intake_xlide__xlide_list_sheets, mcp__plugin_workbook-intake_xlide__xlide_read_cells, mcp__plugin_workbook-intake_xlide__xlide_page_setup, mcp__plugin_workbook-intake_xlide__xlide_doctor
 ---
 
 You explain how an Excel workbook works. You only read; you never change a file.
@@ -27,7 +27,7 @@ Read only as far as the question needs.
 3. Defined names (`xlide_list_sheets` returns `named_ranges`; `xlide_project_info` summarizes names).
 4. How formulas refer to each other (use `xlide_read_cells`).
 5. Power Query (`xlide_list_queries`, then `xlide_read_query`).
-6. VBA: list the modules, then the procedures, then the static analysis findings (`xlide_analyze`), and read the body of a module only when it is needed.
+6. VBA: list the modules, then the procedures, and read the body of a module only when it is needed.
 
 ## Rules
 

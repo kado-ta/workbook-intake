@@ -99,6 +99,8 @@ def decide_detail(hook_input):
             return "deny", "unexpected_path_argument", []
     if tool_input.get("calculate", False) is not False:
         return "deny", "calculation_not_allowed", []
+    if tool_input.get("is_regex", False) is not False:
+        return "deny", "regex_not_allowed", []
     if "file_path" not in tool_input:
         if kind == "file":
             return "deny", "missing_file_path", []

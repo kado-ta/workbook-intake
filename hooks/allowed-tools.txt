@@ -5,7 +5,6 @@ xlide_list_modules file
 xlide_read_module file
 xlide_list_procedures file
 xlide_search_modules file
-xlide_analyze file
 xlide_list_references file
 xlide_list_forms file
 xlide_read_form file
@@ -15,4 +14,3 @@ xlide_list_sheets file
 xlide_read_cells file
 xlide_page_setup file
 xlide_doctor nofile
-xlide_rules nofile

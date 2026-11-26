@@ -169,6 +169,26 @@ class GuardXlideTest(unittest.TestCase):
         path = self.consented()
         self.assertEqual(gx.decide(call(path, extra={"calculate": False})), ("allow", "ok"))
 
+    def test_regex_denied(self):
+        path = self.consented()
+        for value in (True, "true", 1, None):
+            self.assertDenied(call(path, extra={"is_regex": value}), "regex_not_allowed")
+
+    def test_regex_denied_before_consent(self):
+        path = self.book()
+        self.assertDenied(call(path, extra={"is_regex": True}), "regex_not_allowed")
+
+    def test_regex_false_passes_on(self):
+        path = self.consented()
+        self.assertEqual(gx.decide(call(path, extra={"is_regex": False})), ("allow", "ok"))
+
+    def test_analyze_not_allowed(self):
+        path = self.consented()
+        self.assertDenied(call(path, tool=gx.TOOL_PREFIX + "xlide_analyze"), "tool_not_allowed")
+
+    def test_rules_not_allowed(self):
+        self.assertDenied(call(tool=gx.TOOL_PREFIX + "xlide_rules"), "tool_not_allowed")
+
     def test_check_cells_not_allowed(self):
         path = self.consented()
         self.assertDenied(call(path, tool=gx.TOOL_PREFIX + "xlide_check_cells"),
@@ -375,7 +395,7 @@ class GuardXlideTest(unittest.TestCase):
         self.assertIn("workbook-intake: internal_error", body["permissionDecisionReason"])
 
     def test_allow_output_shape(self):
-        code, out = self.run_main(json.dumps(call(tool=gx.TOOL_PREFIX + "xlide_rules")))
+        code, out = self.run_main(json.dumps(call(tool=gx.TOOL_PREFIX + "xlide_doctor")))
         self.assertEqual(code, 0)
         self.assertEqual(json.loads(out), {"hookSpecificOutput": {
             "hookEventName": "PreToolUse", "permissionDecision": "allow",
@@ -520,10 +540,10 @@ class ManifestTest(unittest.TestCase):
         tools = gx.load_allowlist()
         expected = dict.fromkeys((
             "project_info", "validate_project", "list_modules", "read_module",
-            "list_procedures", "search_modules", "analyze", "list_references", "list_forms",
+            "list_procedures", "search_modules", "list_references", "list_forms",
             "read_form", "list_queries", "read_query", "list_sheets", "read_cells",
             "page_setup"), "file")
-        expected.update({"doctor": "nofile", "rules": "nofile"})
+        expected.update({"doctor": "nofile"})
         self.assertEqual(tools, {"xlide_" + k: v for k, v in expected.items()})
 
     def test_allowlist_reviewed_for_pinned_version(self):
