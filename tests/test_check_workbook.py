@@ -1,3 +1,4 @@
+import base64
 import contextlib
 import io
 import json
@@ -20,8 +21,8 @@ sys.path.insert(0, str(ROOT))
 import check_workbook  # noqa: E402
 from tests.workbook_factory import (  # noqa: E402
     assemble_zip, build_hand_zip, build_zip, central_entries, deflate_split_at_output_limit, deflated_entries,
-    local_entry, mashup_item, minimal_parts, patch_entry, raw_zip, shift_central_offsets,
-    split_zip, write_raw, write_workbook,
+    local_entry, mashup_blob, mashup_item, mashup_wrap, minimal_parts, patch_entry, raw_zip,
+    shift_central_offsets, split_zip, write_raw, write_workbook,
 )
 
 SCRIPT = str(ROOT / "scripts" / "check_workbook.py")
@@ -311,7 +312,8 @@ class CheckWorkbookTest(unittest.TestCase):
         self.assertIn("external_relationship", self.warn(parts)["warnings"])
 
     def test_power_query_warns(self):
-        data = "\ufeff<DataMashup xmlns='x'>AAAA</DataMashup>".encode("utf-16-le")
+        # A whole package: a DataMashup that Excel would not write fails (D1 of round 3).
+        data = mashup_item(raw_zip({"Formulas/Section1.m": b"section Section1;"}))
         r = self.warn(self.parts_with(**{"customXml__item1.xml": data}))
         self.assertIn("power_query", r["warnings"])
 
@@ -614,10 +616,8 @@ class CheckWorkbookTest(unittest.TestCase):
         self.assertIn("strings_not_checked", self.warn(parts)["warnings"])
 
     def test_power_query_reports_long_string(self):
-        body = "A" * (check_workbook.LONG_STRING_CHARS + 1)
-        data = (
-            '\ufeff<DataMashup xmlns="http://schemas.microsoft.com/DataMashup">%s</DataMashup>' % body
-        ).encode("utf-16-le")
+        # A whole package (D1 of round 3); its base64 is one string over the limit.
+        data = mashup_item(raw_zip({"Formulas/Section1.m": b"x" * check_workbook.LONG_STRING_CHARS}))
         r = self.warn(self.parts_with(**{"customXml__item1.xml": data}))
         self.assertIn("power_query", r["warnings"])
         self.assertIn("very_long_string", r["warnings"])
@@ -1213,11 +1213,13 @@ class PowerQueryPackageTest(unittest.TestCase):
                 self.assertEqual(r["failures"], ["xml_dtd"])
 
     def test_mashup_declared_size_not_trusted(self):
+        # A part shorter than declared: Excel never writes one, so it fails closed (D1 of round 3).
         package = local_entry("Formulas/Section1.m", zipfile.ZIP_DEFLATED, _deflate(b"0123456789"), 0xFFFFFFFF)
         r = self.check({"customXml/item1.xml": mashup_item(package)})
-        self.assertEqual(r["result"], "pass")
+        self.assertEqual(r["failures"], ["not_zip"])
 
     def test_mashup_inflation_stops_after_declared_size(self):
+        # A part longer than declared: Excel never writes one, so it fails closed (D1 of round 3).
         package = local_entry("Formulas/Section1.m", zipfile.ZIP_DEFLATED, _deflate(b"\x00" * MIB), 1024)
         produced = []
         real = zlib.decompressobj
@@ -1237,18 +1239,21 @@ class PowerQueryPackageTest(unittest.TestCase):
         # Stored outer parts, so only the package part is inflated.
         with mock.patch.object(check_workbook.zlib, "decompressobj", lambda wbits: Counting()):
             r = self.check({"customXml/item1.xml": mashup_item(package)}, zipfile.ZIP_STORED)
-        self.assertEqual(r["result"], "pass")
+        self.assertEqual(r["failures"], ["not_zip"])
         self.assertEqual(sum(produced), 1024 + 1)
 
     def test_mashup_counted_past_unknown_method(self):
-        package = local_entry("Config/Package.xml", 12, b"\x00" * 16, 16) + self.bomb_entry()
+        # Excel writes only stored and deflated parts; another method fails closed (D1 of round 3).
+        # The data would inflate, so the method alone decides.
+        package = local_entry("Config/Package.xml", 12, _deflate(b"\x00" * 16), 16) + self.bomb_entry()
         r = self.check({"customXml/item1.xml": mashup_item(package)})
-        self.assertEqual(r["failures"], ["compression_ratio_too_high"])
+        self.assertEqual(r["failures"], ["not_zip"])
 
     def test_mashup_in_other_name_ignored(self):
         item = mashup_item(self.bomb_entry())
         self.assertEqual(self.check({"customXml/item1.xml": item})["failures"], ["compression_ratio_too_high"])
-        r = self.check({"customXml/itemA.xml": item, "customXml/item1.xml.bak": item})
+        # customXml/itemA.xml is read now: the name pattern covers \d on every Python (D1 of round 3).
+        r = self.check({"customXml/item1.xml.bak": item})
         self.assertEqual(r["result"], "pass")
 
     def test_mashup_item_over_parse_limit_fails(self):
@@ -1260,13 +1265,91 @@ class PowerQueryPackageTest(unittest.TestCase):
                     r = self.check({"customXml/item1.xml": item})
                 self.assertEqual(r["failures"], failures)
 
-    def test_mashup_bad_base64_ignored(self):
-        text = (
-            '<?xml version="1.0" encoding="utf-16"?>'
-            '<DataMashup xmlns="http://schemas.microsoft.com/DataMashup">A</DataMashup>'
-        )
-        r = self.check({"customXml/item1.xml": b"\xff\xfe" + text.encode("utf-16-le")})
+    def test_mashup_bad_base64_fails(self):
+        # Base64 that Excel never writes fails closed (D1 of round 3). The second is version 0
+        # and four empty sections with one "=" too many, which Python 3.9 decodes without error.
+        for b64 in ("A", base64.b64encode(bytes(20)).decode("ascii") + "="):
+            with self.subTest(b64=b64):
+                r = self.check({"customXml/item1.xml": mashup_wrap(b64)})
+                self.assertEqual(r["failures"], ["not_zip"])
+
+    def test_mashup_base64_with_inner_padding_fails(self):
+        # Python 3.9 stops decoding at this "=", 3.13 and later go on past it.
+        b64 = base64.b64encode(mashup_blob(self.bomb_entry())).decode("ascii")
+        item = mashup_wrap("QQ==" + b64[4:])
+        self.assertEqual(check_workbook._mashup_blob(item), ("not_zip", None))
+        self.assertEqual(self.check({"customXml/item1.xml": item})["failures"], ["not_zip"])
+
+    def test_mashup_base64_with_line_breaks_passes(self):
+        package = raw_zip({"Formulas/Section1.m": b"section Section1;"}, zipfile.ZIP_DEFLATED)
+        b64 = base64.b64encode(mashup_blob(package)).decode("ascii")
+        lines = "\r\n".join(b64[i:i + 76] for i in range(0, len(b64), 76))
+        self.assertIn("\r\n", lines)
+        r = self.check({"customXml/item1.xml": mashup_wrap(lines)})
         self.assertEqual(r["result"], "pass")
+        self.assertIn("power_query", r["warnings"])
+
+    def test_mashup_newer_unicode_digit_name_counted(self):
+        # A Tangsa digit (Unicode 14): \d matches it on xlide's Python 3.15, not on 3.9.
+        name = "customXml/item\U00016AC0.xml"
+        r = self.check({name: mashup_item(self.bomb_entry())})
+        with zipfile.ZipFile(os.path.join(self.dir, "book.xlsx")) as z:
+            self.assertTrue(z.getinfo(name).flag_bits & 0x800)
+        self.assertEqual(r["failures"], ["compression_ratio_too_high"])
+
+    def test_mashup_metadata_dtd_fails(self):
+        # pyopenvba parses the metadata section with ElementTree.
+        package = raw_zip({"Formulas/Section1.m": b"section Section1;"}, zipfile.ZIP_DEFLATED)
+        metadata = b'<?xml version="1.0" encoding="utf-8"?><!DOCTYPE x><LocalPackageMetadataFile/>'
+        item = mashup_wrap(base64.b64encode(mashup_blob(package, metadata)).decode("ascii"))
+        self.assertEqual(self.check({"customXml/item1.xml": item})["failures"], ["xml_dtd"])
+
+    def test_mashup_trailing_bytes_after_sections_fail(self):
+        package = raw_zip({"Formulas/Section1.m": b"section Section1;"}, zipfile.ZIP_DEFLATED)
+        item = mashup_wrap(base64.b64encode(mashup_blob(package) + b"\x00").decode("ascii"))
+        self.assertEqual(self.check({"customXml/item1.xml": item})["failures"], ["not_zip"])
+
+    def test_mashup_truncated_entry_fails(self):
+        first = local_entry("Config/Package.xml", zipfile.ZIP_STORED, b"<Package/>", len(b"<Package/>"))
+        plain = b"section Section1;"
+        last = local_entry("Formulas/Section1.m", zipfile.ZIP_STORED, plain, len(plain))
+        for cut, package in (("data", first + last[:-1]), ("header", first + last[:29])):
+            with self.subTest(cut=cut):
+                r = self.check({"customXml/item1.xml": mashup_item(package)})
+                self.assertEqual(r["failures"], ["not_zip"])
+
+    def test_mashup_zlib_error_fails(self):
+        plain = b"section Section1;"
+        data = bytearray(_deflate(plain))
+        data[0] |= 0x06  # block type 3, which deflate reserves
+        package = local_entry("Formulas/Section1.m", zipfile.ZIP_DEFLATED, bytes(data), len(plain))
+        r = self.check({"customXml/item1.xml": mashup_item(package)})
+        self.assertEqual(r["failures"], ["not_zip"])
+
+    def test_mashup_size_mismatch_fails(self):
+        plain = b"section Section1;"
+        for method, payload in ((zipfile.ZIP_STORED, plain), (zipfile.ZIP_DEFLATED, _deflate(plain))):
+            with self.subTest(method=method):
+                package = local_entry("Formulas/Section1.m", method, payload, len(plain) + 1)
+                r = self.check({"customXml/item1.xml": mashup_item(package)})
+                self.assertEqual(r["failures"], ["not_zip"])
+
+    def test_mashup_non_utf8_name_fails(self):
+        package = local_entry(b"Formulas/\xffSection1.m", zipfile.ZIP_STORED, b"x", 1)
+        r = self.check({"customXml/item1.xml": mashup_item(package)})
+        self.assertEqual(r["failures"], ["not_zip"])
+
+    def test_mashup_blob_counted_in_total(self):
+        plain = b"section Section1;"
+        package = raw_zip({"Formulas/Section1.m": plain})
+        item = mashup_item(package)
+        outer = sum(len(v) for v in minimal_parts().values()) + len(item)
+        blob = len(mashup_blob(package))
+        for limit, failures in ((outer + blob + len(plain), []), (outer + blob - 1, ["uncompressed_too_large"])):
+            with self.subTest(limit=limit):
+                with mock.patch.object(check_workbook, "MAX_TOTAL_UNCOMPRESSED", limit):
+                    r = self.check({"customXml/item1.xml": item})
+                self.assertEqual(r["failures"], failures)
 
 
 if __name__ == "__main__":

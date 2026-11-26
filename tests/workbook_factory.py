@@ -175,8 +175,11 @@ def build_hand_zip(parts, local_extra=b"", central_extra=b"", descriptor=None):
 
 
 def local_entry(name, method, payload, usize):
-    """One local header and its data, declaring usize whatever payload holds (CRC zero)."""
-    nb = name.encode()
+    """One local header and its data, declaring usize whatever payload holds (CRC zero).
+
+    A str name is stored as UTF-8, a bytes name as it is.
+    """
+    nb = name.encode() if isinstance(name, str) else name
     return b"PK\x03\x04" + struct.pack(
         "<HHHHHIIIHH", 20, 0, method, 0, 0x21, 0, len(payload), usize, len(nb), 0
     ) + nb + payload
@@ -196,20 +199,32 @@ _MASHUP_METADATA = (
 )
 
 
-def mashup_item(package, encoding="utf-16"):
-    """A customXml item in Excel's DataMashup wrapper around package.
+def mashup_blob(package, metadata=_MASHUP_METADATA):
+    """The bytes Excel base64-encodes in a DataMashup element.
 
-    The base64 holds version 0, then four length-prefixed sections: package,
-    a permission list, metadata and an empty one. encoding "utf-16" gives
-    UTF-16LE with a BOM, "utf-8" gives UTF-8 without one.
+    Version 0, then four length-prefixed sections: package, a permission
+    list, metadata and an empty one.
     """
     blob = struct.pack("<I", 0)
-    for section in (package, _MASHUP_PERMISSIONS, _MASHUP_METADATA, b""):
+    for section in (package, _MASHUP_PERMISSIONS, metadata, b""):
         blob += struct.pack("<I", len(section)) + section
-    text = _MASHUP_HEAD + base64.b64encode(blob).decode("ascii") + "</DataMashup>"
+    return blob
+
+
+def mashup_wrap(b64, encoding="utf-16"):
+    """A customXml item in Excel's DataMashup wrapper around the text b64.
+
+    encoding "utf-16" gives UTF-16LE with a BOM, "utf-8" gives UTF-8 without one.
+    """
+    text = _MASHUP_HEAD + b64 + "</DataMashup>"
     if encoding == "utf-8":
         return text.encode("utf-8")
     return b"\xff\xfe" + text.encode("utf-16-le")
+
+
+def mashup_item(package, encoding="utf-16"):
+    """A customXml item in Excel's DataMashup wrapper around package (see mashup_blob)."""
+    return mashup_wrap(base64.b64encode(mashup_blob(package)).decode("ascii"), encoding)
 
 
 def deflated_entries(parts):
