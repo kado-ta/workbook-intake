@@ -9,7 +9,7 @@ EN = (ROOT / "README.md").read_text(encoding="utf-8") if (ROOT / "README.md").ex
 JA_PATH = ROOT / "README.ja.md"
 JA = JA_PATH.read_text(encoding="utf-8") if JA_PATH.exists() else ""
 RUNBOOK = "docs/runbooks/maintenance.md"
-SECTIONS = ("Requirements", "Install", "Configuration", "Usage", "Checks",
+SECTIONS = ("Requirements", "Install", "Usage", "Checks",
             "Limitations", "Troubleshooting", "Maintenance", "License")
 
 
@@ -68,12 +68,22 @@ class ReadmeTest(unittest.TestCase):
 
     def test_required_settings_enable_sandbox(self):
         for name, text in (("README.md", EN), ("README.ja.md", JA)):
-            start = text.index("## Configuration")
+            start = text.index('<a name="required-settings"></a>')
             blocks = re.findall(r"```json\n(.*?)\n```", text[start:], flags=re.S)
             settings = json.loads(blocks[0])
             self.assertIs(settings["sandbox"]["enabled"], True, name)
             self.assertTrue(settings["sandbox"]["filesystem"]["denyRead"], name)
             self.assertTrue(settings["permissions"]["deny"], name)
+
+    def test_install_names_both_scopes_and_files(self):
+        for name, text in (("README.md", EN), ("README.ja.md", JA)):
+            start = text.index('<a name="install"></a>')
+            section = text[start:text.index('<a name="usage"></a>')]
+            for anchor in ("install-every-project", "install-one-project", "required-settings"):
+                self.assertIn('<a name="%s"></a>' % anchor, section, name)
+            self.assertIn("--scope local", section, name)
+            self.assertIn("`~/.claude/settings.json`", section, name)
+            self.assertIn("`.claude/settings.local.json`", section, name)
 
     def test_maintenance_links_runbook(self):
         self.assertIn(RUNBOOK, EN)

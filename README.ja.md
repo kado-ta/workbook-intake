@@ -14,7 +14,7 @@
 
 ## 何をするか
 
-- xlide が読めるのは、受取用フォルダ 1 つ（既定は `~/workbook-intake`。変える方法は[設定](#configuration)）の中だけです。
+- xlide が読めるのは、受取用フォルダ 1 つ（既定は `~/workbook-intake`。変える方法は[別の受取用フォルダを使う](#another-folder)）の中だけです。
 - xlide がファイルを読む前に、個人情報や機密情報が含まれていないことの確認を求めます。答えはフックが記録し、モデルは答えを選べません。
 - そのあと、フックが macOS の Seatbelt（通信も書き込みもできない）の中で、ファイルの作りを検査し、結果を固定の語彙で伝えます。
 - xlide を呼べるのは、読み取り用のサブエージェントだけで、使えるのは読み取り用のツールだけです。それ以外の呼び出しはフックが止めます。
@@ -54,14 +54,59 @@
 
 GitHub から入れてください。手元の作業用コピーをマーケットプレイスにして入れないでください。プラグインがそのフォルダの中でそのまま動き、そこで動く sandbox 付きのセッションから書き換えられうるためです。
 
-手早い方法:
+プラグインは settings を配れないので、[必須の設定](#required-settings)は自分で書きます。書く先は、プラグインを有効にした範囲と同じ範囲の settings のファイルです。次の 2 通りのどちらかを選びます。
 
-```sh
-claude plugin marketplace add kado-ta/workbook-intake
-claude plugin install workbook-intake@workbook-intake
-```
+| | すべてのプロジェクトで使う | 1 つのプロジェクトで使う |
+| --- | --- | --- |
+| プラグインの範囲 | `user`（`claude plugin install` の既定） | `local` |
+| 設定を書くファイル | `~/.claude/settings.json` | プロジェクトのフォルダの `.claude/settings.local.json` |
 
-おすすめは、確かめたコミットに固定し、自動更新を切ったままにすることです。ユーザーの settings（`~/.claude/settings.json`）で、`ref` に 40 文字のコミット SHA を書きます（マーケットプレイスのソースは `ref` に SHA を書けます。Claude Code 2.1.324 以上）。
+プロジェクトの settings は、そのプロジェクトで起動したセッションにだけ効きます。プラグインが有効なのに必須の設定がないプロジェクトでは、スキルは最初の確かめで止まります。ただし、スキルを使わずに頼めば、Claude は受取用フォルダを読めます（[制限](#limitations)）。
+
+<a name="install-every-project"></a>
+
+### すべてのプロジェクトで使う
+
+1. 受取用フォルダを作ります。
+
+   ```sh
+   mkdir -p ~/workbook-intake
+   ```
+
+2. マーケットプレイスを足し、プラグインを入れます。
+
+   ```sh
+   claude plugin marketplace add kado-ta/workbook-intake
+   claude plugin install workbook-intake@workbook-intake
+   ```
+
+3. [必須の設定](#required-settings)を `~/.claude/settings.json` に足します。
+
+<a name="install-one-project"></a>
+
+### 1 つのプロジェクトで使う
+
+1. 受取用フォルダを作ります。
+
+   ```sh
+   mkdir -p ~/workbook-intake
+   ```
+
+2. プロジェクトのフォルダで、マーケットプレイスを足し、`--scope local` を付けてプラグインを入れます。
+
+   ```sh
+   cd <使うプロジェクト>
+   claude plugin marketplace add kado-ta/workbook-intake
+   claude plugin install workbook-intake@workbook-intake --scope local
+   ```
+
+3. [必須の設定](#required-settings)を、そのプロジェクトのフォルダの `.claude/settings.local.json` に足します。代わりにプロジェクトの `.claude/settings.json` に書くと、そのプロジェクトで作業する全員に効きます。
+
+<a name="pin"></a>
+
+### 確かめたコミットに固定する（推奨）
+
+手順 2 の `claude plugin marketplace add` の代わりに、マーケットプレイスを確かめたコミットに固定し、自動更新を切ったままにします。`~/.claude/settings.json` で、`ref` に 40 文字のコミット SHA を書きます（マーケットプレイスのソースは `ref` に SHA を書けます。Claude Code 2.1.324 以上）。
 
 ```json
 {
@@ -78,32 +123,13 @@ claude plugin install workbook-intake@workbook-intake
 }
 ```
 
-そのあと `claude plugin install workbook-intake@workbook-intake` を実行します。書き方は[公式ドキュメント](https://code.claude.com/docs/en/plugins/marketplace-reference.md#marketplace-sources)を見てください。
+そのあと、選んだ方法の `claude plugin install` のコマンドを実行します。書き方は[公式ドキュメント](https://code.claude.com/docs/en/plugins/marketplace-reference.md#marketplace-sources)を見てください。
 
-`claude plugin install` は、既定では `user` の範囲、つまりすべてのプロジェクトでプラグインを有効にします。1 つのプロジェクトだけで使うなら、そのプロジェクトで `--scope local` を付けて入れます。
+<a name="required-settings"></a>
 
-```sh
-cd <使うプロジェクト>
-claude plugin install workbook-intake@workbook-intake --scope local
-```
+### 必須の設定
 
-このときは、必須の設定もそのプロジェクトの settings に書きます（[設定](#configuration)を見てください）。
-
-<a name="configuration"></a>
-
-## Configuration（設定）
-
-受取用フォルダを作ります: `mkdir -p ~/workbook-intake`。
-
-プラグインは settings を配れないので、自分で書きます。書く場所は、プラグインを有効にした範囲に合わせます。
-
-- 上の手順（`claude plugin install` の既定の範囲 `user`）で入れると、プラグインはすべてのプロジェクトで有効になります。このときは `~/.claude/settings.json` に書きます。
-- 1 つのプロジェクトだけで使うなら、そのプロジェクトで `claude plugin install workbook-intake@workbook-intake --scope local` で入れ、そのプロジェクトの `.claude/settings.local.json` に書けます（`.claude/settings.json` に書くと、そのプロジェクトの全員に効きます）。プロジェクトの settings は、そのプロジェクトで起動したセッションにだけ効きます。
-- プラグインが有効なのに必須の設定がないプロジェクトでは、スキルは最初の確かめで止まります。ただし、スキルを使わずに頼めば、Claude は受取用フォルダを読めます（[制限](#limitations)）。
-
-以下の例は `~/.claude/settings.json` に書く場合です。
-
-必須（両方）。今の settings に足してください（置き換えないでください）。sandbox は既定で無効なので、`"enabled": true` も必須に含まれます。Claude の Bash と Read ツールが、受取用フォルダを読めなくなります。xlide とフックは sandbox の外で動くので、読めます。probe では `denyRead` だけだと Read ツールが読めたので、両方が要ります。sandbox が Bash による受取用フォルダの読み取りを拒否しないと、スキルは止まります。
+選んだ方法の settings のファイル（`~/.claude/settings.json` か、プロジェクトの `.claude/settings.local.json`）に、両方を足します。今の settings に足してください（置き換えないでください）。sandbox は既定で無効なので、`"enabled": true` も必須に含まれます。Claude の Bash と Read ツールが、受取用フォルダを読めなくなります。xlide とフックは sandbox の外で動くので、読めます。probe では `denyRead` だけだと Read ツールが読めたので、両方が要ります。sandbox が Bash による受取用フォルダの読み取りを拒否しないと、スキルは止まります。
 
 ```json
 {
@@ -119,7 +145,7 @@ claude plugin install workbook-intake@workbook-intake --scope local
 }
 ```
 
-推奨:
+### 推奨の設定
 
 - `"sandbox": {"allowUnsandboxedCommands": false}`: Claude Code のドキュメントによると、sandbox の外でコマンドを動かす要求を、Claude Code が無視するようになります。自分の確認では、この設定の効果だけを切り分けられていません。
 - `"sandbox": {"failIfUnavailable": true}`: ドキュメントによると、sandbox が使えないとき、sandbox なしで動かさずに、Claude Code が起動を止めます。
@@ -127,35 +153,43 @@ claude plugin install workbook-intake@workbook-intake --scope local
 
 `failIfUnavailable` と `denyWrite` の書き方は、動かして確かめた例ではなく、ドキュメントにあるキー名から書いたものです。これらのキーは、[settings の一覧](https://code.claude.com/docs/en/settings-reference.md)（`sandbox.filesystem.denyRead`・`sandbox.filesystem.denyWrite`・`sandbox.failIfUnavailable`・`sandbox.allowUnsandboxedCommands`）と[sandboxing](https://code.claude.com/docs/en/sandboxing.md)にあります。
 
-プロジェクトが、同じ `uvx` のコマンドで `xlide` を定義していると、使われるのは片方だけで、プラグインのものは重複として外されます（Claude Code 2.1.331 で確認）。プロジェクトのほうは `"disabledMcpjsonServers": ["xlide"]` で無効にします。プラグインが有効な範囲では、サブエージェント（アナリスト）以外からの xlide の呼び出しは、プロジェクト自身の xlide サーバーへの呼び出しを含めて、フックがすべて拒否します。
+<a name="another-folder"></a>
 
-別のフォルダを使うときは、Claude Code を起動する環境で `WORKBOOK_INTAKE_DIR` を設定し、上の必須の設定にある 2 つの拒否（`sandbox.filesystem.denyRead` と、`permissions.deny` の `Read(...)` の規則）も、同じフォルダに変えます。この 2 つは、絶対パスの書き方が違います。`sandbox.filesystem.denyRead` は `/abs/path` と書きますが、`Read(...)` の権限の規則は先頭に斜線を 2 つ付けて `Read(//abs/path/**)` と書きます（斜線が 1 つだと、設定ファイルの場所からの相対になります）。ホームフォルダの下なら、どちらも `~/...` と書けます。フォルダのパスに `:` は使えません。xlide が複数のフォルダに分けてしまうため、フックは `intake_dir_invalid` で拒否します。
+### 別の受取用フォルダを使う
+
+別のフォルダを使うときは、Claude Code を起動する環境で `WORKBOOK_INTAKE_DIR` を設定し、[必須の設定](#required-settings)にある 2 つの拒否（`sandbox.filesystem.denyRead` と、`permissions.deny` の `Read(...)` の規則）も、同じフォルダに変えます。この 2 つは、絶対パスの書き方が違います。`sandbox.filesystem.denyRead` は `/abs/path` と書きますが、`Read(...)` の権限の規則は先頭に斜線を 2 つ付けて `Read(//abs/path/**)` と書きます（斜線が 1 つだと、設定ファイルの場所からの相対になります）。ホームフォルダの下なら、どちらも `~/...` と書けます。フォルダのパスに `:` は使えません。xlide が複数のフォルダに分けてしまうため、フックは `intake_dir_invalid` で拒否します。
 
 たとえば `~/received` を使うときは、次のようにします。
 
 1. フォルダを作り、Claude Code を起動するシェルで変数を設定してから起動します（毎回使うなら、`export` の行を `~/.zshrc` などに書きます）。フック、xlide、`doctor.sh` は、どれも起動したときのこの変数を見ます。
 
-```sh
-mkdir -p ~/received
-export WORKBOOK_INTAKE_DIR=~/received
-claude
-```
+   ```sh
+   mkdir -p ~/received
+   export WORKBOOK_INTAKE_DIR=~/received
+   claude
+   ```
 
-2. `~/.claude/settings.json` の必須の設定（上の例）の 2 つの拒否を、そのフォルダに変えます。ほかのキーはそのまま残します。変えた後の必須の設定は、次のとおりです。
+2. 選んだ方法の settings のファイル（`~/.claude/settings.json` か、プロジェクトの `.claude/settings.local.json`）で、2 つの拒否をそのフォルダに変えます。ほかのキーはそのまま残します。変えた後の必須の設定は、次のとおりです。
 
-```json
-{
-  "sandbox": {
-    "enabled": true,
-    "filesystem": {
-      "denyRead": ["~/received"]
-    }
-  },
-  "permissions": {
-    "deny": ["Read(~/received/**)"]
-  }
-}
-```
+   ```json
+   {
+     "sandbox": {
+       "enabled": true,
+       "filesystem": {
+         "denyRead": ["~/received"]
+       }
+     },
+     "permissions": {
+       "deny": ["Read(~/received/**)"]
+     }
+   }
+   ```
+
+<a name="project-xlide"></a>
+
+### プロジェクトの xlide
+
+プロジェクトが、同じ `uvx` のコマンドで `xlide` を定義していると、使われるのは片方だけで、プラグインのものは重複として外されます（Claude Code 2.1.331 で確認）。プロジェクトのほうは `"disabledMcpjsonServers": ["xlide"]` で無効にします。プラグインが有効な範囲では、サブエージェント（アナリスト）以外からの xlide の呼び出しは、プロジェクト自身の xlide サーバーへの呼び出しを含めて、フックがすべて拒否します。
 
 <a name="usage"></a>
 
@@ -236,7 +270,7 @@ Google スプレッドシートは直接読みません。`.xlsx` でダウン�
 - xlide は `uvx` を PATH から探して起動します。PATH の先頭に、sandbox から書ける場所を置かないでください。
 - xlide は、uv のキャッシュ（`~/.cache/uv`、または `UV_CACHE_DIR`）から、sandbox の外で動きます。sandbox のコマンドからそこへ書けないようにしてください。sandbox の書き込みの許可に入れず、`~` で起動するセッションでは `denyWrite` に足します。そこで書き換えられたコードは、次に xlide が起動したときに、あなたの権限で動きます。`--python 3.15` で uv が選ぶ Python（`uv python find 3.15` で確かめられます）も同じで、キャッシュの外にあることがあります。
 - macOS だけです。xlide の Windows 向けの live 系のツールは使いません。
-- スキルは Read の deny を `workbook-intake-read-check.xlsx` という 1 つの名前で確かめるので、フォルダより狭い deny（例: `Read(~/workbook-intake/**/*.xlsx)`）は、正しい規則と見分けられません。規則は、[設定](#configuration)のとおりフォルダ全体に書いてください。
+- スキルは Read の deny を `workbook-intake-read-check.xlsx` という 1 つの名前で確かめるので、フォルダより狭い deny（例: `Read(~/workbook-intake/**/*.xlsx)`）は、正しい規則と見分けられません。規則は、[必須の設定](#required-settings)のとおりフォルダ全体に書いてください。
 - 守りの対象外: このプラグインなしで xlide を使う人、Google Sheets のコネクタ。
 
 <a name="troubleshooting"></a>
@@ -289,9 +323,9 @@ xlide を守るフックの拒否（`workbook-intake: <理由>`。必要なら�
 
 フックが拒否したら、スキルは止まって理由を伝えます。別の方法でファイルを読もうとはしません。
 
-スキルが最初の確かめで止まり、`xlide_doctor` の結果が返ったか、許可の確認が出たときは、このセッションで xlide を守るフックが動いていません。どの設定ファイルでも `disableAllHooks` が設定されているとき、または管理設定の `allowManagedHooksOnly` が有効なときに、フックは止まります（[制限](#limitations)を見てください）。フックが動くまで、このプラグインを使わないでください。ほかの理由で拒否されたときは、上の表を見てください。スキルが Read の確かめで止まったときは、受取用フォルダへの `Read(...)` の deny がないか、フォルダに当たっていません。[設定](#configuration)のとおりに足してください（別のフォルダなら `Read(//abs/path/**)` の形）。その Read の許可の確認が出たときは、許可しないでください。Read をセッション全体で止めている（例: `--disallowedTools Read`）ときも、Read の確かめは deny の拒否を返さないので、スキルは止まります。Read を止めずに、[設定](#configuration)の deny を足して起動してください。スキルが最初の確かめで、Agent ツールに `name` か `team_name` の引数があるために止まったときは、エージェントのチームが有効です。`CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS` を外すか空にし、`--agent-teams` を付けずに、Claude Code を起動し直してください。スキルは、Agent ツールの定義が見えないときも止まります。そのセッションでは、どのみちサブエージェントを起動できません。
+スキルが最初の確かめで止まり、`xlide_doctor` の結果が返ったか、許可の確認が出たときは、このセッションで xlide を守るフックが動いていません。どの設定ファイルでも `disableAllHooks` が設定されているとき、または管理設定の `allowManagedHooksOnly` が有効なときに、フックは止まります（[制限](#limitations)を見てください）。フックが動くまで、このプラグインを使わないでください。ほかの理由で拒否されたときは、上の表を見てください。スキルが Read の確かめで止まったときは、受取用フォルダへの `Read(...)` の deny がないか、フォルダに当たっていません。[必須の設定](#required-settings)のとおりに足してください（別のフォルダなら `Read(//abs/path/**)` の形）。その Read の許可の確認が出たときは、許可しないでください。Read をセッション全体で止めている（例: `--disallowedTools Read`）ときも、Read の確かめは deny の拒否を返さないので、スキルは止まります。Read を止めずに、[必須の設定](#required-settings)の deny を足して起動してください。スキルが最初の確かめで、Agent ツールに `name` か `team_name` の引数があるために止まったときは、エージェントのチームが有効です。`CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS` を外すか空にし、`--agent-teams` を付けずに、Claude Code を起動し直してください。スキルは、Agent ツールの定義が見えないときも止まります。そのセッションでは、どのみちサブエージェントを起動できません。
 
-`doctor.sh` の項目: `macos`（macOS ではない）、`uvx`（uv が PATH にない）、`python3`（Command Line Tools がない、またはその python が root の持ち物でない）、`sandbox_exec`（`/usr/bin/sandbox-exec` がない）、`intake_dir_protected`（Bash による受取用フォルダの一覧を sandbox が拒否しなかった。必須の設定がない、sandbox が無効、フォルダがない）。xlide のツールが見えないときは、uv がない、初回の取得に失敗した、プロジェクトの `xlide` にプラグインのものが外された、のどれかです（[設定](#configuration)を見てください）。
+`doctor.sh` の項目: `macos`（macOS ではない）、`uvx`（uv が PATH にない）、`python3`（Command Line Tools がない、またはその python が root の持ち物でない）、`sandbox_exec`（`/usr/bin/sandbox-exec` がない）、`intake_dir_protected`（Bash による受取用フォルダの一覧を sandbox が拒否しなかった。必須の設定がない、sandbox が無効、フォルダがない）。xlide のツールが見えないときは、uv がない、初回の取得に失敗した、プロジェクトの `xlide` にプラグインのものが外された、のどれかです（[プロジェクトの xlide](#project-xlide)を見てください）。
 
 <a name="maintenance"></a>
 

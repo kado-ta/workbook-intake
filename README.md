@@ -12,7 +12,7 @@ Use it at your own risk. It does not guarantee safety.
 
 ## What it does
 
-- xlide is limited to one intake folder (`~/workbook-intake` by default; to change it, see [Configuration](#configuration)).
+- xlide is limited to one intake folder (`~/workbook-intake` by default; to change it, see [Another intake folder](#another-folder)).
 - Before xlide reads a file, you are asked to confirm that it contains no personal or confidential information. A hook records your answer; the model does not choose it.
 - A hook then runs a structural check of the file inside a macOS Seatbelt sandbox (no network, no writes) and tells you the result in a fixed vocabulary.
 - Only a read-only subagent can call xlide, and only its read-only tools. A hook blocks every other call.
@@ -50,14 +50,59 @@ Files you let Claude read are sent to Anthropic as model input, and may also sta
 
 Install from GitHub, not from a local working copy. A local directory used as a marketplace makes the plugin run in place from that folder, and a sandboxed session there could modify it.
 
-Quick way:
+A plugin cannot ship settings, so you add the [required settings](#required-settings) yourself, to the settings file of the same scope as the plugin. Choose one of the two ways:
 
-```sh
-claude plugin marketplace add kado-ta/workbook-intake
-claude plugin install workbook-intake@workbook-intake
-```
+| | Every project | One project |
+| --- | --- | --- |
+| Plugin scope | `user` (the default of `claude plugin install`) | `local` |
+| Settings file | `~/.claude/settings.json` | `.claude/settings.local.json` in the project folder |
 
-Recommended: pin the marketplace to a commit you reviewed, and keep auto-update off. In your user settings (`~/.claude/settings.json`), set `ref` to the full 40-character commit SHA (marketplace sources accept a SHA in `ref`; Claude Code 2.1.324 or later):
+Project settings apply only to sessions started in that project. In a project where the plugin is enabled but the required settings are missing, the skill stops at its first checks, but Claude can still read the intake folder when asked directly, without the skill (see [Limitations](#limitations)).
+
+<a name="install-every-project"></a>
+
+### Every project
+
+1. Create the intake folder:
+
+   ```sh
+   mkdir -p ~/workbook-intake
+   ```
+
+2. Add the marketplace and install the plugin:
+
+   ```sh
+   claude plugin marketplace add kado-ta/workbook-intake
+   claude plugin install workbook-intake@workbook-intake
+   ```
+
+3. Add the [required settings](#required-settings) to `~/.claude/settings.json`.
+
+<a name="install-one-project"></a>
+
+### One project
+
+1. Create the intake folder:
+
+   ```sh
+   mkdir -p ~/workbook-intake
+   ```
+
+2. In the project folder, add the marketplace and install the plugin with `--scope local`:
+
+   ```sh
+   cd <your project>
+   claude plugin marketplace add kado-ta/workbook-intake
+   claude plugin install workbook-intake@workbook-intake --scope local
+   ```
+
+3. Add the [required settings](#required-settings) to `.claude/settings.local.json` in that project folder. Writing them to `.claude/settings.json` in the project instead applies them to everyone who works in the project.
+
+<a name="pin"></a>
+
+### Pin to a reviewed commit (recommended)
+
+Instead of `claude plugin marketplace add` in step 2, pin the marketplace to a commit you reviewed and keep auto-update off. In `~/.claude/settings.json`, set `ref` to the full 40-character commit SHA (marketplace sources accept a SHA in `ref`; Claude Code 2.1.324 or later):
 
 ```json
 {
@@ -74,32 +119,13 @@ Recommended: pin the marketplace to a commit you reviewed, and keep auto-update 
 }
 ```
 
-Then run `claude plugin install workbook-intake@workbook-intake`. See [plugin marketplace sources](https://code.claude.com/docs/en/plugins/marketplace-reference.md#marketplace-sources).
+Then run the `claude plugin install` command of the way you chose. See [plugin marketplace sources](https://code.claude.com/docs/en/plugins/marketplace-reference.md#marketplace-sources).
 
-`claude plugin install` enables the plugin in the `user` scope by default, which means every project. To use it in one project only, run the install in that project with `--scope local`:
+<a name="required-settings"></a>
 
-```sh
-cd <your project>
-claude plugin install workbook-intake@workbook-intake --scope local
-```
+### Required settings
 
-The required settings then go in that project's settings; see [Configuration](#configuration).
-
-<a name="configuration"></a>
-
-## Configuration
-
-Create the intake folder: `mkdir -p ~/workbook-intake`.
-
-Settings cannot be shipped by a plugin, so you set them yourself, in the scope where the plugin is enabled:
-
-- Installed as above (`claude plugin install` defaults to the `user` scope), the plugin is enabled in every project. Put the settings in `~/.claude/settings.json`.
-- To use it in one project only, install it there with `claude plugin install workbook-intake@workbook-intake --scope local` and put the settings in that project's `.claude/settings.local.json` (`.claude/settings.json` applies them to everyone in the project). Project settings apply only to sessions started in that project.
-- In a project where the plugin is enabled but the required settings are missing, the skill stops at its first checks. Claude can still read the intake folder when asked directly, without the skill (see [Limitations](#limitations)).
-
-The examples below are for `~/.claude/settings.json`.
-
-Required (both). Add them to your existing settings; do not replace what is there. The sandbox is off by default, so `"enabled": true` is part of the requirement. They stop Claude's Bash and Read tool from reading the intake folder. xlide and the hooks run outside the sandbox and can still read it. In a probe, `denyRead` alone still let the Read tool read, so both are needed. The skill stops unless the sandbox refuses Bash's read of the folder.
+Add both to the settings file of the way you chose (`~/.claude/settings.json` or the project's `.claude/settings.local.json`). Add them to your existing settings; do not replace what is there. The sandbox is off by default, so `"enabled": true` is part of the requirement. They stop Claude's Bash and Read tool from reading the intake folder. xlide and the hooks run outside the sandbox and can still read it. In a probe, `denyRead` alone still let the Read tool read, so both are needed. The skill stops unless the sandbox refuses Bash's read of the folder.
 
 ```json
 {
@@ -115,7 +141,7 @@ Required (both). Add them to your existing settings; do not replace what is ther
 }
 ```
 
-Recommended:
+### Recommended settings
 
 - `"sandbox": {"allowUnsandboxedCommands": false}`: according to the Claude Code documentation, Claude Code then ignores requests to run a command outside the sandbox. I could not isolate its effect in my own check.
 - `"sandbox": {"failIfUnavailable": true}`: according to the documentation, Claude Code refuses to start when the sandbox is unavailable, instead of running unsandboxed.
@@ -123,35 +149,43 @@ Recommended:
 
 I wrote the `failIfUnavailable` and `denyWrite` forms from the documented key names, not from a tested example. These sandbox keys are listed in the [settings reference](https://code.claude.com/docs/en/settings-reference.md) (`sandbox.filesystem.denyRead`, `sandbox.filesystem.denyWrite`, `sandbox.failIfUnavailable`, `sandbox.allowUnsandboxedCommands`) and in [sandboxing](https://code.claude.com/docs/en/sandboxing.md).
 
-If a project defines its own `xlide` server with the same `uvx` command, Claude Code uses one of them only, and the plugin's is dropped as a duplicate (observed with Claude Code 2.1.331). Disable the project's with `"disabledMcpjsonServers": ["xlide"]`. While the plugin is enabled, the hook denies every call to xlide that does not come from the analyst subagent, including calls to a project's own xlide server.
+<a name="another-folder"></a>
 
-To use another intake folder, set `WORKBOOK_INTAKE_DIR` in the environment that starts Claude Code, and change the two deny settings in the required settings above (`sandbox.filesystem.denyRead` and the `Read(...)` rule in `permissions.deny`) to the same folder (example below). The two write absolute paths differently: `sandbox.filesystem.denyRead` takes `/abs/path`, while a `Read(...)` permission rule needs two leading slashes, `Read(//abs/path/**)` (a single leading slash is relative to the settings file). A path under your home folder can be written `~/...` in both. The folder path cannot contain a colon (`:`), because xlide splits it into several folders; the hooks refuse it as `intake_dir_invalid`.
+### Another intake folder
+
+To use another intake folder, set `WORKBOOK_INTAKE_DIR` in the environment that starts Claude Code, and change the two deny settings in the [required settings](#required-settings) (`sandbox.filesystem.denyRead` and the `Read(...)` rule in `permissions.deny`) to the same folder. The two write absolute paths differently: `sandbox.filesystem.denyRead` takes `/abs/path`, while a `Read(...)` permission rule needs two leading slashes, `Read(//abs/path/**)` (a single leading slash is relative to the settings file). A path under your home folder can be written `~/...` in both. The folder path cannot contain a colon (`:`), because xlide splits it into several folders; the hooks refuse it as `intake_dir_invalid`.
 
 For example, to use `~/received`:
 
 1. Create the folder, set the variable in the shell that starts Claude Code, and start it (put the `export` line in `~/.zshrc` or similar to use it every time). The hooks, xlide and `doctor.sh` all read the variable as it was when Claude Code started.
 
-```sh
-mkdir -p ~/received
-export WORKBOOK_INTAKE_DIR=~/received
-claude
-```
+   ```sh
+   mkdir -p ~/received
+   export WORKBOOK_INTAKE_DIR=~/received
+   claude
+   ```
 
-2. In `~/.claude/settings.json`, point the two deny settings of the required settings (the example above) at that folder. Keep your other keys. The required settings then read:
+2. In the settings file of the way you chose (`~/.claude/settings.json` or the project's `.claude/settings.local.json`), point the two deny settings at that folder. Keep your other keys. The required settings then read:
 
-```json
-{
-  "sandbox": {
-    "enabled": true,
-    "filesystem": {
-      "denyRead": ["~/received"]
-    }
-  },
-  "permissions": {
-    "deny": ["Read(~/received/**)"]
-  }
-}
-```
+   ```json
+   {
+     "sandbox": {
+       "enabled": true,
+       "filesystem": {
+         "denyRead": ["~/received"]
+       }
+     },
+     "permissions": {
+       "deny": ["Read(~/received/**)"]
+     }
+   }
+   ```
+
+<a name="project-xlide"></a>
+
+### A project's own xlide
+
+If a project defines its own `xlide` server with the same `uvx` command, Claude Code uses one of them only, and the plugin's is dropped as a duplicate (observed with Claude Code 2.1.331). Disable the project's with `"disabledMcpjsonServers": ["xlide"]`. While the plugin is enabled, the hook denies every call to xlide that does not come from the analyst subagent, including calls to a project's own xlide server.
 
 <a name="usage"></a>
 
@@ -232,7 +266,7 @@ Check statuses: `pass`, `fail`, `error` (output outside the vocabulary or unexpe
 - xlide finds `uvx` through PATH. Do not put a directory that a sandboxed command can write to at the front of PATH.
 - xlide runs from uv's cache (`~/.cache/uv`, or `UV_CACHE_DIR`) outside the sandbox. Do not let sandboxed commands write to it: keep it out of the sandbox's write allowances, and add it to `denyWrite` for sessions started from `~`. Code changed there would run with your privileges the next time xlide starts. The same goes for the Python that uv picks for `--python 3.15` (see `uv python find 3.15`), which may live outside the cache.
 - macOS only. Windows live tools of xlide are not used.
-- The skill checks the Read deny with one file name, `workbook-intake-read-check.xlsx`, so it cannot tell a deny that is narrower than the folder (for example `Read(~/workbook-intake/**/*.xlsx)`) from the right one. Write the rule for the whole folder, as in [Configuration](#configuration).
+- The skill checks the Read deny with one file name, `workbook-intake-read-check.xlsx`, so it cannot tell a deny that is narrower than the folder (for example `Read(~/workbook-intake/**/*.xlsx)`) from the right one. Write the rule for the whole folder, as in [Required settings](#required-settings).
 - Not covered: people who use xlide without this plugin, and the Google Sheets connector.
 
 <a name="troubleshooting"></a>
@@ -285,9 +319,9 @@ Guard hook denials (`workbook-intake: <reason>`, with failure or warning codes i
 
 If a hook denies a call, the skill stops and tells you why. It does not try to read the file another way.
 
-If the skill stops at its first check because `xlide_doctor` returned a result or a permission prompt appeared, the guard hook is not running in this session. Hooks are off when `disableAllHooks` is set in any settings file, or when the managed setting `allowManagedHooksOnly` is on (see [Limitations](#limitations)). Do not use the plugin until the hook runs. If the check was refused with another reason, see the table above. If the skill stops at its Read check, the `Read(...)` deny rule for the intake folder is missing or does not match it: add it as described in [Configuration](#configuration) (for another folder, `Read(//abs/path/**)`). If a permission prompt appeared for that Read, decline it. The skill also stops when Read is turned off for the whole session (for example `--disallowedTools Read`), because the Read check then does not return the refusal of a deny rule. Start Claude Code without turning Read off, and add the deny from [Configuration](#configuration). If the skill stops at its first check because its Agent tool has a `name` or `team_name` parameter, agent teams are on: unset `CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS` or leave it empty, do not pass `--agent-teams`, and start Claude Code again. The skill also stops if it cannot see its Agent tool's definition; the subagent cannot be started in that session anyway.
+If the skill stops at its first check because `xlide_doctor` returned a result or a permission prompt appeared, the guard hook is not running in this session. Hooks are off when `disableAllHooks` is set in any settings file, or when the managed setting `allowManagedHooksOnly` is on (see [Limitations](#limitations)). Do not use the plugin until the hook runs. If the check was refused with another reason, see the table above. If the skill stops at its Read check, the `Read(...)` deny rule for the intake folder is missing or does not match it: add it as described in [Required settings](#required-settings) (for another folder, `Read(//abs/path/**)`). If a permission prompt appeared for that Read, decline it. The skill also stops when Read is turned off for the whole session (for example `--disallowedTools Read`), because the Read check then does not return the refusal of a deny rule. Start Claude Code without turning Read off, and add the deny from [Required settings](#required-settings). If the skill stops at its first check because its Agent tool has a `name` or `team_name` parameter, agent teams are on: unset `CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS` or leave it empty, do not pass `--agent-teams`, and start Claude Code again. The skill also stops if it cannot see its Agent tool's definition; the subagent cannot be started in that session anyway.
 
-`doctor.sh` items: `macos` (not macOS), `uvx` (uv not on PATH), `python3` (Command Line Tools missing, or its installation is not owned by root), `sandbox_exec` (`/usr/bin/sandbox-exec` missing), `intake_dir_protected` (the sandbox did not refuse Bash's listing of the intake folder: the required settings are missing, the sandbox is off, or the folder does not exist). If the xlide tools are not visible, uv may be missing, the first-run download failed, or a project's own `xlide` dropped the plugin's (see [Configuration](#configuration)).
+`doctor.sh` items: `macos` (not macOS), `uvx` (uv not on PATH), `python3` (Command Line Tools missing, or its installation is not owned by root), `sandbox_exec` (`/usr/bin/sandbox-exec` missing), `intake_dir_protected` (the sandbox did not refuse Bash's listing of the intake folder: the required settings are missing, the sandbox is off, or the folder does not exist). If the xlide tools are not visible, uv may be missing, the first-run download failed, or a project's own `xlide` dropped the plugin's (see [A project's own xlide](#project-xlide)).
 
 <a name="maintenance"></a>
 
