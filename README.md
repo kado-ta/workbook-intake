@@ -113,7 +113,7 @@ To use another intake folder, set `WORKBOOK_INTAKE_DIR` in the environment that 
 
 ## Usage
 
-1. Put the file in the intake folder (`.xlsx`, `.xlsm`, `.xltx`, `.xltm`, `.xlam`, `.xlsb`; up to 100 MB).
+1. Put the file in the intake folder (`.xlsx`, `.xlsm`, `.xlam`, `.xlsb`; up to 100 MB). Templates (`.xltx`, `.xltm`) are not accepted because xlide cannot read them: save them as `.xlsx` or `.xlsm` in Excel first, then put the saved file in the folder.
 2. Ask Claude to analyze it by file name, for example "Analyze `sales.xlsx` with /workbook-intake:analyze". Claude cannot list the folder, so name the file.
 3. The skill shows two fixed questions: the input confirmation, and, only if the check reported warnings, a warning confirmation. Answering "Confirmed" or "Continue" is recorded by a hook. The record is valid for this session and this file content only.
 4. The read-only subagent `workbook-intake:excel-analyst` reads the workbook with xlide and returns a summary.

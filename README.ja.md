@@ -117,7 +117,7 @@ claude plugin install workbook-intake@workbook-intake
 
 ## Usage（使い方）
 
-1. ファイルを受け取り用フォルダに置きます（`.xlsx`・`.xlsm`・`.xltx`・`.xltm`・`.xlam`・`.xlsb`。100 MB まで）。
+1. ファイルを受け取り用フォルダに置きます（`.xlsx`・`.xlsm`・`.xlam`・`.xlsb`。100 MB まで）。テンプレート（`.xltx`・`.xltm`）は、xlide が読めないため受け付けません。Excel で `.xlsx` か `.xlsm` に保存し直してから置いてください。
 2. ファイルの名前を示して、解析を頼みます。例: 「`sales.xlsx` を /workbook-intake:analyze で解析して」。Claude はフォルダの中を一覧できないので、名前を示してください。
 3. スキルが、固定の質問を出します。入力の確認と、検査に警告があるときだけの、警告の確認です。「確認した」「続ける」を選ぶと、フックが記録します。記録が効くのは、このセッションと、そのファイルの同じ中身だけです。
 4. 読み取り専用のサブエージェント `workbook-intake:excel-analyst` が、xlide でブックを読み、要約を返します。
