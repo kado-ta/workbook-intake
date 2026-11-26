@@ -372,3 +372,67 @@ QA の確かめ（メインの会話からの `xlide_doctor` は `wrong_caller`�
 | CI と開発用の probe | CI は `pull_request`、`contents: read`、`persist-credentials: false`。probe は別のマーケットプレイスで、配布するプラグインからは読み込まれない |
 
 洗い出しの結果が 0 件だったので、誤検知を除くための確かめは行っていない。
+
+<a name="codex-1"></a>
+
+### Codex review（1 回目、`805ff1a`）
+
+人が通常のターミナルで `codex review --base main -c 'sandbox_mode="read-only"' -c skills.include_instructions=false` を実行した（2026-11-26T09:34:52Z。5 回の上限のうち 1 回目）。結果は `~/.codex/sessions` の最終メッセージから読んだ。Codex の総評は「patch is incorrect」（確からしさ 0.96）。Codex は、読み取り専用の環境で一時ディレクトリを作れず、全体のテストを実行できなかった（shellcheck と、一時ファイルの要らないテスト 26 件は通った）。
+
+| 重さ | 場所 | 内容 | 確かめた結果 |
+| --- | --- | --- | --- |
+| P1（0.98） | `README.md:90-93`（日本語版も） | 必須の設定の例に `"sandbox": {"enabled": true}` がない。sandbox は既定で無効なので、例のとおりに設定しても `denyRead` が Bash に効かず、`doctor.sh` が `missing intake_dir_protected` を返して止まる | 正しい。公式ドキュメント（sandboxing）に「The sandbox is off by default」とあり、例はどれも `"enabled": true` を書いている。止まる側に倒れるので迂回ではないが、README のとおりでは使えない |
+| P2（0.95） | `scripts/doctor.sh:47-50` | `denyRead` だけを設定し、`Read(...)` の deny を入れ忘れても、Bash の `ls` が失敗するので `ok intake_dir_protected` になり、スキルが進む。この設定では Read ツールが受け取り用フォルダのテキストのファイルを読める（[プローブの項目 12](research-plugin-behavior.md#results)） | 正しい。設計の失敗の条件「推奨設定がない環境で、スキルが止まらずに解析へ進む」に当たる。Claude Code 2.1.332 の本体では、Read ツールがバイナリとして拒否する拡張子に `.xlsx`・`.xlsm`・`.xlsb` はあるが、`.xlam` はない。そのため、受け取り用フォルダのテキストのファイルに加えて、`.xlam` のバイト列も Read ツールに届きうる（推測。`.xlam` を Read で開くことは試していない） |
+
+採否は、challenge の結果と合わせて決めた（[2 回目](#codex-2)の 1・2 と同じ）。
+
+<a name="codex-2"></a>
+
+### Codex challenge（2 回目、`805ff1a`）
+
+人が通常のターミナルで `codex exec - -s read-only -c skills.include_instructions=false < tmp/codex/challenge.md` を実行した（2026-11-26T10:09:01Z。5 回の上限のうち 2 回目）。プロンプトは、変更前（xlide だけ）と比べた後退、README と design の約束が守られない入力、検査と xlide の読み方の違い、文書とコードの食い違いを、絞らずに挙げるよう頼んだ。結果は `~/.codex/sessions` の最終メッセージから読んだ。Codex は、ネットワークとファイルの変更をせず、Seatbelt を使う総合テストと Claude Code の画面での確かめは行っていない。
+
+38 件。採否はユーザーの判断（2026-11-26）による。2・3 は Bash と Read の両方を開始時に確かめる（D1）、11 は `:` を含む受け取り用フォルダを拒否する（D2）、12 は `mcp_server` のない入力を拒否する（D3）。ほかは主担当の案のとおり（D4）。直すものは [Task 40〜44](plan.md#codex-fixes)。
+
+| # | 場所 | 内容 | 採否 |
+| --- | --- | --- | --- |
+| 1 | README | 必須の設定に `"enabled": true` がない（[1 回目](#codex-1)の P1 と同じ） | 直す |
+| 2 | `doctor.sh` | Read の deny がなくても進む（1 回目の P2 と同じ） | 直す。スキルが Step 0 で Read の deny を確かめる（D1） |
+| 3 | `doctor.sh` | 一覧の失敗を守りの証拠にしている。フォルダが `0111` なら、sandbox がなくても `ok` になり、名前の分かるファイルは読める | 直す。`doctor.sh` が sandbox の拒否（`Operation not permitted`）を求める（D1） |
+| 4 | スキル、`record_consent.py` | 入力の確認を出してから答えるまでに中身が変わると、承認は変わった後の中身に付く | 設計の受け入れるリスク（ほかのプロセスによる書き換え）の文を、確認から xlide が読むまでの全体に広げる |
+| 5 | `record_consent.py` | 同じパスの 2 つの版に同じ警告があると、古い警告の確認が新しい版に付く | 4 と同じ |
+| 6 | `guard_xlide.py` | 検査の前後でハッシュが同じでも、検査がそのバイト列を読んだとは限らない（検査の間の書き換え） | 4 と同じ |
+| 7 | `guard_xlide.py` | 最初の検査が時間切れでも、後で検査が通れば、その承認で許可される | 採らない。入力の確認・検査の合格・警告なしは、通常の許可の条件と同じ |
+| 8 | `intake_common.py` | NFC で同じになる別のファイルが、バイト列も同じなら承認を共有する | 採らない。中身が同じなので、検査の結果も確認の意味も同じ |
+| 9 | `intake_common.py` | 受け取り用フォルダの祖先のシンボリックリンクは許される | 採らない。`doctor.sh` は設定したパスで一覧するので、deny が実体に効かなければ止まる（推測） |
+| 10 | `intake_common.py`、README | ハードリンクだと、フォルダの外の別名から同じ中身を読める | README に、フォルダの外のコピー（ダウンロード先など）とハードリンクは守られないと書く |
+| 11 | `.mcp.json`、`intake_common.py` | `WORKBOOK_INTAKE_DIR` に `:` があると、xlide は複数のルートに分ける（Codex が xlide の引数の処理で確かめた） | 直す。フックが `intake_dir_invalid` で拒否する（D2） |
+| 12 | `guard_xlide.py:85` | フックの入力に `mcp_server` がないと、サーバーの由来を確かめずに通す | 直す。`not_plugin_server` で拒否する（D3） |
+| 13 | `doctor.sh`、スキル | 承認の前やキャンセルのときも、フォルダとファイルの絶対パスが会話に入る | 採らない。ファイル名は人が依頼で書き、フォルダは人が選ぶ |
+| 14 | `intake_common.py` | `consents` がシンボリックリンクだと、`chmod` と読み込みがリンク先に効く | 採らない。保存先に書ける場合は、受け入れるリスクに含まれる |
+| 15 | `intake_common.py:315` | `os.write()` が一部しか書かなくても「記録した」を返す | 直す（書いた長さを確かめる）。拒否の側に倒れるので迂回ではない |
+| 16 | `guard_xlide.py` | 読むたびのハッシュ・検査・記録の読み込みで時間がかかる | 採らない。[8 回目](#review-8)と同じ |
+| 17 | `intake_common.py:55` | 検査の出力の重複や余分な項目を受け入れるので、乗っ取られた検査は語彙の並びで情報を運べる | 採らない。乗っ取られた検査は受け入れるリスクで、並びで運べる量はわずか |
+| 18 | `guard-xlide.sh` | フックの Python は、所有者を確かめる前に起動する | 採らない。`DEVELOPER_DIR`（環境変数）か root の変更が要り、受け入れるリスクに含まれる |
+| 19 | `.mcp.json`、`hooks.json` | プラグインが有効な範囲では、プロジェクトの xlide もガードに拒否される | README の Configuration に書く（重複の説明と Troubleshooting の行はあるが、拒否されることは書いていない） |
+| 20 | エージェント | セルだけの質問でも、最初の概要で VBA などの名前を読む | 採らない。読む順は設計の選択で、読んだものはサブエージェントの中に留まる |
+| 21 | `check_workbook.py` | 空の zip や、シートの参照先がない zip が警告なしで通る。xlide は読めない | 採らない。xlide が読まないので、確かめていない文字列は届かない |
+| 22 | `check_workbook.py:665` | 復号できない XML の部品が警告なしになる。xlide も開けない | 21 と同じ |
+| 23 | `check_workbook.py:611` | 宣言の文字コードと中身が違うと、検査は通り、xlide は拒否する | 21 と同じ |
+| 24 | `check_workbook.py:800` | 部品のデータに ZIP64 の印があると、xlide のセル側だけが拒否する | 21 と同じ |
+| 25 | `check_workbook.py:480` | 小文字の `external` を検査は警告するが、xlide は外部の関係とみなさない | 採らない。多めに警告する側 |
+| 26 | `check_workbook.py:175` | 名前空間の違う `DataMashup` で、ブック全体が `not_zip` になる | 採らない。多めに拒否する側 |
+| 27 | `check_workbook.py:286` | 空の Power Query の内側のパッケージが通る。pyopenvba は拒否する | 21 と同じ |
+| 28 | `check_workbook.py:591` | 空白だけの長い文字列を `very_long_string` にしない | 採らない。指示の文を運べない |
+| 29 | `check_workbook.py` | 表示の書式（`@@@`）で、`include="text"` の文字列が保存された長さより長くなる | 採らない。確かめた文字列の繰り返しで、新しい中身はない |
+| 30 | README | 圧縮率 100 倍の制限に、100 KiB 以下の部品の例外がある | README に書く。単位を MiB にする |
+| 31 | `check_workbook.py:849` | データ記述子の CRC と大きさを、中央ディレクトリと比べていない | 採らない。Codex も、記述子の値で読む読み手は見つけていない |
+| 32 | README、`check_workbook.py:185` | Base64 の使わないビットまでは確かめていない | README の言い方を直す（同じバイト列になるので、読み方は分かれない） |
+| 33 | README | 部品 10,000 の上限は外側の zip だけ | README に範囲を書く |
+| 34 | README | `power_query` は、`DataMashup` の印を見つけたという意味 | README の説明を直す |
+| 35 | design、`check_workbook.sb:21` | 実行を許すのは Python だけでなく、`PYTHON_HOME` の下の全体 | design の言い方を直す。`usr/bin/python3` は framework の Python を起動するので、下の全体を許している |
+| 36 | スキル | 確かめで分かるのは PreToolUse のガードが動くことだけ。実際の理由には `. See the README (Troubleshooting).` が続く | スキルの文を「`workbook-intake: wrong_caller` で始まる」にし、確かめの意味を書く |
+| 37 | README | 「何でも読める」と書くが、プラグインはコメントなどを読まない | 採らない。気をつけることとして広く書いている |
+| 38 | design | 流れの順（記録してから検査）と、記録の中身（セッション ID）が実装と違う | design を実装に合わせる |
+
+確かめたこと: 30（`RATIO_GRACE_BYTES = 100 * 1024`）、35（`(allow process-exec (subpath (param "PYTHON_HOME")))`）、36（スキルは理由が `workbook-intake: wrong_caller` であることを求め、ガードは後ろに `. See the README (Troubleshooting).` を付ける）、38（design の[承認の記録](design.md#consent)の文）はコードと設計で確かめた。12 は、ガードが `mcp_server` のあるときだけ見ていること（`guard_xlide.py:85`）と、Claude Code 2.1.332 のフックの入力の定義で `mcp_server` が省略できることを確かめた。22・23 は、検査が先頭のバイトで文字コードを決め、厳密に復号できない部品を XML とみなさないこと（`check_workbook.py:626-690`）を確かめた。

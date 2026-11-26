@@ -959,7 +959,7 @@ git commit -m "docs: record manual verification of workbook-intake"
 
 - [x] **Step 1: `/review` を実行し、指摘への対応を決める。直したら、全体のテストを実行し直す。** 1 回目の結果と採否は [test-report のレビュー](test-report.md#review-1)。小さな指摘は `be03451` で直した。検査と xlide の読み方の違いなどは、[Task 13](#task-13)〜[Task 15](#task-15) で直す（ユーザーの判断、2026-11-25）。Task 15 の後に、`/review` をもう一度実行してから Step 2 に進む。2 回目の結果と採否は [test-report のレビュー](test-report.md#review-2)。小さな指摘は `fe3b14c`・`e4ad15b`・`25108c0` で直した。残りは [Task 16](#task-16)〜[Task 19](#task-19) で直す（ユーザーの判断、2026-11-25）。Task 19 の後に、`/review` を 3 回目として実行してから Step 2 に進む。3 回目の結果と採否は [test-report のレビュー](test-report.md#review-3)。小さな指摘は `77dd89c`・`1fb2760` で直した。残りは [Task 20](#task-20)〜[Task 24](#task-24) で直す（ユーザーの判断、2026-11-26）。Task 24 の後に、`/review` を 4 回目として実行してから Step 2 に進む。4 回目の結果と採否は [test-report のレビュー](test-report.md#review-4)。小さな指摘は `5d36800` で直した。残りは [Task 25](#task-25)〜[Task 28](#task-28) で直す（ユーザーの判断、2026-11-26）。Task 28 の後に、`/review` を 5 回目として実行してから Step 2 に進む。5 回目の結果と採否は [test-report のレビュー](test-report.md#review-5)。小さな指摘は `62d094e` で直した。残りは [Task 29](#task-29)〜[Task 32](#task-32) で直す（ユーザーの判断、2026-11-26）。Task 32 の後に、`/review` を 6 回目として実行してから Step 2 に進む。6 回目の結果と採否は [test-report のレビュー](test-report.md#review-6)。文書とエージェントの説明の指摘は `1954697` で直した。残りは [Task 33](#task-33)・[Task 34](#task-34) で直す（ユーザーの判断、2026-11-26）。Task 34 の後に、`/review` を 7 回目として実行してから Step 2 に進む。7 回目の結果と採否は [test-report のレビュー](test-report.md#review-7)。言い回しの指摘は `054a81e` で直した。残りは [Task 35](#task-35)・[Task 36](#task-36) で直す（ユーザーの判断、2026-11-26）。Task 36 の後に、`/review` を 8 回目として実行してから Step 2 に進む。8 回目の結果と採否は [test-report のレビュー](test-report.md#review-8)。言い回しとテストの指摘は `9a01971`・`854db19` で直した。残りは [Task 37](#task-37)〜[Task 39](#task-39) で直す（ユーザーの判断、2026-11-26）。Task 39 の後は、9 回目の `/review` をせずに Step 2 に進む（ユーザーの判断、2026-11-26）。
 - [x] **Step 2: `/security-review` を実行する（外部からの入力と権限の境界に触れるため）。** 結果は [test-report](test-report.md#security-review)。指摘なし。
-- [ ] **Step 3: Codex のレビューを行う（必須。ユーザーの指定）。** 人が通常のターミナルで `codex review` と、challenge（変更前と比べた後退と、壊れる入力を挙げてもらう。プロンプトは Claude が書く）を実行する。結果は、CLAUDE.md の Skill routing の手順で読み、test-report に記録してから採否を整理する。直したら、全体のテストを実行し直す。上限は 5 回。
+- [ ] **Step 3: Codex のレビューを行う（必須。ユーザーの指定）。** 人が通常のターミナルで `codex review` と、challenge（変更前と比べた後退と、壊れる入力を挙げてもらう。プロンプトは Claude が書く）を実行する。結果は、CLAUDE.md の Skill routing の手順で読み、test-report に記録してから採否を整理する。直したら、全体のテストを実行し直す。上限は 5 回。1 回目（review）と 2 回目（challenge）の結果と採否は [test-report](test-report.md#codex-1)。直すものは [Task 40](#task-40)〜[Task 44](#task-44) で直す（ユーザーの判断、2026-11-26）。
 - [ ] **Step 4: 作業文書を締める。** design.md・plan.md・research・test-report の `status` を `done` にしてコミットする。
 - [ ] **Step 5: `/crit-review` でブランチの差分を開き、`approved: true` を待つ。** その後に `cc-safe-push` と `cc-safe-pr create` を使う（許可リストにないリポジトリなら、人にコマンドを示す）。PR を作ったら `gh pr checks` で CI の結果を確かめる。
 - [ ] **Step 6: 公開のときの人の作業を伝える。** GitHub の説明文とトピック（`claude-code`・`claude-code-plugin` など）の設定、Dependabot alerts を有効にすること（リポジトリの Settings の Code security）、dotfiles の settings.json の作業（設計の[人の作業](design.md#human-steps)。dotfiles で別に行う）。
@@ -2174,3 +2174,178 @@ Expected: すべて PASS、skip なし。結果を test-report に書く。
 コミット（タイトル `docs: record the Seatbelt run after the eighth review fixes`）: `docs/work/20261124_workbook-intake/test-report.md`。
 
 その後、9 回目の `/review` をせずに、[Task 12](#task-12) の Step 2（`/security-review`）に進む。
+
+<a name="codex-fixes"></a>
+
+## Codex の指摘の修正（Task 40〜44）
+
+[Task 12](#task-12) の Step 3 で、人が Codex の review（1 回目）と challenge（2 回目）を実行した。結果と採否は [test-report の 1 回目](test-report.md#codex-1)・[2 回目](test-report.md#codex-2)。ユーザーの判断（2026-11-26）:
+
+- D1（指摘 2・3）: 開始時に、Bash の側と Read ツールの側の両方を確かめる。`doctor.sh` は、一覧の失敗が sandbox の拒否（`Operation not permitted`）であることを求める。スキルは Step 0 で、受け取り用フォルダの中の存在しない `workbook-intake-read-check.xlsx` を Read し、deny の規則の拒否が返ったときだけ進む。Claude Code 2.1.332 の Read ツールは、deny の規則を、バイナリの拡張子とファイルの有無より先に確かめる（主担当が本体で確かめた）。
+- D2（指摘 11）: `WORKBOOK_INTAKE_DIR` に `:` があれば、フックが `intake_dir_invalid` で拒否する。xlide は `--root` を `:` で複数のルートに分けるため。
+- D3（指摘 12）: フックの入力に `mcp_server` がなければ、`not_plugin_server` で拒否する。
+- D4: 残りの 34 件は、test-report に書いた案のとおり。直すのは 14 件、採らないのは 20 件。
+
+設計は 2026-11-26 の 7 つ目の改訂で直す（[Task 43](#task-43)）。
+
+<a name="task-40"></a>
+
+### Task 40: `doctor.sh` の守りの確かめと、README の必須の設定
+
+**Files:**
+- Modify: `scripts/doctor.sh`、`tests/test_doctor.py`、`README.md`、`README.ja.md`、`tests/test_readme.py`
+
+**Interfaces:**
+- `doctor.sh` の `intake_dir_protected` は、`LC_ALL=C ls -A "$intake"` が失敗し、その標準エラーに `Operation not permitted` があるときだけ `ok`。一覧できた、または別の理由（`Permission denied`、`No such file or directory` など）で失敗したときは `missing`。sandbox の `denyRead` が Bash の `ls` をこの文で拒否することは、[プローブの項目 12](research-plugin-behavior.md#results) で確かめてある。
+- README の必須の設定の例（日英）の `sandbox` に `"enabled": true` を足す。sandbox は既定で無効であること（公式ドキュメントの sandboxing）と、既存の settings に足し合わせることを書く。`doctor.sh` の項目の説明の `intake_dir_protected` を、「Bash の一覧を sandbox が拒否しなかった（必須の設定がない、sandbox が無効、フォルダがない）」に直す。
+
+- [ ] **Step 1: 失敗するテストを書く**
+
+今のテストは、フォルダを `chmod 0` にして守りを真似ている。これを、`self.bin` に置く偽の `ls`（標準エラーに `ls: <引数>: Operation not permitted` を書き、1 で終わる）に置き換える。
+
+```python
+# tests/test_doctor.py
+def test_permission_denied_is_not_protected(self):   # 偽の ls なし、フォルダを chmod 0 → "missing intake_dir_protected"、終了コード 1
+def test_sandbox_refusal_is_protected(self):         # 偽の ls → "ok intake_dir_protected"
+def test_seatbelt_denied_folder_is_protected(self):  # sandbox-exec で受け取り用フォルダの実際のパスの file-read-data を拒否して doctor.sh を動かす → "ok intake_dir_protected"。sandbox-exec が使えなければ skip（WORKBOOK_INTAKE_REQUIRE_SANDBOX=1 なら失敗。tests/test_sandbox_profile.py と同じ扱い）
+# tests/test_readme.py
+def test_required_settings_enable_sandbox(self):     # README.md と README.ja.md の必須の設定の JSON を読み、sandbox.enabled が true、sandbox.filesystem.denyRead と permissions.deny がある
+```
+
+- [ ] **Step 2: テストが失敗することを確かめ、実装し、通ることを確かめる**
+
+Run: `"$PY" -B -m unittest discover -s tests -t . -v && shellcheck scripts/doctor.sh`
+Expected: 実装の前は新しいテストが FAIL、実装の後はすべて PASS（sandbox の中では skip あり）、指摘なし。
+
+- [ ] **Step 3: コミットする**
+
+1 つ目のコミット（タイトル `fix: require the sandbox refusal in the intake folder check`）: `scripts/doctor.sh`・`tests/test_doctor.py`。
+2 つ目のコミット（タイトル `docs: enable the sandbox in the required settings`）: `README.md`・`README.ja.md`・`tests/test_readme.py`。
+
+<a name="task-41"></a>
+
+### Task 41: スキルの Read の確かめと、フックの確かめの文
+
+**Files:**
+- Modify: `skills/analyze/SKILL.md`、`tests/test_skill_and_agent.py`、`README.md`、`README.ja.md`、`docs/runbooks/maintenance.md`、`docs/work/20261124_workbook-intake/test-report.md`
+
+**Interfaces:**
+- SKILL.md の Step 0 で、`folder <path>` の段落の後（`<folder>` が決まった後）に、Read の確かめの段落を足す。中身: `file_path` を `<folder>/workbook-intake-read-check.xlsx` にして Read を 1 回呼ぶ。ファイルはなくてよく、中身は読まれない（Claude Code は deny の規則を先に確かめる）。ファイルが deny の規則で拒否されている（"denied by your permission settings"）という拒否のときだけ続ける。ほかの結果（バイナリは読めないという拒否、ファイルがないという結果、許可の確認、中身）は `Read(...)` の deny がないということなので、README の Configuration を示して止まる。許可の確認が出たら、許可せずに断るよう人に伝える。
+- 冒頭の「Never read the workbook yourself: no Read, ...」に、Step 0 のこの確かめ（ブックではないファイル名）だけは除くと書く。
+- フックの確かめの段落（指摘 36）: 続ける条件を「拒否の理由が `workbook-intake: wrong_caller` で始まる」にする。この確かめで分かるのは、メインの会話からの呼び出しを PreToolUse のフックが拒否することだけで、承認を記録するフックは Step 3（`workbook-intake:` の行がなければ止まる）で確かめる、と書く。
+- README（日英）の使い方の、スキルの最初の確かめの段落に、Read の確かめを足す。Troubleshooting に、Read の確かめで止まったとき（`Read(...)` の deny を足す。別のフォルダなら `Read(//abs/path/**)` の形）を足す。
+- runbook の、Claude Code を更新したときに確かめ直す行に、Read ツールが deny の規則をバイナリの拡張子とファイルの有無より先に確かめること（2.1.332 の `validateInput` で、"File is in a directory that is denied by your permission settings." が "This tool cannot read binary files" より先）と、`.xlsx` がバイナリの拡張子の一覧にあることを足す。
+- test-report の「実機での確認」に、本体での確かめ（2.1.332。Read の `validateInput` の順序、バイナリの拡張子の一覧に `.xlsx`・`.xlsm`・`.xlsb` はあり `.xlam` はないこと。固定の文字列とバイトの位置で読んだ。Read の確かめを実際のセッションで動かしてはいない）を 1 項で書く。
+
+- [ ] **Step 1: 失敗するテストを書く**
+
+```python
+# tests/test_skill_and_agent.py
+def test_skill_checks_read_deny(self):        # "workbook-intake-read-check.xlsx" を含む段落が、"folder <path>" を含む段落より後、"## Step 1" より前にある。その段落に "denied by your permission settings" と "stop" がある
+def test_skill_hook_check_uses_prefix(self):  # フックの確かめの段落に "starts with `workbook-intake: wrong_caller`" がある
+```
+
+- [ ] **Step 2: テストが失敗することを確かめ、実装し、通ることを確かめる**
+
+Run: `"$PY" -B -m unittest discover -s tests -t . -v && claude plugin validate . --strict`
+Expected: 実装の前は新しいテストが FAIL、実装の後はすべて PASS（sandbox の中では skip あり）、通過。
+
+- [ ] **Step 3: README・runbook・test-report を直す**
+
+上の Interfaces のとおり。
+
+- [ ] **Step 4: コミットする**
+
+1 つ目のコミット（タイトル `fix: check the Read deny rule before the analysis`）: `skills/analyze/SKILL.md`・`tests/test_skill_and_agent.py`。
+2 つ目のコミット（タイトル `docs: describe the Read deny check`）: `README.md`・`README.ja.md`・runbook・test-report。
+
+<a name="task-42"></a>
+
+### Task 42: ガードの入力（コロン、`mcp_server`、書き込みの長さ）
+
+**Files:**
+- Modify: `hooks/intake_common.py`、`hooks/guard_xlide.py`、`tests/test_guard_xlide.py`、`tests/test_record_consent.py`、`README.md`、`README.ja.md`
+
+**Interfaces:**
+- `resolve_in_intake(path)`: `intake_dir()` の値に `:` があれば `(None, "intake_dir_invalid")`。ガードと承認の記録の両方がこの関数を使う。`doctor.sh` は変えない（ファイルを読む呼び出しはすべてフックが拒否する）。
+- `decide_detail(hook_input)`: `mcp_server` がなければ `("deny", "not_plugin_server", [])`。あるときの判定は今のまま。今の `test_absent_mcp_server_relies_on_prefix`（ないときに許す）は、拒否を求めるテストに置き換える。ほかのテストのフックの入力に `mcp_server` がなければ足す。
+- `_append(session_id, record)`: `os.write` が行のすべてのバイトを書いたときだけ `True`。
+- README（日英）: `WORKBOOK_INTAKE_DIR` の説明に、`:` を含むパスは使えない（xlide が複数のフォルダに分ける）と書く。Troubleshooting の `not_plugin_server` の行に、Claude Code がサーバーの由来を渡さないとき（古い版）も含むので更新する、と足す。`intake_dir_invalid` の行に `:` を足す。
+
+- [ ] **Step 1: 失敗するテストを書く**
+
+```python
+# tests/test_guard_xlide.py
+def test_absent_mcp_server_is_denied(self):         # プラグインの接頭辞・アナリスト・mcp_server なし → ("deny", "not_plugin_server")
+def test_intake_dir_with_colon_is_invalid(self):    # WORKBOOK_INTAKE_DIR に ":" を含む実在のフォルダ → 中のファイルで ("deny", "intake_dir_invalid")
+# tests/test_record_consent.py
+def test_short_write_is_not_recorded(self):         # intake_common の os.write を、2 を返すものに差し替える → _append が False
+```
+
+- [ ] **Step 2: テストが失敗することを確かめ、実装し、通ることを確かめる**
+
+Run: `"$PY" -B -m unittest discover -s tests -t . -v`
+Expected: 実装の前は新しいテストが FAIL、実装の後はすべて PASS（sandbox の中では skip あり）。
+
+- [ ] **Step 3: README を直す**
+
+上の Interfaces のとおり。
+
+- [ ] **Step 4: コミットする**
+
+1 つ目のコミット（タイトル `fix: refuse calls without the server origin and folders with a colon`）: `hooks/intake_common.py`・`hooks/guard_xlide.py`・`tests/test_guard_xlide.py`。
+2 つ目のコミット（タイトル `fix: report a consent as recorded only after a full write`）: `hooks/intake_common.py`・`tests/test_record_consent.py`。
+3 つ目のコミット（タイトル `docs: describe the colon and server origin refusals`）: `README.md`・`README.ja.md`。
+
+<a name="task-43"></a>
+
+### Task 43: README と design の言い方
+
+**Files:**
+- Modify: `README.md`、`README.ja.md`、`docs/work/20261124_workbook-intake/design.md`、`tests/test_readme.py`（必要なときだけ）
+
+**Interfaces:** 指摘の番号は [test-report の 2 回目](test-report.md#codex-2)。README は日英の両方を直す。値はコード（`scripts/check_workbook.py` の定数など）から書く。
+
+- README:
+  - 19: Configuration に、プラグインが有効な範囲では、アナリスト以外からの xlide の呼び出しを、プロジェクトの xlide を含めてフックが拒否すること。
+  - 10: 利用上の注意に、受け取り用フォルダの外のコピー（ダウンロード先、メールの添付）とハードリンクは守られないので、コピーではなく移すこと。
+  - 30: Checks の表の圧縮率の行に、100 KiB 以下の部品には圧縮率の制限を使わないこと。大きさの単位を、コードのとおり MiB にする（100 MiB、256 MiB、32 MiB）。
+  - 32: `not_zip` の説明の「non-canonical base64」を、確かめていること（Base64 の文字の外の文字、パディングの位置、復号できないこと）に直す。
+  - 33: 部品の数の上限は外側のパッケージに使い、Power Query の内側のパッケージは大きさの上限で抑えること。
+  - 34: `power_query` は、どれかの部品に `DataMashup` の印が見つかったという意味。
+- design:
+  - 改訂の節に、2026-11-26 の 7 つ目の項（Codex の 1・2 回目の後。D1〜D3 と、下の言い方の修正）を足す。
+  - D1: [直接の読み込みを止める](design.md#direct-read)・[前提の確認](design.md#doctor)・[スキル](design.md#skill)に、`doctor.sh` が sandbox の拒否を求めることと、スキルの Read の確かめを書く。
+  - D2・D3: [フック](design.md#hook)に、`:` を含む受け取り用フォルダと、`mcp_server` のない入力を拒否することを書く。
+  - 4・5・6: [受け入れるリスク](design.md#risks)の、受け取り用フォルダの書き換えの項を、入力の確認を出してから xlide が読むまでの全体（確認と答えの間、検査の間、検査の後）に広げる。
+  - 35: [sandbox のプロファイル](design.md#sandbox-profile)の「起動できるのは python3 だけ」を、`PYTHON_HOME` の下だけ（`usr/bin/python3` は framework の Python を起動する）に直す。
+  - 38: [承認の記録](design.md#consent)の順序（ハッシュ → 検査 → ハッシュ → 1 回だけ記録）と、記録の中身（セッション ID はファイル名の SHA-256 で、行にはない。パスは `realpath` を NFC にしたもの）を、実装に合わせる。
+
+- [ ] **Step 1: README と design を直す**
+
+上の Interfaces のとおり。
+
+- [ ] **Step 2: テストと検証を実行する**
+
+Run: `"$PY" -B -m unittest discover -s tests -t . -v && claude plugin validate . --strict`
+Expected: すべて PASS（sandbox の中では skip あり）、通過。
+
+- [ ] **Step 3: コミットする**
+
+1 つ目のコミット（タイトル `docs: state what the checks and the plugin scope cover`）: `README.md`・`README.ja.md`（と `tests/test_readme.py`）。
+2 つ目のコミット（タイトル `docs: record the Codex review decisions in the design`）: design。
+
+<a name="task-44"></a>
+
+### Task 44: 人による実行（メインの会話で行う）
+
+- [ ] **Step 1: 全体のテストを、人がきれいな複製で実行する**
+
+Run（人）: runbook の通常のターミナルのコマンド（`<確かめたコミット>` は Task 43 の後の HEAD の完全な SHA）
+Expected: すべて PASS、skip なし。結果を test-report に書く。
+
+- [ ] **Step 2: コミットする**
+
+コミット（タイトル `docs: record the Seatbelt run after the Codex review fixes`）: `docs/work/20261124_workbook-intake/test-report.md`。
+
+その後、[Task 12](#task-12) の Step 3 に戻り、直した差分に Codex の review をもう一度（3 回目。上限 5 回）実行するかを人に聞く。
