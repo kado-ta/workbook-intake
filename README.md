@@ -155,7 +155,7 @@ Warning codes (you must confirm before the analysis continues):
 | `invisible_characters` | Zero-width, direction-control or tag characters in strings |
 | `instruction_like_text` | Wording that looks like instructions to an AI |
 | `very_long_string` | A string over 10,000 characters (Power Query workbooks can show it, because the query is stored as one long encoded string) |
-| `strings_not_checked` | Some parts could not be fully checked; strings, sheet states and relationships in them are unknown: `.xlsb` (binary), oversized XML parts, XML parts the checker cannot read, two attributes with the same local name on one element, nesting deeper than 256 levels, a part whose first two bytes contain NUL without a byte-order mark, nested text runs inside a paragraph |
+| `strings_not_checked` | Some parts could not be fully checked; strings, sheet states and relationships in them are unknown: `.xlsb` (binary), oversized XML parts, XML parts the checker cannot read, two attributes with the same local name on one element, nesting deeper than 256 levels, a part whose first two bytes contain NUL without a byte-order mark, nested text runs inside a paragraph, parts whose XML syntax is read differently by xlide's reader (such as a comment starting with `<!-->`) |
 
 Check statuses: `pass`, `fail`, `error` (output outside the vocabulary or unexpected result), `timeout` (over 20 seconds), `sandbox_missing` (`sandbox-exec` not found).
 
