@@ -136,7 +136,7 @@ Failure codes (the file is not read):
 | `not_zip` | Cannot be opened as a zip, or the ZIP layout could be read differently by different readers (an archive comment, prefix data, gaps or overlaps between entries, ZIP64 records, local headers that disagree with the central directory, a Unicode Path extra, flag bits 5 or 6, part data whose length or CRC differs from the central directory), or the zip inside a Power Query part is broken (non-canonical base64, section or part lengths that do not add up) |
 | `too_many_parts` | More than 10,000 parts |
 | `unsafe_part_name` | A part name has `..` or an absolute path, `\`, a drive letter (such as `C:`), NUL, an empty segment, a `.` segment, a directory name with content, or a name that disagrees with the UTF-8 flag, or two names differ only in letter case |
-| `uncompressed_too_large` | Expands to more than 256 MB in total (including the zip inside a Power Query part), or a `customXml/item<N>.xml` part is over 32 MB |
+| `uncompressed_too_large` | Expands to more than 256 MB in total (including the zip inside a Power Query part), or a part named `customXml/item*.xml` (such as `item1.xml` or `itemProps1.xml`) is over 32 MB |
 | `compression_ratio_too_high` | One part (including a part of the zip inside a Power Query part) compresses by more than 100 times |
 | `xml_dtd` | A part has `<!DOCTYPE` or `<!ENTITY`. Every part is searched, not only XML, and so is the content of a Power Query part (the parts of the zip inside it and its metadata), so an SVG image or a macro that writes HTML can cause it |
 

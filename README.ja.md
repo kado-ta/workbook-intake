@@ -41,7 +41,7 @@
 - Command Line Tools（`xcode-select --install`。`python3` のため）。
 - [uv](https://docs.astral.sh/uv/)（`uvx`）。
 - Claude Code 2.1.295 以上（フックの `onFailure` のため）。`plugin.json` の `engines` で宣言していますが、Claude Code が `engines` を読むのは 2.1.323 以降なので、それより古い版では強制されません。マーケットプレイスをコミットの SHA で固定する（Install を見てください）には、2.1.324 以上が要ります。
-- xlide は Python 3.15 で動く。手元になければ、uv が初回の起動で取得する（取得できない環境では xlide のツールが見えない）。
+- xlide は Python 3.15 で動きます。手元になければ、uv が初回の起動で取得します（取得できない環境では xlide のツールが見えません）。
 - 初回は、`uvx` が Python と固定した版のパッケージを取得するので、通信が要り、時間がかかります。
 
 `scripts/doctor.sh` が、スキルの開始時に必要なものを確かめます。`macos`・`uvx`・`python3`・`sandbox_exec`・`intake_dir_protected` ごとに `ok <項目>` か `missing <項目>` を出し、最後に `folder <パス>` を出します。
@@ -140,7 +140,7 @@ Google スプレッドシートは直接読みません。`.xlsx` でダウン�
 | `not_zip` | zip として開けない、または読み手によって読み方が変わりうる zip の形（注釈、前置きのデータ、エントリの隙間や重なり、ZIP64、中央ディレクトリと食い違うローカルヘッダー、Unicode Path の extra、フラグの 5・6 ビット、長さや CRC が中央ディレクトリと違う部品のデータ）。または、Power Query の部品の中の zip が壊れている（正規の形でない base64、節や部品の長さの食い違い） |
 | `too_many_parts` | 部品が 10,000 を超える |
 | `unsafe_part_name` | 部品名に `..`・絶対パス・`\`・ドライブ名（`C:` など）・NUL・空のセグメント・`.` のセグメント・中身のあるディレクトリ名がある、文字コードの印と合わない名前がある、または大文字小文字だけが違う名前が重なる |
-| `uncompressed_too_large` | 展開の合計が 256 MB を超える（Power Query の部品の中の zip を含む）。または、`customXml/item<N>.xml` の部品が 32 MB を超える |
+| `uncompressed_too_large` | 展開の合計が 256 MB を超える（Power Query の部品の中の zip を含む）。または、名前が `customXml/item*.xml` の部品（`item1.xml`・`itemProps1.xml` など）が 32 MB を超える |
 | `compression_ratio_too_high` | 1 つの部品（Power Query の部品の中の zip の部品を含む）が 100 倍を超えて圧縮されている |
 | `xml_dtd` | 部品に `<!DOCTYPE` か `<!ENTITY` がある。XML に限らずすべての部品を探し、Power Query の部品の中身（中の zip の部品とメタデータ）も探すので、SVG の画像や、HTML を書き出すマクロでも出ることがある |
 
