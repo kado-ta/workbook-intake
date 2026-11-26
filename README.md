@@ -107,7 +107,7 @@ I wrote the `failIfUnavailable` and `denyWrite` forms from the documented key na
 
 If a project defines its own `xlide` server with the same `uvx` command, Claude Code uses one of them only, and the plugin's is dropped as a duplicate (observed with Claude Code 2.1.331). Disable the project's with `"disabledMcpjsonServers": ["xlide"]`.
 
-To use another intake folder, set `WORKBOOK_INTAKE_DIR` in the environment that starts Claude Code, and change both deny settings to the same folder.
+To use another intake folder, set `WORKBOOK_INTAKE_DIR` in the environment that starts Claude Code, and change both deny settings to the same folder. The two settings write absolute paths differently: `sandbox.filesystem.denyRead` takes `/abs/path`, while a `Read(...)` permission rule needs two leading slashes, `Read(//abs/path/**)` (a single leading slash is relative to the settings file). A path under your home folder can be written `~/...` in both.
 
 <a name="usage"></a>
 
@@ -170,9 +170,9 @@ Check statuses: `pass`, `fail`, `error` (output outside the vocabulary or unexpe
 - `disableAllHooks` can turn off hooks from a settings file at any scope, including the repository's `.claude/settings.json` (hooks from managed settings are exempt). Plugin hooks are expected to be turned off too (inferred, not verified). When they are off, the main conversation can call xlide, and neither the input confirmation nor the check runs. Do not use the plugin in such an environment.
 - The check runs on the Command Line Tools Python 3.9.6, with its expat 2.2.8. Seatbelt stops a hijacked check from writing, using the network, or running programs, but it does not protect the verdict itself. Strict decoding of the character encoding, rejection of DTDs, and a 32 MB limit per part narrow what can reach the parser.
 - xlide expands VBA source with no size limit. A workbook with macros (the `vba_project` warning) can use a lot of memory.
-- A crafted file can still make xlide use a lot of time or memory through the tools that stay allowed. Examples (measured values are in the [test report](docs/work/20261124_workbook-intake/test-report.md#review-5)): reading a long shared formula, a row with a huge number of cells, thousands of queries, many VBA line continuations. xlide runs outside the sandbox and has no memory limit. If things get heavy, stop Claude Code and end the xlide process. The heaviest shapes (calculation, static analysis of VBA, regular-expression search) are blocked by the hook.
+- A crafted file can still make xlide use a lot of time or memory through the tools that stay allowed. Examples (measured values are in the [test report](docs/work/20261124_workbook-intake/test-report.md#review-5)): reading a long shared formula, a row with a huge number of cells, thousands of queries, many VBA line continuations. xlide runs outside the sandbox and has no memory limit. If things get heavy, stop Claude Code and end the xlide process from a normal terminal (for example `pkill -f xlide-mcp`; commands inside the sandbox cannot see it). The heaviest shapes (calculation, static analysis of VBA, regular-expression search) are blocked by the hook.
 - This assumes Claude Code's experimental agent teams (`CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS`) are off. When they are on, the agent that reads the workbook can message other teammates directly.
-- `.mcp.json` pins only xlide-mcp and four dependencies. The other dependencies are resolved to the latest at the first start (on purpose, to receive security fixes of the dependencies below).
+- `.mcp.json` pins only xlide-mcp and four dependencies. The other dependencies are resolved by uv when it builds the environment, which can happen again on a later start, so a newer version of them can arrive on any start (on purpose, to receive security fixes of the dependencies below).
 - The input confirmation relies on a person answering the AskUserQuestion screen. In an environment where another plugin's hook or an SDK host fills in the answer, an approval can be recorded without a person confirming it.
 - Tool names carry the prefix `mcp__plugin_workbook-intake_xlide__` (for example `mcp__plugin_workbook-intake_xlide__xlide_doctor`). A matcher that names only the server (`mcp__xlide__.*`) does not match them.
 - xlide is visible to the main conversation too, because plugin subagents cannot declare their own MCP servers. Calls from the main conversation are blocked by the hook.
@@ -183,6 +183,7 @@ Check statuses: `pass`, `fail`, `error` (output outside the vocabulary or unexpe
 - If the plugin cache is writable from a sandboxed session, the hooks could be modified. If your GitHub account is taken over, a bad update could be published; pinning by SHA with auto-update off helps you use only versions you have reviewed, but it does not prevent this.
 - The environment can change where uv fetches from (for example `UV_DEFAULT_INDEX`).
 - xlide finds `uvx` through PATH. Do not put a directory that a sandboxed command can write to at the front of PATH.
+- xlide runs from uv's cache (`~/.cache/uv`, or `UV_CACHE_DIR`) outside the sandbox. Do not let sandboxed commands write to it: keep it out of the sandbox's write allowances, and add it to `denyWrite` for sessions started from `~`. Code changed there would run with your privileges the next time xlide starts.
 - macOS only. Windows live tools of xlide are not used.
 - Not covered: people who use xlide without this plugin, and the Google Sheets connector.
 
@@ -242,7 +243,7 @@ If a hook denies a call, the skill stops and tells you why. It does not try to r
 
 The author maintains this in private time, as time allows. Regular updates are not promised, and replies to issues and pull requests are not promised either.
 
-- Versions are pinned (xlide-mcp 1.2.4 and four dependencies). Security fixes to them do not arrive until the author bumps the pins. The other dependencies are not pinned: they are resolved to the latest at the first start, so their security fixes arrive without a bump.
+- Versions are pinned (xlide-mcp 1.2.4 and four dependencies). Security fixes to them do not arrive until the author bumps the pins. The other dependencies are not pinned: uv resolves them when it builds the environment, which can happen again on a later start, so their security fixes (and any other new version) can arrive without a bump.
 - Pin the marketplace by commit SHA and keep auto-update off. Read the diff before you move the SHA.
 - If you need fixes sooner, fork the repository and bump the pins yourself (MIT).
 - The author's steps are in [docs/runbooks/maintenance.md](docs/runbooks/maintenance.md) (Japanese).
