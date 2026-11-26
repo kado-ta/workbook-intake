@@ -22,6 +22,10 @@ jobs:
 
   macos:
     runs-on: macos-latest
+    env:
+      # The hooks and doctor.sh require a python3 installed and owned by root, as the
+      # Command Line Tools are. On the runner, xcode-select points to Xcode.app instead.
+      DEVELOPER_DIR: /Library/Developer/CommandLineTools
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
