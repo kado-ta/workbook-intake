@@ -957,7 +957,7 @@ git commit -m "docs: record manual verification of workbook-intake"
 
 ### Task 12: レビューと PR の準備
 
-- [x] **Step 1: `/review` を実行し、指摘への対応を決める。直したら、全体のテストを実行し直す。** 1 回目の結果と採否は [test-report のレビュー](test-report.md#review-1)。小さな指摘は `be03451` で直した。検査と xlide の読み方の違いなどは、[Task 13](#task-13)〜[Task 15](#task-15) で直す（ユーザーの判断、2026-11-25）。Task 15 の後に、`/review` をもう一度実行してから Step 2 に進む。2 回目の結果と採否は [test-report のレビュー](test-report.md#review-2)。小さな指摘は `fe3b14c`・`e4ad15b`・`25108c0` で直した。残りは [Task 16](#task-16)〜[Task 19](#task-19) で直す（ユーザーの判断、2026-11-25）。Task 19 の後に、`/review` を 3 回目として実行してから Step 2 に進む。3 回目の結果と採否は [test-report のレビュー](test-report.md#review-3)。小さな指摘は `77dd89c`・`1fb2760` で直した。残りは [Task 20](#task-20)〜[Task 24](#task-24) で直す（ユーザーの判断、2026-11-26）。Task 24 の後に、`/review` を 4 回目として実行してから Step 2 に進む。4 回目の結果と採否は [test-report のレビュー](test-report.md#review-4)。小さな指摘は `5d36800` で直した。残りは [Task 25](#task-25)〜[Task 28](#task-28) で直す（ユーザーの判断、2026-11-26）。Task 28 の後に、`/review` を 5 回目として実行してから Step 2 に進む。5 回目の結果と採否は [test-report のレビュー](test-report.md#review-5)。小さな指摘は `62d094e` で直した。残りは [Task 29](#task-29)〜[Task 32](#task-32) で直す（ユーザーの判断、2026-11-26）。Task 32 の後に、`/review` を 6 回目として実行してから Step 2 に進む。6 回目の結果と採否は [test-report のレビュー](test-report.md#review-6)。文書とエージェントの説明の指摘は `1954697` で直した。残りは [Task 33](#task-33)・[Task 34](#task-34) で直す（ユーザーの判断、2026-11-26）。Task 34 の後に、`/review` を 7 回目として実行してから Step 2 に進む。7 回目の結果と採否は [test-report のレビュー](test-report.md#review-7)。言い回しの指摘は `054a81e` で直した。残りは [Task 35](#task-35)・[Task 36](#task-36) で直す（ユーザーの判断、2026-11-26）。Task 36 の後に、`/review` を 8 回目として実行してから Step 2 に進む。
+- [x] **Step 1: `/review` を実行し、指摘への対応を決める。直したら、全体のテストを実行し直す。** 1 回目の結果と採否は [test-report のレビュー](test-report.md#review-1)。小さな指摘は `be03451` で直した。検査と xlide の読み方の違いなどは、[Task 13](#task-13)〜[Task 15](#task-15) で直す（ユーザーの判断、2026-11-25）。Task 15 の後に、`/review` をもう一度実行してから Step 2 に進む。2 回目の結果と採否は [test-report のレビュー](test-report.md#review-2)。小さな指摘は `fe3b14c`・`e4ad15b`・`25108c0` で直した。残りは [Task 16](#task-16)〜[Task 19](#task-19) で直す（ユーザーの判断、2026-11-25）。Task 19 の後に、`/review` を 3 回目として実行してから Step 2 に進む。3 回目の結果と採否は [test-report のレビュー](test-report.md#review-3)。小さな指摘は `77dd89c`・`1fb2760` で直した。残りは [Task 20](#task-20)〜[Task 24](#task-24) で直す（ユーザーの判断、2026-11-26）。Task 24 の後に、`/review` を 4 回目として実行してから Step 2 に進む。4 回目の結果と採否は [test-report のレビュー](test-report.md#review-4)。小さな指摘は `5d36800` で直した。残りは [Task 25](#task-25)〜[Task 28](#task-28) で直す（ユーザーの判断、2026-11-26）。Task 28 の後に、`/review` を 5 回目として実行してから Step 2 に進む。5 回目の結果と採否は [test-report のレビュー](test-report.md#review-5)。小さな指摘は `62d094e` で直した。残りは [Task 29](#task-29)〜[Task 32](#task-32) で直す（ユーザーの判断、2026-11-26）。Task 32 の後に、`/review` を 6 回目として実行してから Step 2 に進む。6 回目の結果と採否は [test-report のレビュー](test-report.md#review-6)。文書とエージェントの説明の指摘は `1954697` で直した。残りは [Task 33](#task-33)・[Task 34](#task-34) で直す（ユーザーの判断、2026-11-26）。Task 34 の後に、`/review` を 7 回目として実行してから Step 2 に進む。7 回目の結果と採否は [test-report のレビュー](test-report.md#review-7)。言い回しの指摘は `054a81e` で直した。残りは [Task 35](#task-35)・[Task 36](#task-36) で直す（ユーザーの判断、2026-11-26）。Task 36 の後に、`/review` を 8 回目として実行してから Step 2 に進む。8 回目の結果と採否は [test-report のレビュー](test-report.md#review-8)。言い回しとテストの指摘は `9a01971`・`854db19` で直した。残りは [Task 37](#task-37)〜[Task 39](#task-39) で直す（ユーザーの判断、2026-11-26）。Task 39 の後は、9 回目の `/review` をせずに Step 2 に進む（ユーザーの判断、2026-11-26）。
 - [ ] **Step 2: `/security-review` を実行する（外部からの入力と権限の境界に触れるため）。**
 - [ ] **Step 3: Codex のレビューを行う（必須。ユーザーの指定）。** 人が通常のターミナルで `codex review` と、challenge（変更前と比べた後退と、壊れる入力を挙げてもらう。プロンプトは Claude が書く）を実行する。結果は、CLAUDE.md の Skill routing の手順で読み、test-report に記録してから採否を整理する。直したら、全体のテストを実行し直す。上限は 5 回。
 - [ ] **Step 4: 作業文書を締める。** design.md・plan.md・research・test-report の `status` を `done` にしてコミットする。
@@ -2076,3 +2076,100 @@ Expected: すべて PASS、skip なし。結果を test-report に書く。
 コミット（タイトル `docs: record the Seatbelt run after the seventh review fixes`）: `docs/work/20261124_workbook-intake/test-report.md`。
 
 その後、[Task 12](#task-12) の Step 1 の続き（8 回目の `/review`）に戻る。
+
+<a name="review8-fixes"></a>
+
+## 8 回目の `/review` の指摘の修正（Task 37〜39）
+
+8 回目の `/review` の結果と採否は [test-report](test-report.md#review-8)。言い回しとテストの指摘は `9a01971`・`854db19` で直した。ユーザーの判断（2026-11-26）:
+
+- D1: スキルの「`--agent-teams` で起動されているなら止まる」を、モデルが見える手がかりに置き換える。チームが有効なときだけ見えるツール（TeamCreate など）が、Claude Code 2.1.332 の本体でチームの判定と同じ条件で足されることを確かめてから書く。確かめられなければ、スキルからこの文を消し、スキルはこの起動を見分けられないと README と design に書く。
+- D2: 承認の記録の場所・中身・残る期間・消し方を、README の利用上の注意と design の受け入れるリスクに書く。場所と消える条件は、公式ドキュメントで確かめてから書く。
+- D3: Task 39 の後は、9 回目の `/review` をせずに [Task 12](#task-12) の Step 2 に進む。
+
+設計は 2026-11-26 の 6 つ目の改訂で直す（[design.md の改訂](design.md#revisions)）。
+
+<a name="task-37"></a>
+
+### Task 37: スキルのチームの確かめ（見える手がかり）
+
+**Files:**
+- Modify: `skills/analyze/SKILL.md`、`README.md`、`README.ja.md`、`docs/work/20261124_workbook-intake/design.md`、`docs/work/20261124_workbook-intake/test-report.md`、`tests/test_skill_and_agent.py`
+
+**Interfaces:**
+- 確かめの結果（版、探した文字列、見つかった条件）を、test-report の「実機での確認」に 1 行で書く。本体は `"$(readlink -f "$(command -v claude)")"`。固定の文字列で探す（`LC_ALL=C grep -a -F`）。前後を正規表現で取り出すと、数分かかる。
+- 手がかりが確かめられたとき: スキルの Step 0 の、フックの確かめの段落の後に、「そのツール（ツールの一覧、または名前だけが並ぶ後から読み込むツールの一覧）が見えたら、エージェントのチームが有効（`--agent-teams` での起動を含む）なので、README の Troubleshooting を示して止まる」を足す。Step 5 の「Stop instead if Claude Code was started with `--agent-teams`: ...」の文は消す。
+- 確かめられなかったとき: Step 5 のその文を消すだけにする。README と design には、スキルもフックもこの起動を見分けられないと書く。
+
+- [ ] **Step 1: Claude Code の本体で手がかりを確かめる**
+
+チームが有効なときだけ足されるツールの名前と、その有効の条件が、`CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS` と `--agent-teams` を見るのと同じ判定かを確かめる。チームが切れているこのセッションのツールの一覧に、そのツールがないことも確かめる。
+
+- [ ] **Step 2: 失敗するテストを書く**
+
+```python
+# tests/test_skill_and_agent.py
+def test_skill_does_not_rely_on_start_flags(self):   # SKILL.md に "Stop instead if Claude Code was started with `--agent-teams`" がない
+def test_skill_stops_on_team_tools(self):            # 確かめられたときだけ: 手がかりのツールの名前がある段落が "## Step 1" より前にある
+```
+
+- [ ] **Step 3: テストが失敗することを確かめ、実装し、通ることを確かめる**
+
+Run: `"$PY" -B -m unittest discover -s tests -t . -v && claude plugin validate . --strict`
+Expected: 実装の前は新しいテストが FAIL、実装の後はすべて PASS（sandbox の中では skip あり）、通過。
+
+- [ ] **Step 4: README と design を直す**
+
+`README.md`・`README.ja.md` の制限の、エージェントのチームの行の `--agent-teams` の文を、確かめの結果に合わせて直す。design の受け入れるリスクの、エージェントのチームの項と、スキルの節も同じように直す。
+
+- [ ] **Step 5: コミットする**
+
+1 つ目のコミット（タイトル `fix: stop the skill on a signal of agent teams it can see`。確かめられなかったときは `fix: drop the start flag check the skill cannot see`）: `skills/analyze/SKILL.md`・`tests/test_skill_and_agent.py`。
+2 つ目のコミット（タイトル `docs: describe how the skill detects agent teams`）: `README.md`・`README.ja.md`・design・test-report。
+
+<a name="task-38"></a>
+
+### Task 38: 承認の記録の文書
+
+**Files:**
+- Modify: `README.md`、`README.ja.md`、`docs/work/20261124_workbook-intake/design.md`、`tests/test_readme.py`
+
+**Interfaces:**
+- 公式ドキュメント（プラグインのリファレンスの、永続的なデータの置き場所の節）で、`${CLAUDE_PLUGIN_DATA}` が指す場所と、いつ消えるか（プラグインを外したとき、保つ引数など）を確かめる。中身は `hooks/intake_common.py` と `hooks/record_consent.py` から書く（推測で書かない）。
+
+- [ ] **Step 1: 失敗するテストを書く**
+
+```python
+# tests/test_readme.py
+def test_readme_describes_consent_records(self):   # README.md と README.ja.md の両方に "consents" がある
+```
+
+- [ ] **Step 2: テストが失敗することを確かめ、README を直し、通ることを確かめる**
+
+`README.md` の Notes on use と `README.ja.md` の利用上の注意に 1 項を足す。承認の記録は `${CLAUDE_PLUGIN_DATA}/consents/`（確かめた実際の場所）にあり、セッションごとのファイルに、受け取ったファイルの実際のパスと中身の SHA-256 などが残る。消す処理はなく、プラグインを外すまで残る（確かめた条件）。ファイル名には取引先の名前などが入りうる。消してよいのは、プラグインを使っているセッションがないとき（消すと、次の分析で入力の確認をやり直す）。
+
+Run: `"$PY" -B -m unittest discover -s tests -t . -v`
+Expected: 実装の前は新しいテストが FAIL、実装の後はすべて PASS（sandbox の中では skip あり）。
+
+- [ ] **Step 3: design を直す**
+
+design の受け入れるリスクに、承認の記録が残ること（中身、場所、期間、README に書いたこと。消す処理は、守りの境界に新しいコードを足すので足さない。ユーザーの判断）を足す。
+
+- [ ] **Step 4: コミットする**
+
+コミット（タイトル `docs: describe where consent records stay and how to delete them`）: `README.md`・`README.ja.md`・`tests/test_readme.py`・design。
+
+<a name="task-39"></a>
+
+### Task 39: 人による実行（メインの会話で行う）
+
+- [ ] **Step 1: 全体のテストを、人がきれいな複製で実行する**
+
+Run（人）: runbook の通常のターミナルのコマンド（`<確かめたコミット>` は Task 38 の後の HEAD の完全な SHA）
+Expected: すべて PASS、skip なし。結果を test-report に書く。
+
+- [ ] **Step 2: コミットする**
+
+コミット（タイトル `docs: record the Seatbelt run after the eighth review fixes`）: `docs/work/20261124_workbook-intake/test-report.md`。
+
+その後、9 回目の `/review` をせずに、[Task 12](#task-12) の Step 2（`/security-review`）に進む。

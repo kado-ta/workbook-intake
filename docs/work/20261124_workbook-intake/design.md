@@ -31,6 +31,7 @@ created: 2026-11-24
 - 2026-11-26: 5 回目の `/review` で、計算エンジンのほかにも、ファイルの中身だけで xlide が多くの時間やメモリを使う形が見つかった（[test-report](test-report.md#review-5)）。最も重い `xlide_analyze`（VBA の静的な解析）と `xlide_rules` を許可リストから外し、[フック](#hook)は正規表現の検索（`is_regex`）を拒否する。残りの形は[受け入れるリスク](#risks)に書く。xlide が読めない `.xltx`・`.xltm` は受け付けない（[検査](#checker)）。固定しない下の依存、エージェントのチーム、通常のターミナルでテストを動かすときの作業ツリーのことを、README と runbook に書く（ユーザーの判断）。
 - 2026-11-26: 6 回目の `/review` の後（[test-report](test-report.md#review-6)）。[フック](#hook)は、検索の文字列（`query`）が 256 文字を超える呼び出しと、エージェントのチームが有効な環境（`CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS` が空でない）での呼び出しを拒否する。matcher は、プラグインの xlide のすべてのツールに当たる形に広げる（ユーザーの判断）。
 - 2026-11-26: 7 回目の `/review` の後（[test-report](test-report.md#review-7)）。[スキル](#skill)は、最初にメインの会話から `xlide_doctor` を呼び、フックが `wrong_caller` で拒否したときだけ先に進む（フックが動いていることの確かめ）。起動の引数 `--agent-teams` でもチームが有効になりフックは見分けられないこと、ほかのフックが `updatedInput` で入力を書き換えうることを、[受け入れるリスク](#risks)に足す（ユーザーの判断）。
+- 2026-11-26: 8 回目の `/review` の後（[test-report](test-report.md#review-8)）。[スキル](#skill)の「`--agent-teams` で起動されているなら止まる」は、モデルが起動の引数を見られないので何もしない。チームが有効なときだけ見えるツールを Claude Code の本体で確かめ、見えたら止まる手順に置き換える（確かめられなければ、スキルからこの文を消す）。承認の記録（ファイルの実際のパスと SHA-256）がプラグインを外すまで残ることを、README と[受け入れるリスク](#risks)に書く（ユーザーの判断）。
 
 <a name="intent"></a>
 
