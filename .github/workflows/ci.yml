@@ -26,5 +26,13 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
+      # The hooks and doctor.sh require a python3 installed and owned by root, as the
+      # Command Line Tools are. On the runner, xcode-select points to Xcode.app instead.
+      # Switch the system selection, not DEVELOPER_DIR: the doctor.sh tests run it
+      # with a minimal environment.
+      - name: Select the Command Line Tools
+        run: |
+          sudo xcode-select --switch /Library/Developer/CommandLineTools
+          xcode-select -p
       - name: Unit tests (sandbox-exec tests are required)
         run: WORKBOOK_INTAKE_REQUIRE_SANDBOX=1 "$(xcode-select -p)/usr/bin/python3" -B -m unittest discover -s tests -t . -v
