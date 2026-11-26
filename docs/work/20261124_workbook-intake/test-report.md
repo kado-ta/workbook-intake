@@ -210,3 +210,25 @@ Seatbelt に関わる 3 つは、Claude の sandbox の中では `sandbox-exec` 
 - base64 を `b64(blob[:1]) + b64(blob[1:])` と 2 つに分けた形は、3.15 でも戻した全体がずれ、pyopenvba が読めなかった（検査は `not_zip`）。xlide が展開するのは、上の表の、`==` を挟んだ形である。
 - メタデータの展開は約 375 倍で、3 回目の `/review` で見た 100 倍を超えた。expat の上限は、出力がある量（既定で 8 MiB）を超えてから効くためと見られる（推測）。
 - 2 MiB の 0 を入れた 2 つのブックは、展開の後に、pyopenvba がクエリの書式の誤りで止まる。止まる前に展開は終わっている。シートを隠したブックでは、共有文字列の関係がないので、`read()` が `ValueError` で失敗した。読み比べの結論には関わらない。
+
+<a name="review-4"></a>
+
+### /review（4 回目、`6ce9c18`）
+
+3 回目の修正（Task 20〜24）の後に、ブランチ全体をもう一度見た。専門のレビュアー 6 つ（Testing、Maintainability、Security、Performance、Simplification、State Machines）、Red Team、Claude の敵対的なパスを出し、3 回目の後の差分を重点にした。Codex のパスは、人が通常のターミナルで実行するため、ここでは飛ばした。Testing のほかの専門のレビュアーは指摘なし。
+
+最新の差分で、検査をすり抜ける形は見つからなかった。敵対的なパスは、正規の base64 に空白を混ぜた 5,021 件の入力と、Power Query の部品の 1,500 件の形を、検査（3.9.6）と pyopenvba（3.15.2）に読ませた。pyopenvba が展開し、検査が合格し、検査の数えた展開量が pyopenvba より少ない、という標本は 0 件だった。`<!-->` の判定も、pyofficeeditor の読み手の違いを尽くしていると確かめた。
+
+| 重さ | 場所 | 内容 | 採否 |
+| --- | --- | --- | --- |
+| 中 | `hooks/allowed-tools.txt`（`xlide_read_cells`・`xlide_evaluate_formula`） | 数式の計算は、検査を通ったまま上限なくメモリを使う。`calculate=true` の `xlide_read_cells` はブック全体を計算し（`xlide_mcp/cells.py:226-227,268`）、`SEQUENCE` は配列を全部作る。約 1 KB のブックの `=SUM(SEQUENCE(2000,2000))` で 351 MB を使い、検査は警告なしで合格にした。xlide は sandbox の外で動き、メモリに上限がない（敵対的なパスと Red Team の両方。主担当がソースで確かめた） | 直す（[Task 25](plan.md#task-25)。計算をフックで止め、`xlide_evaluate_formula` を外す） |
+| 軽微 | `.mcp.json` | `--python 3.15` が固定するのはマイナー版だけ。この環境の uvx は mise の 3.15.2（expat 2.9.0）を使っていた。別の 3.15.x に黙って変わりうる。ただし、今の検査の規則はパッチ版に頼らない（敵対的なパスと Red Team） | 文書と手順で扱う（[Task 27](plan.md#task-27)。パッチ版までは固定しない） |
+| 軽微 | `scripts/check_workbook.py` | 検査そのものは Command Line Tools の expat 2.2.8（2019 年）に頼る。乗っ取られた検査が「合格」と出力するのは Seatbelt では止まらない。届く既知の脆弱性は見つかっていない | 受け入れるリスクに書く（[Task 27](plan.md#task-27)） |
+| 軽微 | `tests/test_check_workbook.py` | 中の zip の部品に extra field がある形と `itemProps1.xml` のテストがない。`+ xlen` を消す変異が全テストを通る（Testing） | テストを足す（[Task 26](plan.md#task-26)） |
+| 軽微 | `tests/test_guard_xlide.py` | `bash -p` は文字列で固定しているだけで、設定どおりに動かして `BASH_ENV` を読まないことを確かめるテストがない（Testing） | テストを足す（[Task 26](plan.md#task-26)） |
+| 軽微 | `tests/test_check_workbook.py` | 権限と結び付けの節だけに DTD を置いたテストがない。DTD を探す範囲をメタデータの節だけに狭めても落ちない（Task 22 の先送り） | テストを足す（[Task 26](plan.md#task-26)） |
+| 軽微 | README | `uncompressed_too_large` の行が、古い部品名（`customXml/item<N>.xml`）のまま。日本語の Requirements の 1 行が普通体 | 直した（`5d36800`） |
+
+QA の確かめ（正しい Power Query のブックは `pass` と `power_query`、base64 の途中に `==` を挟んだ zip bomb は `not_zip`、`<!-->` でシートを隠したブックは `strings_not_checked`、全体のテスト、shellcheck、`claude plugin validate . --strict`）は、どれも期待のとおりだった。
+
+各 Task のレビューで先送りにした軽微な指摘のうち、上の表にないものは直さない（主担当の判断）。調査の文書の古い記述（[research-xlide-parsing.md](research-xlide-parsing.md) の 6 節の検査の説明）は、その時点の記録として残す。`total += len(blob)` の位置、`test_manifests.py` の引数の外し方、Task 21 のテストの部品名は、結果を変えない。

@@ -957,7 +957,7 @@ git commit -m "docs: record manual verification of workbook-intake"
 
 ### Task 12: レビューと PR の準備
 
-- [x] **Step 1: `/review` を実行し、指摘への対応を決める。直したら、全体のテストを実行し直す。** 1 回目の結果と採否は [test-report のレビュー](test-report.md#review-1)。小さな指摘は `be03451` で直した。検査と xlide の読み方の違いなどは、[Task 13](#task-13)〜[Task 15](#task-15) で直す（ユーザーの判断、2026-11-25）。Task 15 の後に、`/review` をもう一度実行してから Step 2 に進む。2 回目の結果と採否は [test-report のレビュー](test-report.md#review-2)。小さな指摘は `fe3b14c`・`e4ad15b`・`25108c0` で直した。残りは [Task 16](#task-16)〜[Task 19](#task-19) で直す（ユーザーの判断、2026-11-25）。Task 19 の後に、`/review` を 3 回目として実行してから Step 2 に進む。3 回目の結果と採否は [test-report のレビュー](test-report.md#review-3)。小さな指摘は `77dd89c`・`1fb2760` で直した。残りは [Task 20](#task-20)〜[Task 24](#task-24) で直す（ユーザーの判断、2026-11-26）。Task 24 の後に、`/review` を 4 回目として実行してから Step 2 に進む。
+- [x] **Step 1: `/review` を実行し、指摘への対応を決める。直したら、全体のテストを実行し直す。** 1 回目の結果と採否は [test-report のレビュー](test-report.md#review-1)。小さな指摘は `be03451` で直した。検査と xlide の読み方の違いなどは、[Task 13](#task-13)〜[Task 15](#task-15) で直す（ユーザーの判断、2026-11-25）。Task 15 の後に、`/review` をもう一度実行してから Step 2 に進む。2 回目の結果と採否は [test-report のレビュー](test-report.md#review-2)。小さな指摘は `fe3b14c`・`e4ad15b`・`25108c0` で直した。残りは [Task 16](#task-16)〜[Task 19](#task-19) で直す（ユーザーの判断、2026-11-25）。Task 19 の後に、`/review` を 3 回目として実行してから Step 2 に進む。3 回目の結果と採否は [test-report のレビュー](test-report.md#review-3)。小さな指摘は `77dd89c`・`1fb2760` で直した。残りは [Task 20](#task-20)〜[Task 24](#task-24) で直す（ユーザーの判断、2026-11-26）。Task 24 の後に、`/review` を 4 回目として実行してから Step 2 に進む。4 回目の結果と採否は [test-report のレビュー](test-report.md#review-4)。小さな指摘は `5d36800` で直した。残りは [Task 25](#task-25)〜[Task 28](#task-28) で直す（ユーザーの判断、2026-11-26）。Task 28 の後に、`/review` を 5 回目として実行してから Step 2 に進む。
 - [ ] **Step 2: `/security-review` を実行する（外部からの入力と権限の境界に触れるため）。**
 - [ ] **Step 3: Codex のレビューを行う（必須。ユーザーの指定）。** 人が通常のターミナルで `codex review` と、challenge（変更前と比べた後退と、壊れる入力を挙げてもらう。プロンプトは Claude が書く）を実行する。結果は、CLAUDE.md の Skill routing の手順で読み、test-report に記録してから採否を整理する。直したら、全体のテストを実行し直す。上限は 5 回。
 - [ ] **Step 4: 作業文書を締める。** design.md・plan.md・research・test-report の `status` を `done` にしてコミットする。
@@ -1658,3 +1658,146 @@ git commit -m "docs: record the parity check and Seatbelt run after the third re
 ```
 
 その後、[Task 12](#task-12) の Step 1 の続き（4 回目の `/review`）に戻る。
+
+<a name="review4-fixes"></a>
+
+## 4 回目の `/review` の指摘の修正（Task 25〜28）
+
+4 回目の `/review` の結果と採否は [test-report](test-report.md#review-4)。最新の差分で検査をすり抜ける形は見つからなかった。ブランチ全体では、数式の計算が上限なくメモリを使う道が見つかった。ユーザーの判断（2026-11-26）:
+
+- D1: 計算を求める呼び出し（`calculate` が `false` でない引数）をフックで拒否し、`xlide_evaluate_formula` を許可リストとエージェントのツールから外す。
+- D2: `--python 3.15` のままにし、マイナー版だけの固定であることと、実際の版を確かめる手順を書く。
+- D3: 検査が Command Line Tools の expat 2.2.8 に頼ることを、受け入れるリスクと README の制限に書く。
+- D4: テストの不足 3 つ（Excel の形の中の zip、設定どおりの `bash -p`、権限と結び付けの節の DTD）を足す。
+
+設計は 2026-11-26 の 2 つ目の改訂で直した（[design.md の改訂](design.md#revisions)）。検査の語彙は増やさない。フックの拒否の理由に `calculation_not_allowed` を足す。
+
+<a name="task-25"></a>
+
+### Task 25: フック（計算を止める）
+
+**Files:**
+- Modify: `hooks/guard_xlide.py`、`hooks/allowed-tools.txt`、`agents/excel-analyst.md`、`tests/test_guard_xlide.py`、`README.md`、`README.ja.md`、`docs/runbooks/maintenance.md`
+- 計算の機能に触れていれば Modify: `skills/analyze/SKILL.md`
+
+**Interfaces:**
+- `decide_detail` は、パスらしい引数の確かめの後、`file_path` の確かめの前に、`tool_input.get("calculate", False) is not False` なら `("deny", "calculation_not_allowed", [])` を返す。値の型は問わない（`"true"`・`1`・`null` も拒否する。xlide の引数の読み手が型を寄せうるため）。
+- `hooks/allowed-tools.txt` から `xlide_evaluate_formula file` の行を消す。`reviewed-for:` は変えない。
+- `agents/excel-analyst.md` の `tools` から `mcp__plugin_workbook-intake_xlide__xlide_evaluate_formula` を消す（`tests/test_skill_and_agent.py` の `test_agent_tools_match_allowlist` が、許可リストと同じであることを確かめる）。
+
+- [ ] **Step 1: 計算に届くツールを洗い出す**
+
+xlide-mcp 1.2.4 のソース（xlide の uv の環境の `site-packages/xlide_mcp/`）で、許可リストのツールのうち、pyofficeeditor の計算（`book.calculate`・`sheet.evaluate`・`excel/_calc`）に届くものと、その引数を挙げる。分かっているのは `xlide_read_cells` の `calculate` と `xlide_evaluate_formula`。ほかにも届くツールがあれば、実装の前に止めて主担当に報告する。
+
+- [ ] **Step 2: 失敗するテストを書く**
+
+```python
+def test_calculate_denied(self):            # extra={"calculate": v} の v = True, "true", 1, None → "calculation_not_allowed"（承認と検査の前に止まる）
+def test_calculate_false_passes_on(self):   # extra={"calculate": False} → 今までどおり（承認と検査が済んでいれば allow）
+def test_evaluate_formula_not_allowed(self): # tool="xlide_evaluate_formula" → "tool_not_allowed"
+```
+
+`test_allowlist_format` の期待から `evaluate_formula` を外す。
+
+- [ ] **Step 3: テストが失敗することを確かめる**
+
+Run: `"$PY" -B -m unittest tests.test_guard_xlide tests.test_skill_and_agent -v`
+Expected: 上の 3 件と、直した `test_allowlist_format` が FAIL。
+
+- [ ] **Step 4: 実装する**
+
+- [ ] **Step 5: 文書を直す**
+
+- `agents/excel-analyst.md`: `xlide_evaluate_formula` に触れる文を消し、`calculate=true` の注意を「再計算はフックが止めるので使わない。セルの値は Excel が最後に保存した結果」にする。
+- `README.md`・`README.ja.md`: Troubleshooting に `calculation_not_allowed`（「計算を求める呼び出し（`calculate=true` など）。xlide の計算エンジンは上限なくメモリを使いうるため」）を足す。使い方の注意の「再計算（`calculate=true`）」の文を、「再計算はできない（フックが止める）。セルの値は Excel が最後に保存した結果」にする。
+- `docs/runbooks/maintenance.md`: 許可リストの見直しの 3 点に、4 点目「計算エンジン（`book.calculate`・`sheet.evaluate`）に届くか。届くなら、どの引数か」を足す。
+
+- [ ] **Step 6: テストが通ることを確かめ、判定を外すと落ちることを確かめる**
+
+Run: `"$PY" -B -m unittest discover -s tests -t . -v && claude plugin validate . --strict`
+Expected: すべて PASS（sandbox の中では skip あり）、通過。判定を外すと、Step 2 のテストが FAIL になることを写しで確かめる。
+
+- [ ] **Step 7: コミットする**
+
+```bash
+git add hooks/guard_xlide.py hooks/allowed-tools.txt agents/excel-analyst.md tests/test_guard_xlide.py
+git commit -m "fix: deny formula calculation in the xlide guard"
+git add README.md README.ja.md docs/runbooks/maintenance.md   # skills/analyze/SKILL.md を直したら足す
+git commit -m "docs: say that recalculation is blocked and why"
+```
+
+<a name="task-26"></a>
+
+### Task 26: テストの不足を足す
+
+**Files:**
+- Modify: `tests/test_check_workbook.py`、`tests/test_guard_xlide.py`、`tests/test_record_consent.py`、必要なら `tests/workbook_factory.py`
+
+製品のコードは変えない。どのテストも、今のコードで通り、規則を外した写しで落ちることを確かめる（今のコードで正しく動くことは、4 回目の `/review` で手で確かめた）。
+
+- [ ] **Step 1: テストを書く**
+
+```python
+# tests/test_check_workbook.py の PowerQueryPackageTest
+def test_mashup_excel_like_package_passes(self):   # zipfile で作る中の zip。部品に 8 バイトの extra field（growth hint、id 0xA220）。customXml/itemProps1.xml（DataMashup の schemaRef）も置く → "pass"、"power_query"
+def test_mashup_permissions_dtd_fails(self):       # 権限の節（2 つ目）だけに '<!DOCTYPE x>' → "xml_dtd"
+def test_mashup_bindings_dtd_fails(self):          # 結び付けの節（4 つ目）だけに '<!DOCTYPE x>' → "xml_dtd"
+# tests/test_guard_xlide.py と tests/test_record_consent.py
+def test_configured_command_ignores_bash_env(self):  # hooks/hooks.json の command を読み、${CLAUDE_PLUGIN_ROOT} を置き換え、shlex で分けて動かす。BASH_ENV は印のファイルを作るスクリプト → 印はできない。対照として、同じ入力を -p なしの /bin/bash で動かすと印ができることも確かめる
+```
+
+- [ ] **Step 2: 通ることと、規則を外した写しで落ちることを確かめる**
+
+Run: `"$PY" -B -m unittest discover -s tests -t . -v`
+Expected: すべて PASS（sandbox の中では skip あり）。写しで、`_check_package` の `+ xlen` を消すと 1 件目が、DTD を探す範囲を `sections[2]` だけにすると 2・3 件目が、`hooks.json` の `-p` を消すと 4 件目が FAIL になる。
+
+- [ ] **Step 3: コミットする**
+
+```bash
+git add tests/
+git commit -m "test: pin the Excel-shaped package, the DTD search over every section and bash -p"
+```
+
+<a name="task-27"></a>
+
+### Task 27: 文書（Python の固定の範囲、検査の expat）
+
+**Files:**
+- Modify: `README.md`、`README.ja.md`、`docs/runbooks/maintenance.md`
+
+- [ ] **Step 1: 手順書に、実際の版を確かめる手順を足す**
+
+`docs/runbooks/maintenance.md` の「版を上げる手順」の前に、新しい版を出す前の確かめを足す。プラグインと同じ `uvx` の引数で xlide の環境の python を動かし、`sys.version`・`pyexpat.EXPAT_VERSION`・`unicodedata.unidata_version` を表示するコマンドを書く（実行して、表示されることを確かめる）。調査のときの値（3.15.2、`expat_2.9.0`、17.0.0）と違えば、「版を上げる手順」の読み比べと検査の写しの見直しを行う。uv は、自分で管理する 3.15 があればそれを、なければ PATH の `python3.15` を使うことも書く。
+
+- [ ] **Step 2: README を直す**
+
+- Requirements の Python 3.15 の行に、「固定するのはマイナー版（3.15）だけ。uv が管理する 3.15 か、PATH の `python3.15` を使う」を足す。
+- 制限（Limitations）に、「検査は Command Line Tools の Python 3.9.6 と、その expat 2.2.8 で動く。Seatbelt は、乗っ取られた検査の書き込み・通信・実行を止めるが、判定そのものは守らない。文字コードの厳密な復号、DTD の拒否、1 部品 32 MB の上限で、届く面を狭くしている」を足す。
+
+- [ ] **Step 3: 確かめてコミットする**
+
+Run: `"$PY" -B -m unittest discover -s tests -t . && claude plugin validate . --strict`
+Expected: すべて PASS、通過。
+
+```bash
+git add README.md README.ja.md docs/runbooks/maintenance.md
+git commit -m "docs: describe the Python pin scope and the checker's expat"
+```
+
+<a name="task-28"></a>
+
+### Task 28: 人による実行（メインの会話で行う）
+
+- [ ] **Step 1: 全体のテストを、人が通常のターミナルで実行する**
+
+Run（人）: `WORKBOOK_INTAKE_REQUIRE_SANDBOX=1 "$(xcode-select -p)/usr/bin/python3" -B -m unittest discover -s tests -t . -v`
+Expected: すべて PASS、skip なし。結果を test-report に書く。
+
+- [ ] **Step 2: コミットする**
+
+```bash
+git add docs/work/20261124_workbook-intake/test-report.md
+git commit -m "docs: record the Seatbelt run after the fourth review fixes"
+```
+
+その後、[Task 12](#task-12) の Step 1 の続き（5 回目の `/review`）に戻る。
