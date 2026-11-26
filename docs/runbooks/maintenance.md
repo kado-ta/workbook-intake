@@ -18,7 +18,7 @@
 
 | きっかけ | 気づき方 | 対応 |
 | --- | --- | --- |
-| xlide と固定した依存の新しい版・脆弱性 | Dependabot の PR と alerts | [版を上げる手順](#bump) |
+| xlide と固定した依存の新しい版・脆弱性 | Dependabot の PR と alerts | [版を上げる手順](#bump)。**Dependabot の PR そのものはマージしない**（手順の冒頭を参照） |
 | Claude Code の更新（フック・プラグイン・MCP・権限・AskUserQuestion に関わる変更） | Claude Code の changelog。自動では検知しない | [前提を確かめ直す手順](#recheck) |
 | macOS・Command Line Tools の更新（python3 の版が変わるなど） | CI の macOS のジョブの失敗、`doctor.sh` | 全体のテストを通常のターミナルで動かす。`PYTHON_HOME` と Seatbelt を確かめる |
 | uv の更新 | 自動では検知しない | `uvx --no-config` の動きを確かめる |
@@ -44,6 +44,8 @@ uvx --no-config --python 3.15 --from xlide-mcp==1.2.4 --with pyopenvba==6.6.0 --
 ## 版を上げる手順
 
 xlide-mcp か、固定した依存（pyopenvba・pyofficeeditor・pyvbaanalysis・mcp）の版を上げるとき。xlide の Python の版（`.mcp.json` の `--python`）を上げるときも、同じ確かめ（読み比べと、検査の写しの見直し）を行う。
+
+Dependabot の pip の PR（毎週の版の更新と、脆弱性の修正版を入れる security updates）は、この手順を始める合図として扱い、PR そのものはマージしない。Dependabot が変えるのは写しの `deps/requirements.txt` だけなので、`tests/test_manifests.py` の一致のテストで CI が落ちる。PR のブランチに残りの変更を足してマージすることもしない。CI は通るようになるが、SkillSpector と許可リストの確かめ直しが抜ける（`main` のルールセットは承認を求めないので、止まらない）。この手順を自分のブランチで行い、マージした後、Dependabot の PR が開いたままなら閉じる。
 
 - [ ] 版を上げる。次の 3 か所を同じ版にそろえる。
   - `.mcp.json`
