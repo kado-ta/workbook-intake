@@ -58,7 +58,7 @@ class CheckWorkbookTest(unittest.TestCase):
         self.assertEqual(check_workbook.check(self.build(name="book.XLSX"))["result"], "pass")
 
     def test_unsupported_extension_fails(self):
-        for name in ("book.xls", "book.csv", "book.docm"):
+        for name in ("book.xls", "book.csv", "book.docm", "book.xltx", "book.xltm"):
             with self.subTest(name=name):
                 self.assertIn("unsupported_extension", self.failures(self.build(name=name)))
 

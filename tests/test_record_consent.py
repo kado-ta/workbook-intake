@@ -493,9 +493,11 @@ class ResolveInIntakeTest(unittest.TestCase):
                 self.assertEqual(self.reason("/etc/hosts"), "intake_dir_invalid")
 
     def test_unsupported_extension(self):
-        p = os.path.join(self.intake, "a.txt")
-        open(p, "w").close()
-        self.assertEqual(self.reason(p), "unsupported_extension")
+        for name in ("a.txt", "a.xltx", "a.xltm"):
+            with self.subTest(name=name):
+                p = os.path.join(self.intake, name)
+                open(p, "w").close()
+                self.assertEqual(self.reason(p), "unsupported_extension")
 
     def test_file_too_large(self):
         p = write_workbook(os.path.join(self.intake, "big.xlsx"), minimal_parts())

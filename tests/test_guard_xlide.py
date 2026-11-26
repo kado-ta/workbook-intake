@@ -112,6 +112,12 @@ class GuardXlideTest(unittest.TestCase):
         path = self.consented("c.xlsx ")
         self.assertDenied(call(path), "unsupported_extension")
 
+    def test_template_extensions_denied(self):
+        for name in ("t.xltx", "t.xltm"):
+            with self.subTest(name=name):
+                path = self.consented(name)
+                self.assertDenied(call(path), "unsupported_extension")
+
     def test_xlide_list_shapes_not_allowed(self):
         path = self.consented()
         self.assertDenied(call(path, tool=gx.TOOL_PREFIX + "xlide_list_shapes"),

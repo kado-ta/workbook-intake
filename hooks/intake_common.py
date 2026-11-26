@@ -16,7 +16,7 @@ SANDBOX_EXEC = "/usr/bin/sandbox-exec"
 # The checker runs under a profile that lets it read only itself and the target, so it
 # cannot share code with the hooks. These values are repeated there and kept equal by
 # tests/test_sandbox_profile.py.
-SUPPORTED_EXTENSIONS = (".xlsx", ".xlsm", ".xltx", ".xltm", ".xlam", ".xlsb")
+SUPPORTED_EXTENSIONS = (".xlsx", ".xlsm", ".xlam", ".xlsb")
 MAX_FILE_BYTES = 100 * 1024 * 1024
 
 FAILURE_CODES = (

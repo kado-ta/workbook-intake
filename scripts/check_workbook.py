@@ -18,7 +18,7 @@ import zipfile
 import zlib
 from xml.parsers import expat
 
-SUPPORTED_EXTENSIONS = (".xlsx", ".xlsm", ".xltx", ".xltm", ".xlam", ".xlsb")
+SUPPORTED_EXTENSIONS = (".xlsx", ".xlsm", ".xlam", ".xlsb")
 MAX_FILE_BYTES = 100 * 1024 * 1024
 MAX_PARTS = 10_000
 MAX_TOTAL_UNCOMPRESSED = 256 * 1024 * 1024
