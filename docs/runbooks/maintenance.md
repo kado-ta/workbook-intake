@@ -98,6 +98,7 @@ xlide-mcp か、固定した依存（pyopenvba・pyofficeeditor・pyvbaanalysis�
 | `engines` | `{"claude-code": ">=2.1.295"}` を書いても validate は通り、読み込まれる |
 
 - [ ] 上の値と 1 つでも違えば、README の対象の記述と、フック・スキルの前提を見直す。違う項目は、使うのをやめて設計を見直す判断を、人に求める。
+- [ ] スキルは、Claude Code がエージェントのチームが有効な間だけ Agent ツールに `name`・`team_name` の引数を足すことに頼る（2026-11-26、2.1.332 の本体で確かめた。`CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS` と `--agent-teams` を見る判定が偽のとき、スキーマから外す）。新しい版でも、チームを切ったセッションの Agent ツールにこれらの引数がなく、有効にしたセッションにはあることを確かめる。ほかの理由で現れる、またはチームが有効でも現れないなら、スキルの Step 0 の確かめを直す。
 - [ ] `claude plugin validate . --strict` を通す。
 
 <a name="records"></a>
