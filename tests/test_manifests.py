@@ -6,6 +6,7 @@ ROOT = Path(__file__).resolve().parent.parent
 
 XLIDE_ARGS = [
     "--no-config",
+    "--python", "3.15",
     "--from", "xlide-mcp==1.2.4",
     "--with", "pyopenvba==6.6.0",
     "--with", "pyofficeeditor==0.4.1",
@@ -53,5 +54,9 @@ class ManifestTest(unittest.TestCase):
 
     def test_probe_pins_match_plugin(self):
         probe = load_json("dev/probe/workbook-intake/.mcp.json")["mcpServers"]["xlide"]
-        self.assertEqual(without_root_value(probe["args"]), without_root_value(XLIDE_ARGS))
+        # The probe is a separate plugin and stays unpinned for Python (the pins that matter are versions).
+        plugin_args = without_root_value(XLIDE_ARGS)
+        i = plugin_args.index("--python")
+        del plugin_args[i:i + 2]
+        self.assertEqual(without_root_value(probe["args"]), plugin_args)
         self.assertEqual(probe["env"], XLIDE_ENV)

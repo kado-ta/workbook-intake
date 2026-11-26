@@ -4,6 +4,7 @@
       "command": "uvx",
       "args": [
         "--no-config",
+        "--python", "3.15",
         "--from", "xlide-mcp==1.2.4",
         "--with", "pyopenvba==6.6.0",
         "--with", "pyofficeeditor==0.4.1",
