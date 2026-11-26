@@ -69,7 +69,7 @@ xlide-mcp か、固定した依存（pyopenvba・pyofficeeditor・pyvbaanalysis�
 
   `<確かめたコミット>` には、ブランチ名ではなく完全な SHA を書く（複製の元のリポジトリは sandbox から書けるので、ブランチは確かめた後に動かされうる）。確かめたコミットのきれいな複製で動かす。作業ツリーのままだと、追跡していない `tests/test_*.py` や古い `__pycache__` が sandbox の外で読み込まれるため。
 
-- [ ] 実機で確かめる（設計の[完了条件](../work/20261124_workbook-intake/design.md#done)）。メインの会話から xlide を呼ぶと止まる、承認のないファイルは止まる、承認したあとは読める、警告のあるファイルは警告の確認が要る、受け取り用フォルダの外は止まる、書き込み用のツールは止まる、推奨設定のもとで Bash から読めない、など。
+- [ ] 実機で確かめる（設計の[完了条件](../work/20261124_workbook-intake/design.md#done)）。メインの会話から xlide を呼ぶと止まる、承認のないファイルは止まる、承認したあとは読める、警告のあるファイルは警告の確認が要る、受取用フォルダの外は止まる、書き込み用のツールは止まる、推奨設定のもとで Bash から読めない、など。
 - [ ] `.claude-plugin/plugin.json` の `version` を上げ、タグを付ける。
 - [ ] 自分の settings の、マーケットプレイスの SHA の固定を、新しいコミットに更新する。
 
@@ -99,7 +99,7 @@ xlide-mcp か、固定した依存（pyopenvba・pyofficeeditor・pyvbaanalysis�
 
 - [ ] 上の値と 1 つでも違えば、README の対象の記述と、フック・スキルの前提を見直す。違う項目は、使うのをやめて設計を見直す判断を、人に求める。
 - [ ] スキルは、Claude Code がエージェントのチームが有効な間だけ Agent ツールに `name`・`team_name` の引数を足すことに頼る（2026-11-26、2.1.332 の本体で確かめた。`CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS` と `--agent-teams` を見る判定が偽のとき、スキーマから外す）。新しい版でも、チームを切ったセッションの Agent ツールにこれらの引数がなく、有効にしたセッションにはあることを確かめる。ほかの理由で現れる、またはチームが有効でも現れないなら、スキルの Step 0 の確かめを直す。
-- [ ] スキルの Step 0 は、Read ツールが deny の規則を、バイナリの拡張子とファイルの有無より先に確かめることに頼る（2.1.332 の `validateInput` で、"File is in a directory that is denied by your permission settings." が "This tool cannot read binary files" より先）。`.xlsx` がバイナリの拡張子の一覧にあることにも頼る。新しい版でも、deny の規則がある受け取り用フォルダの存在しない `.xlsx` で前者が返り、規則がなければ後者が返ることを確かめる。順序が変わったら、スキルの Read の確かめを直す。
+- [ ] スキルの Step 0 は、Read ツールが deny の規則を、バイナリの拡張子とファイルの有無より先に確かめることに頼る（2.1.332 の `validateInput` で、"File is in a directory that is denied by your permission settings." が "This tool cannot read binary files" より先）。`.xlsx` がバイナリの拡張子の一覧にあることにも頼る。新しい版でも、deny の規則がある受取用フォルダの存在しない `.xlsx` で前者が返り、規則がなければ後者が返ることを確かめる。順序が変わったら、スキルの Read の確かめを直す。
 - [ ] `claude plugin validate . --strict` を通す。
 
 <a name="records"></a>

@@ -12,7 +12,7 @@ Use it at your own risk. It does not guarantee safety.
 
 ## What it does
 
-- xlide is limited to one intake folder (`~/workbook-intake` by default).
+- xlide is limited to one intake folder (`~/workbook-intake` by default; to change it, see [Configuration](#configuration)).
 - Before xlide reads a file, you are asked to confirm that it contains no personal or confidential information. A hook records your answer; the model does not choose it.
 - A hook then runs a structural check of the file inside a macOS Seatbelt sandbox (no network, no writes) and tells you the result in a fixed vocabulary.
 - Only a read-only subagent can call xlide, and only its read-only tools. A hook blocks every other call.
