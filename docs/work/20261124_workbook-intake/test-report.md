@@ -1,5 +1,5 @@
 ---
-status: in-progress
+status: done
 created: 2026-11-25
 ---
 
@@ -65,7 +65,7 @@ created: 2026-11-25
 | 2026-11-26、`0a17307` | 同上 | `shellcheck hooks/*.sh scripts/*.sh dev/probe/workbook-intake/hooks/*.sh` | 指摘なし |
 | 2026-11-26、`0a17307` | 同上 | `claude plugin validate . --strict` | 通過 |
 
-`719943d` から `d093bcb` までに、Seatbelt・フック・検査のコードとそのテスト（`hooks/`、`scripts/check_workbook.*`、`tests/test_sandbox_profile.py`、`tests/test_guard_xlide.py`、`tests/test_record_consent.py`、`tests/test_check_workbook.py`）は変わっていない（`git diff --stat` で確かめた）。そのため、`d093bcb` では人による Seatbelt 付きの実行をやり直していない。`f88e6dd` では、1 回目の `/review` を受けて検査とフックを直したので（[Task 13〜15](plan.md#task-13)）、やり直した。CI（Linux と macOS）の結果は、PR を作った後に足す。
+`719943d` から `d093bcb` までに、Seatbelt・フック・検査のコードとそのテスト（`hooks/`、`scripts/check_workbook.*`、`tests/test_sandbox_profile.py`、`tests/test_guard_xlide.py`、`tests/test_record_consent.py`、`tests/test_check_workbook.py`）は変わっていない（`git diff --stat` で確かめた）。そのため、`d093bcb` では人による Seatbelt 付きの実行をやり直していない。`f88e6dd` では、1 回目の `/review` を受けて検査とフックを直したので（[Task 13〜15](plan.md#task-13)）、やり直した。CI（Linux と macOS）の結果は、PR のチェックで確かめる（この文書は PR の前に `done` にするので、ここには足さない）。
 
 <a name="manual"></a>
 
