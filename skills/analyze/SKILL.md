@@ -23,6 +23,8 @@ The output also has a line `folder <path>`: the real path of the intake folder. 
 
 If no tool whose name starts with `mcp__plugin_workbook-intake_xlide__` is visible, point to README "Troubleshooting" and stop.
 
+Then check that the hook is running. From the main conversation (not from a subagent), call `mcp__plugin_workbook-intake_xlide__xlide_doctor` once, with no arguments. This is the only xlide call you make yourself. The hook must refuse it with `workbook-intake: wrong_caller`; continue to step 1 only if you see exactly that. Stop and point to README "Troubleshooting" if the call returns a result, or is refused with any other `workbook-intake:` reason. If a permission prompt appears, ask the person to decline it, then stop. A result or a prompt means the hook is not running, so the main conversation could read workbooks without the confirmation and the check.
+
 ## Step 1: the file
 
 You cannot list the intake folder from Bash, and that is expected. Ask the person for the file name and their question. The name must be a plain file name: if it contains `/` or a control character, or is `.` or `..`, ask again for a plain name. The file must be a real file in the folder, not a symlink.
@@ -126,7 +128,7 @@ Continue only after the hook adds the line `workbook-intake: warnings_ack=record
 
 ## Step 5: analysis
 
-Start the `workbook-intake:excel-analyst` subagent. Give it the absolute file path, the intake folder path `<folder>` and the person's question. Start it without a name (do not set `name`): a subagent started with a name can run as a member of an agent team. Do not call the xlide tools yourself.
+Start the `workbook-intake:excel-analyst` subagent. Give it the absolute file path, the intake folder path `<folder>` and the person's question. Start it without a name (do not set `name`): a subagent started with a name can run as a member of an agent team. Stop instead if Claude Code was started with `--agent-teams`: that flag turns agent teams on and the hook cannot see it. Apart from the one check in step 0, do not call the xlide tools yourself.
 
 If the subagent or a tool call reports a refusal (`workbook-intake: <reason>`), tell the person the reason and stop. Guard reasons include: bad_input, not_plugin_server, tool_not_allowed, wrong_caller, unexpected_path_argument, calculation_not_allowed, regex_not_allowed, query_too_long, agent_teams_enabled, missing_file_path, path_not_absolute, intake_dir_invalid, outside_intake, not_regular_file, unsupported_extension, file_too_large, path_not_canonical, consent_store_unavailable, no_consent, check_failed, check_timeout, check_error, sandbox_missing, warnings_not_acknowledged, python_missing, internal_error. Do not try to read the file another way: not with Read, not with `unzip` or Python in Bash, and not with another skill.
 

@@ -203,6 +203,12 @@ class GuardXlideTest(unittest.TestCase):
         with mock.patch.dict(os.environ, {"CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS": "1"}):
             self.assertDenied(call(path), "agent_teams_enabled")
 
+    def test_agent_teams_denied_for_any_tool(self):
+        with mock.patch.dict(os.environ, {"CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS": "1"}):
+            self.assertDenied(call(tool=gx.TOOL_PREFIX + "xlide_doctor"), "agent_teams_enabled")
+            self.assertDenied(call(tool=gx.TOOL_PREFIX + "xlide_analyze", agent=None),
+                              "agent_teams_enabled")
+
     def test_agent_teams_empty_passes_on(self):
         path = self.consented()
         self.assertEqual(gx.decide(call(path)), ("allow", "ok"))
@@ -551,7 +557,7 @@ class ManifestTest(unittest.TestCase):
         matcher = pre[0]["matcher"]
         for name in ("mcp__plugin_workbook-intake_xlide__read_workbook", "mcp__other__xlide_doctor"):
             self.assertIsNotNone(re.fullmatch(matcher, name), name)
-        self.assertIsNone(re.fullmatch(matcher, "mcp__other__read"))
+        self.assertIsNone(re.search(matcher, "mcp__other__read"))
 
     def test_hooks_json(self):
         data = json.loads((ROOT / "hooks" / "hooks.json").read_text())["hooks"]

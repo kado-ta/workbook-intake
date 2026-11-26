@@ -66,6 +66,18 @@ class SkillTest(unittest.TestCase):
         ]
         self.assertEqual(blocks, expected)
 
+    def test_skill_checks_the_guard_first(self):
+        for word in ("xlide_doctor", "wrong_caller"):
+            self.assertIn(word, self.text, word)
+        paragraphs = self.text.split("\n\n")
+        check = [i for i, p in enumerate(paragraphs)
+                 if "xlide_doctor" in p and "wrong_caller" in p]
+        start = [i for i, p in enumerate(paragraphs)
+                 if "Start the `workbook-intake:excel-analyst` subagent" in p]
+        self.assertTrue(check)
+        self.assertTrue(start)
+        self.assertLess(check[0], start[0])
+
     def test_file_name_not_in_shell_command(self):
         self.assertNotIn("realpath", self.text)
         self.assertNotIn("<file name>\"", self.text)
