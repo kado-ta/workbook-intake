@@ -408,7 +408,7 @@ class _Collector(object):
     Joined runs are also checked with each run unescaped first, as xlide
     decodes each run before joining. A t inside another t below an open p,
     or a rich in a p, is not joined in xlide's order and marks the part
-    unchecked.
+    unchecked, as does a comment xlide closes early (see comment).
     """
 
     def __init__(self):
@@ -512,6 +512,12 @@ class _Collector(object):
         text, self._cdata = self._cdata, None
         _count_string(text.value(), self.counts)
 
+    def comment(self, text):
+        # xlide ends <!--> and <!---> at once and reads what follows as
+        # markup; expat keeps it in the comment up to the next -->.
+        if text.startswith((">", "->")):
+            self.unchecked = True
+
     def close(self):
         """Count what is still open, for a part that ended early or failed."""
         if self._cdata is not None:
@@ -597,6 +603,7 @@ def _new_parser(enc, collector):
     # With buffer_text, pending text is handed over before these are called.
     parser.StartCdataSectionHandler = collector.cdata_start
     parser.EndCdataSectionHandler = collector.cdata_end
+    parser.CommentHandler = collector.comment
     return parser
 
 
