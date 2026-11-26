@@ -110,15 +110,19 @@ I wrote the `failIfUnavailable` and `denyWrite` forms from the documented key na
 
 If a project defines its own `xlide` server with the same `uvx` command, Claude Code uses one of them only, and the plugin's is dropped as a duplicate (observed with Claude Code 2.1.331). Disable the project's with `"disabledMcpjsonServers": ["xlide"]`. While the plugin is enabled, the hook denies every call to xlide that does not come from the analyst subagent, including calls to a project's own xlide server.
 
-To use another intake folder, set `WORKBOOK_INTAKE_DIR` in the environment that starts Claude Code, and change both deny settings to the same folder (example below). The two settings write absolute paths differently: `sandbox.filesystem.denyRead` takes `/abs/path`, while a `Read(...)` permission rule needs two leading slashes, `Read(//abs/path/**)` (a single leading slash is relative to the settings file). A path under your home folder can be written `~/...` in both. The folder path cannot contain a colon (`:`), because xlide splits it into several folders; the hooks refuse it as `intake_dir_invalid`.
+To use another intake folder, set `WORKBOOK_INTAKE_DIR` in the environment that starts Claude Code, and change the two deny settings in the required settings above (`sandbox.filesystem.denyRead` and the `Read(...)` rule in `permissions.deny`) to the same folder (example below). The two write absolute paths differently: `sandbox.filesystem.denyRead` takes `/abs/path`, while a `Read(...)` permission rule needs two leading slashes, `Read(//abs/path/**)` (a single leading slash is relative to the settings file). A path under your home folder can be written `~/...` in both. The folder path cannot contain a colon (`:`), because xlide splits it into several folders; the hooks refuse it as `intake_dir_invalid`.
 
-For example, to use `~/received`, set the variable in the shell that starts Claude Code (put it in `~/.zshrc` or similar to use it every time), and point both deny settings at that folder. The hooks, xlide and `doctor.sh` all read the variable as it was when Claude Code started.
+For example, to use `~/received`:
+
+1. Create the folder, set the variable in the shell that starts Claude Code, and start it (put the `export` line in `~/.zshrc` or similar to use it every time). The hooks, xlide and `doctor.sh` all read the variable as it was when Claude Code started.
 
 ```sh
 mkdir -p ~/received
 export WORKBOOK_INTAKE_DIR=~/received
 claude
 ```
+
+2. In `~/.claude/settings.json`, point the two deny settings of the required settings (the example above) at that folder. Keep your other keys. The required settings then read:
 
 ```json
 {

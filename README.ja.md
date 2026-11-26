@@ -114,15 +114,19 @@ claude plugin install workbook-intake@workbook-intake
 
 プロジェクトが、同じ `uvx` のコマンドで `xlide` を定義していると、使われるのは片方だけで、プラグインのものは重複として外されます（Claude Code 2.1.331 で確認）。プロジェクトのほうは `"disabledMcpjsonServers": ["xlide"]` で無効にします。プラグインが有効な範囲では、サブエージェント（アナリスト）以外からの xlide の呼び出しは、プロジェクト自身の xlide サーバーへの呼び出しを含めて、フックがすべて拒否します。
 
-別のフォルダを使うときは、Claude Code を起動する環境で `WORKBOOK_INTAKE_DIR` を設定し、2 つの拒否の設定も同じフォルダに変えます。2 つの設定は、絶対パスの書き方が違います。`sandbox.filesystem.denyRead` は `/abs/path` と書きますが、`Read(...)` の権限の規則は先頭に斜線を 2 つ付けて `Read(//abs/path/**)` と書きます（斜線が 1 つだと、設定ファイルの場所からの相対になります）。ホームフォルダの下なら、どちらも `~/...` と書けます。フォルダのパスに `:` は使えません。xlide が複数のフォルダに分けてしまうため、フックは `intake_dir_invalid` で拒否します。
+別のフォルダを使うときは、Claude Code を起動する環境で `WORKBOOK_INTAKE_DIR` を設定し、上の必須の設定にある 2 つの拒否（`sandbox.filesystem.denyRead` と、`permissions.deny` の `Read(...)` の規則）も、同じフォルダに変えます。この 2 つは、絶対パスの書き方が違います。`sandbox.filesystem.denyRead` は `/abs/path` と書きますが、`Read(...)` の権限の規則は先頭に斜線を 2 つ付けて `Read(//abs/path/**)` と書きます（斜線が 1 つだと、設定ファイルの場所からの相対になります）。ホームフォルダの下なら、どちらも `~/...` と書けます。フォルダのパスに `:` は使えません。xlide が複数のフォルダに分けてしまうため、フックは `intake_dir_invalid` で拒否します。
 
-たとえば `~/received` を使うときは、Claude Code を起動するシェルで変数を設定し（毎回使うなら `~/.zshrc` などに書きます）、settings の 2 つの拒否をそのフォルダに変えます。フック、xlide、`doctor.sh` は、どれも起動したときのこの変数を見ます。
+たとえば `~/received` を使うときは、次のようにします。
+
+1. フォルダを作り、Claude Code を起動するシェルで変数を設定してから起動します（毎回使うなら、`export` の行を `~/.zshrc` などに書きます）。フック、xlide、`doctor.sh` は、どれも起動したときのこの変数を見ます。
 
 ```sh
 mkdir -p ~/received
 export WORKBOOK_INTAKE_DIR=~/received
 claude
 ```
+
+2. `~/.claude/settings.json` の必須の設定（上の例）の 2 つの拒否を、そのフォルダに変えます。ほかのキーはそのまま残します。変えた後の必須の設定は、次のとおりです。
 
 ```json
 {
