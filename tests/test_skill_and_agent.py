@@ -92,7 +92,11 @@ class SkillTest(unittest.TestCase):
         self.assertTrue(signal)
         self.assertTrue(step1)
         self.assertLess(signal[0], step1[0])
-        self.assertIn("Troubleshooting", paragraphs[signal[0]])
+        sentences = re.split(r"(?<=\.)\s+", paragraphs[signal[0]])
+        condition = [s for s in sentences if "`team_name`" in s][0]
+        for word in ("`name`", "Troubleshooting", "and stop"):
+            self.assertIn(word, condition, word)
+        self.assertIn("continue to step 1", paragraphs[signal[0]])
 
     def test_file_name_not_in_shell_command(self):
         self.assertNotIn("realpath", self.text)
