@@ -29,7 +29,7 @@
 
 ## 版を上げる手順
 
-xlide-mcp か、固定した依存（pyopenvba・pyofficeeditor・pyvbaanalysis・mcp）の版を上げるとき。
+xlide-mcp か、固定した依存（pyopenvba・pyofficeeditor・pyvbaanalysis・mcp）の版を上げるとき。xlide の Python の版（`.mcp.json` の `--python`）を上げるときも、同じ確かめ（読み比べと、検査の写しの見直し）を行う。
 
 - [ ] 版を上げる。次の 3 か所を同じ版にそろえる。
   - `.mcp.json`

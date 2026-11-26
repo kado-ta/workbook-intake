@@ -37,6 +37,7 @@ Files you let Claude read are sent to Anthropic as model input, and may also sta
 - Command Line Tools (`xcode-select --install`), for `python3`.
 - [uv](https://docs.astral.sh/uv/) (`uvx`).
 - Claude Code 2.1.295 or later, because the hooks use `onFailure`. `plugin.json` declares this in `engines`, but Claude Code reads `engines` only from 2.1.323, so older versions do not enforce it. Pinning a marketplace by commit SHA (see Install) needs 2.1.324 or later.
+- xlide runs on Python 3.15. If it is not on the machine, uv fetches it on the first start (where it cannot be fetched, the xlide tools are not visible).
 - First run: `uvx` downloads a Python and the pinned packages, so it needs a network and takes a while.
 
 `scripts/doctor.sh` checks the requirements when the skill starts. It prints `ok <item>` or `missing <item>` for `macos`, `uvx`, `python3`, `sandbox_exec` and `intake_dir_protected`, and then `folder <path>`.

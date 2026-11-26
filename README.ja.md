@@ -41,6 +41,7 @@
 - Command Line Tools（`xcode-select --install`。`python3` のため）。
 - [uv](https://docs.astral.sh/uv/)（`uvx`）。
 - Claude Code 2.1.295 以上（フックの `onFailure` のため）。`plugin.json` の `engines` で宣言していますが、Claude Code が `engines` を読むのは 2.1.323 以降なので、それより古い版では強制されません。マーケットプレイスをコミットの SHA で固定する（Install を見てください）には、2.1.324 以上が要ります。
+- xlide は Python 3.15 で動く。手元になければ、uv が初回の起動で取得する（取得できない環境では xlide のツールが見えない）。
 - 初回は、`uvx` が Python と固定した版のパッケージを取得するので、通信が要り、時間がかかります。
 
 `scripts/doctor.sh` が、スキルの開始時に必要なものを確かめます。`macos`・`uvx`・`python3`・`sandbox_exec`・`intake_dir_protected` ごとに `ok <項目>` か `missing <項目>` を出し、最後に `folder <パス>` を出します。
