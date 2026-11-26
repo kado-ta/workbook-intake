@@ -82,7 +82,13 @@ Then run `claude plugin install workbook-intake@workbook-intake`. See [plugin ma
 
 Create the intake folder: `mkdir -p ~/workbook-intake`.
 
-Settings cannot be shipped by a plugin, so you set them yourself in `~/.claude/settings.json`.
+Settings cannot be shipped by a plugin, so you set them yourself, in the scope where the plugin is enabled:
+
+- Installed as above (`claude plugin install` defaults to the `user` scope), the plugin is enabled in every project. Put the settings in `~/.claude/settings.json`.
+- To use it in one project only, install it there with `claude plugin install workbook-intake@workbook-intake --scope local` and put the settings in that project's `.claude/settings.local.json` (`.claude/settings.json` applies them to everyone in the project). Project settings apply only to sessions started in that project.
+- In a project where the plugin is enabled but the required settings are missing, the skill stops at its first checks. Claude can still read the intake folder when asked directly, without the skill (see [Limitations](#limitations)).
+
+The examples below are for `~/.claude/settings.json`.
 
 Required (both). Add them to your existing settings; do not replace what is there. The sandbox is off by default, so `"enabled": true` is part of the requirement. They stop Claude's Bash and Read tool from reading the intake folder. xlide and the hooks run outside the sandbox and can still read it. In a probe, `denyRead` alone still let the Read tool read, so both are needed. The skill stops unless the sandbox refuses Bash's read of the folder.
 

@@ -86,7 +86,13 @@ claude plugin install workbook-intake@workbook-intake
 
 受取用フォルダを作ります: `mkdir -p ~/workbook-intake`。
 
-プラグインは settings を配れないので、`~/.claude/settings.json` に自分で書きます。
+プラグインは settings を配れないので、自分で書きます。書く場所は、プラグインを有効にした範囲に合わせます。
+
+- 上の手順（`claude plugin install` の既定の範囲 `user`）で入れると、プラグインはすべてのプロジェクトで有効になります。このときは `~/.claude/settings.json` に書きます。
+- 1 つのプロジェクトだけで使うなら、そのプロジェクトで `claude plugin install workbook-intake@workbook-intake --scope local` で入れ、そのプロジェクトの `.claude/settings.local.json` に書けます（`.claude/settings.json` に書くと、そのプロジェクトの全員に効きます）。プロジェクトの settings は、そのプロジェクトで起動したセッションにだけ効きます。
+- プラグインが有効なのに必須の設定がないプロジェクトでは、スキルは最初の確かめで止まります。ただし、スキルを使わずに頼めば、Claude は受取用フォルダを読めます（[制限](#limitations)）。
+
+以下の例は `~/.claude/settings.json` に書く場合です。
 
 必須（両方）。今の settings に足してください（置き換えないでください）。sandbox は既定で無効なので、`"enabled": true` も必須に含まれます。Claude の Bash と Read ツールが、受取用フォルダを読めなくなります。xlide とフックは sandbox の外で動くので、読めます。probe では `denyRead` だけだと Read ツールが読めたので、両方が要ります。sandbox が Bash による受取用フォルダの読み取りを拒否しないと、スキルは止まります。
 
