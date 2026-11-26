@@ -81,6 +81,10 @@ class SkillTest(unittest.TestCase):
         self.assertLess(check[0], step1[0])
         self.assertLess(check[0], start[0])
 
+    def test_skill_does_not_rely_on_start_flags(self):
+        self.assertNotIn(
+            "Stop instead if Claude Code was started with `--agent-teams`", self.text)
+
     def test_file_name_not_in_shell_command(self):
         self.assertNotIn("realpath", self.text)
         self.assertNotIn("<file name>\"", self.text)
