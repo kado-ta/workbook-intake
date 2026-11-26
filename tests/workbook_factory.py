@@ -199,14 +199,14 @@ _MASHUP_METADATA = (
 )
 
 
-def mashup_blob(package, metadata=_MASHUP_METADATA):
+def mashup_blob(package, metadata=_MASHUP_METADATA, permissions=_MASHUP_PERMISSIONS, bindings=b""):
     """The bytes Excel base64-encodes in a DataMashup element.
 
     Version 0, then four length-prefixed sections: package, a permission
-    list, metadata and an empty one.
+    list, metadata and permission bindings (empty by default).
     """
     blob = struct.pack("<I", 0)
-    for section in (package, _MASHUP_PERMISSIONS, metadata, b""):
+    for section in (package, permissions, metadata, bindings):
         blob += struct.pack("<I", len(section)) + section
     return blob
 

@@ -1179,6 +1179,39 @@ class PowerQueryPackageTest(unittest.TestCase):
         self.assertEqual(r["result"], "pass")
         self.assertIn("power_query", r["warnings"])
 
+    def test_mashup_excel_like_package_passes(self):
+        # Excel's inner parts carry an 8-byte growth-hint extra field (id 0xA220), and
+        # customXml/itemProps1.xml holds the DataMashup schemaRef.
+        buf = io.BytesIO()
+        with zipfile.ZipFile(buf, "w", zipfile.ZIP_DEFLATED) as zf:
+            info = zipfile.ZipInfo("Formulas/Section1.m")
+            info.compress_type = zipfile.ZIP_DEFLATED
+            info.extra = struct.pack("<HH", 0xA220, 4) + bytes(4)
+            zf.writestr(info, b"section Section1;")
+        package = buf.getvalue()
+        self.assertIn(struct.pack("<HH", 0xA220, 4), package)
+        props = (b'<ds:datastoreItem xmlns:ds="http://schemas.openxmlformats.org/officeDocument/2006/customXml">'
+                 b'<ds:schemaRefs><ds:schemaRef ds:uri="http://schemas.microsoft.com/DataMashup"/>'
+                 b"</ds:schemaRefs></ds:datastoreItem>")
+        r = self.check({"customXml/item1.xml": mashup_item(package),
+                        "customXml/itemProps1.xml": props})
+        self.assertEqual(r["result"], "pass")
+        self.assertIn("power_query", r["warnings"])
+
+    def test_mashup_permissions_dtd_fails(self):
+        # The second section; the DTD search covers every section, not only the package.
+        blob = mashup_blob(raw_zip({"Formulas/Section1.m": b"section Section1;"}, zipfile.ZIP_DEFLATED),
+                           permissions=b"<!DOCTYPE x>")
+        item = mashup_wrap(base64.b64encode(blob).decode("ascii"))
+        self.assertEqual(self.check({"customXml/item1.xml": item})["failures"], ["xml_dtd"])
+
+    def test_mashup_bindings_dtd_fails(self):
+        # The fourth section.
+        blob = mashup_blob(raw_zip({"Formulas/Section1.m": b"section Section1;"}, zipfile.ZIP_DEFLATED),
+                           bindings=b"<!DOCTYPE x>")
+        item = mashup_wrap(base64.b64encode(blob).decode("ascii"))
+        self.assertEqual(self.check({"customXml/item1.xml": item})["failures"], ["xml_dtd"])
+
     def test_mashup_package_bomb_fails(self):
         package = raw_zip({"Formulas/Section1.m": b"\x00" * MIB}, zipfile.ZIP_DEFLATED)
         item = mashup_item(package)

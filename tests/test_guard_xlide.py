@@ -1,6 +1,7 @@
 import io
 import json
 import os
+import shlex
 import subprocess
 import sys
 import tempfile
@@ -402,6 +403,29 @@ class GuardXlideTest(unittest.TestCase):
         body = json.loads(r.stdout.decode())["hookSpecificOutput"]
         self.assertEqual(body["permissionDecision"], "deny")
         self.assertIn("workbook-intake: wrong_caller", body["permissionDecisionReason"])
+
+    def test_configured_command_ignores_bash_env(self):
+        # hooks.json runs the wrapper with bash -p, so a BASH_ENV file is not sourced.
+        hooks = json.loads((ROOT / "hooks" / "hooks.json").read_text())["hooks"]["PreToolUse"]
+        command = hooks[0]["hooks"][0]["command"]
+        argv = shlex.split(command.replace("${CLAUDE_PLUGIN_ROOT}", str(ROOT)))
+        self.assertEqual(argv[:2], ["/bin/bash", "-p"])
+        data = json.dumps(call(tool=gx.TOOL_PREFIX + "xlide_doctor", agent=None)).encode()
+        with tempfile.TemporaryDirectory() as tmp:
+            marker = os.path.join(tmp, "ran")
+            rc_file = os.path.join(tmp, "bash_env.sh")
+            with open(rc_file, "w") as f:
+                f.write(": > '%s'\n" % marker)
+            env = {"HOME": self.home, "CLAUDE_PLUGIN_DATA": self.data,
+                   "PATH": "/usr/bin:/bin", "BASH_ENV": rc_file}
+            r = subprocess.run(argv, input=data, env=env, stdout=subprocess.PIPE,
+                               stderr=subprocess.PIPE, timeout=60)
+            self.assertFalse(os.path.exists(marker), "BASH_ENV ran under bash -p")
+            self.assertIn(b"workbook-intake: wrong_caller", r.stdout)
+            # Control: without -p the same BASH_ENV does run.
+            subprocess.run(["/bin/bash", argv[2]], input=data, env=env, stdout=subprocess.PIPE,
+                           stderr=subprocess.PIPE, timeout=60)
+            self.assertTrue(os.path.exists(marker), "BASH_ENV did not run without -p")
 
     def test_wrapper_ignores_commands_on_path(self):
         # A directory early in PATH may be writable from Claude's sandbox; the hook
