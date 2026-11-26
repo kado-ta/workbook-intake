@@ -136,12 +136,12 @@ Google スプレッドシートは直接読みません。`.xlsx` でダウン�
 | `unsupported_extension` | 対象の拡張子ではない |
 | `file_too_large` | 100 MB を超える |
 | `encrypted` | 暗号化されている |
-| `not_zip` | zip として開けない、または読み手によって読み方が変わりうる zip の形（注釈、前置きのデータ、エントリの隙間や重なり、ZIP64、中央ディレクトリと食い違うローカルヘッダー、Unicode Path の extra、フラグの 5・6 ビット、長さや CRC が中央ディレクトリと違う部品のデータ） |
+| `not_zip` | zip として開けない、または読み手によって読み方が変わりうる zip の形（注釈、前置きのデータ、エントリの隙間や重なり、ZIP64、中央ディレクトリと食い違うローカルヘッダー、Unicode Path の extra、フラグの 5・6 ビット、長さや CRC が中央ディレクトリと違う部品のデータ）。または、Power Query の部品の中の zip が壊れている（正規の形でない base64、節や部品の長さの食い違い） |
 | `too_many_parts` | 部品が 10,000 を超える |
 | `unsafe_part_name` | 部品名に `..`・絶対パス・`\`・ドライブ名（`C:` など）・NUL・空のセグメント・`.` のセグメント・中身のあるディレクトリ名がある、文字コードの印と合わない名前がある、または大文字小文字だけが違う名前が重なる |
 | `uncompressed_too_large` | 展開の合計が 256 MB を超える（Power Query の部品の中の zip を含む）。または、`customXml/item<N>.xml` の部品が 32 MB を超える |
 | `compression_ratio_too_high` | 1 つの部品（Power Query の部品の中の zip の部品を含む）が 100 倍を超えて圧縮されている |
-| `xml_dtd` | 部品に `<!DOCTYPE` か `<!ENTITY` がある。XML に限らずすべての部品を探し、Power Query の部品の中にある zip の部品も探すので、SVG の画像や、HTML を書き出すマクロでも出ることがある |
+| `xml_dtd` | 部品に `<!DOCTYPE` か `<!ENTITY` がある。XML に限らずすべての部品を探し、Power Query の部品の中身（中の zip の部品とメタデータ）も探すので、SVG の画像や、HTML を書き出すマクロでも出ることがある |
 
 警告のコード（確認してから続けます）:
 
@@ -151,7 +151,7 @@ Google スプレッドシートは直接読みません。`.xlsx` でダウン�
 | `external_link` | 外部のブックへのリンクがある |
 | `data_connection` | データ接続がある |
 | `external_relationship` | ファイルの外を指す関係がある |
-| `power_query` | Power Query（DataMashup）がある |
+| `power_query` | Power Query（DataMashup）がある。クエリの中の文字列（M のコード、クエリ名、説明）は確かめない |
 | `embedded_object` | 埋め込みのオブジェクトがある |
 | `activex` | ActiveX がある |
 | `hidden_sheet` | 非表示のシートがある |

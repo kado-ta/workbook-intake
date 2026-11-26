@@ -132,12 +132,12 @@ Failure codes (the file is not read):
 | `unsupported_extension` | Extension is not one of the supported ones |
 | `file_too_large` | Over 100 MB |
 | `encrypted` | Password-protected package |
-| `not_zip` | Cannot be opened as a zip, or the ZIP layout could be read differently by different readers (an archive comment, prefix data, gaps or overlaps between entries, ZIP64 records, local headers that disagree with the central directory, a Unicode Path extra, flag bits 5 or 6, part data whose length or CRC differs from the central directory) |
+| `not_zip` | Cannot be opened as a zip, or the ZIP layout could be read differently by different readers (an archive comment, prefix data, gaps or overlaps between entries, ZIP64 records, local headers that disagree with the central directory, a Unicode Path extra, flag bits 5 or 6, part data whose length or CRC differs from the central directory), or the zip inside a Power Query part is broken (non-canonical base64, section or part lengths that do not add up) |
 | `too_many_parts` | More than 10,000 parts |
 | `unsafe_part_name` | A part name has `..` or an absolute path, `\`, a drive letter (such as `C:`), NUL, an empty segment, a `.` segment, a directory name with content, or a name that disagrees with the UTF-8 flag, or two names differ only in letter case |
 | `uncompressed_too_large` | Expands to more than 256 MB in total (including the zip inside a Power Query part), or a `customXml/item<N>.xml` part is over 32 MB |
 | `compression_ratio_too_high` | One part (including a part of the zip inside a Power Query part) compresses by more than 100 times |
-| `xml_dtd` | A part has `<!DOCTYPE` or `<!ENTITY`. Every part is searched, not only XML, and so are the parts of the zip inside a Power Query part, so an SVG image or a macro that writes HTML can cause it |
+| `xml_dtd` | A part has `<!DOCTYPE` or `<!ENTITY`. Every part is searched, not only XML, and so is the content of a Power Query part (the parts of the zip inside it and its metadata), so an SVG image or a macro that writes HTML can cause it |
 
 Warning codes (you must confirm before the analysis continues):
 
@@ -147,7 +147,7 @@ Warning codes (you must confirm before the analysis continues):
 | `external_link` | Links to external workbooks |
 | `data_connection` | Contains data connections |
 | `external_relationship` | A relationship points outside the file |
-| `power_query` | Contains Power Query (DataMashup) |
+| `power_query` | Contains Power Query (DataMashup). Strings inside the queries (M code, query names, descriptions) are not checked |
 | `embedded_object` | Contains embedded objects |
 | `activex` | Contains ActiveX controls |
 | `hidden_sheet` | A hidden sheet exists |
