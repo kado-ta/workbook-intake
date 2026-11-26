@@ -241,7 +241,7 @@ workbook-intake/
  5. 決まった順で読み、要約を返す
  │  （xlide のツールを呼ぶたびに ↓）
  ▼
-フック guard-xlide.sh（sandbox の外。matcher mcp__.*__xlide_.*）
+フック guard-xlide.sh（sandbox の外。matcher mcp__plugin_workbook-intake_xlide__.*|mcp__.*__xlide_.*）
  - プラグインの xlide 以外のサーバーのツール → 拒否
  - 許可リストにないツール → 拒否
  - 呼び出し元が workbook-intake:excel-analyst でない → 拒否

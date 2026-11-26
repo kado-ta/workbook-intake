@@ -171,11 +171,11 @@ Google スプレッドシートは直接読みません。`.xlsx` でダウン�
 - 文字列の検査は見逃すことがあり、誤検知もあります。ウイルス対策ではありません。ウイルス対策は、使う人の端末のものに任せてください。
 - 検査のあと、読むまでにファイルが差し替えられることがあります。受け取り用フォルダは sandbox の書き込みの範囲の外ですが、sandbox の外のもの（人や、ほかのアプリ）は差し替えられます。`denyWrite` を使ってください。
 - 推奨設定がない環境では、スキルを通らない使い方（ほかのスキルや、Bash で読むよう直接頼むこと）で、受け取り用フォルダを読めます。`doctor.sh` はスキルの中でしか動きません。
-- `disableAllHooks` は、どのスコープの設定（リポジトリの `.claude/settings.json` を含む）でもフックを止められます（管理設定のフックは除く）。プラグインのフックも止まる見込みです（推測で、確かめていません）。止まると、メインの会話から xlide を呼べ、入力の確認も検査も効きません。止まっている環境では使わないでください。
+- `disableAllHooks` は、どのスコープの設定（リポジトリの `.claude/settings.json` を含む）でもフックを止められます（管理設定のフックは除く）。プラグインのフックも止まる見込みです（推測で、確かめていません）。管理設定の `allowManagedHooksOnly` も、自分で入れたプラグインのフックを止めます。そのときも、プラグインの xlide のサーバーは読み込まれます。止まると、メインの会話から xlide を呼べ、入力の確認も検査も効きません。止まっている環境では使わないでください。
 - 検査は、Command Line Tools の Python 3.9.6 と、その expat 2.2.8 で動きます。Seatbelt は、乗っ取られた検査の書き込み・通信・実行を止めますが、判定そのものは守りません。文字コードの厳密な復号、DTD の拒否、1 部品 32 MB の上限で、届く面を狭くしています。
 - VBA のソースは、xlide が上限なしに展開します。マクロのブック（`vba_project` の警告）は、メモリを多く使うことがあります。
-- 細工したファイルで、許可しているツールを通して、xlide が多くの時間やメモリを使うことがまだありえます。例（測った値は[テストレポート](docs/work/20261124_workbook-intake/test-report.md#review-5)にあります）: 長い共有数式を読む、1 行に大量のセルがある、クエリが数千件ある、VBA の行の継続が多い。xlide は sandbox の外で動き、メモリの上限がありません。重くなったら Claude Code を止め、通常のターミナルで xlide のプロセスを終えてください（例: `pkill -f xlide-mcp`。sandbox の中のコマンドからは見えません）。最も重い形（計算、VBA の静的な解析、正規表現の検索）はフックが止めます。
-- エージェントのチーム（実験的な機能、`CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS`）は切ってください。有効にすると、ブックを読むエージェントがほかの仲間に直接話しかけられることがあるため、この変数が設定されている間は、フックがすべての xlide の呼び出しを止めます（`agent_teams_enabled`）。この確かめは、フックのプロセスに渡る環境だけを見ます。
+- 細工したファイルで、許可しているツールを通して、xlide が多くの時間やメモリを使うことがまだありえます。例（測った値は[テストレポート](docs/work/20261124_workbook-intake/test-report.md#review-5)にあります）: 長い共有数式を読む、1 行に大量のセルがある、クエリが数千件ある、VBA の行の継続が多い。xlide は sandbox の外で動き、メモリの上限がありません。重くなったら Claude Code を止め、通常のターミナルで xlide のプロセスを終えてください（sandbox の中のコマンドからは見えません）。`pgrep -fl 'xlide-mcp.*--read-only'` で探し、その PID を `kill` で止めます。最も重い形（計算、VBA の静的な解析、正規表現の検索）はフックが止めます。
+- エージェントのチーム（実験的な機能、`CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS`）は切ってください。有効にすると、ブックを読むエージェントがほかの仲間に直接話しかけられることがあるため、この変数が空でない値（`0` を含む）を持つ間は、フックがすべての xlide の呼び出しを止めます（`agent_teams_enabled`）。この確かめは、フックのプロセスに渡る環境だけを見ます。
 - `.mcp.json` が固定するのは xlide-mcp と 4 つの依存だけです。ほかの依存は、uv が環境を作るときに解決します。後の起動で作り直すこともあるので、新しい版はどの起動でも入りえます（下の依存のセキュリティの修正を受け取るため）。
 - 入力の確認は、AskUserQuestion の画面に人が答えることに頼ります。ほかのプラグインのフックや SDK のホストが答えを埋める環境では、人の確認なしに承認が記録されることがあります。
 - ツール名には `mcp__plugin_workbook-intake_xlide__` が付きます（例: `mcp__plugin_workbook-intake_xlide__xlide_doctor`）。サーバー名だけを書いた matcher（`mcp__xlide__.*`）には当たりません。
@@ -187,7 +187,7 @@ Google スプレッドシートは直接読みません。`.xlsx` でダウン�
 - プラグインのキャッシュが sandbox から書ける環境では、フックを書き換えられます。GitHub のアカウントが乗っ取られると、悪い更新を配られうるので、SHA で固定して自動更新を切っておくと、自分で確かめた版だけを使いやすくなりますが、防げるわけではありません。
 - uv の取得元は、環境変数（`UV_DEFAULT_INDEX` など）で変えられます。
 - xlide は `uvx` を PATH から探して起動します。PATH の先頭に、sandbox から書ける場所を置かないでください。
-- xlide は、uv のキャッシュ（`~/.cache/uv`、または `UV_CACHE_DIR`）から、sandbox の外で動きます。sandbox のコマンドからそこへ書けないようにしてください。sandbox の書き込みの許可に入れず、`~` で起動するセッションでは `denyWrite` に足します。そこで書き換えられたコードは、次に xlide が起動したときに、あなたの権限で動きます。
+- xlide は、uv のキャッシュ（`~/.cache/uv`、または `UV_CACHE_DIR`）から、sandbox の外で動きます。sandbox のコマンドからそこへ書けないようにしてください。sandbox の書き込みの許可に入れず、`~` で起動するセッションでは `denyWrite` に足します。そこで書き換えられたコードは、次に xlide が起動したときに、あなたの権限で動きます。`--python 3.15` で uv が選ぶ Python（`uv python find 3.15` で確かめられます）も同じで、キャッシュの外にあることがあります。
 - macOS だけです。xlide の Windows 向けの live 系のツールは使いません。
 - 守りの対象外: このプラグインなしで xlide を使う人、Google Sheets のコネクタ。
 
@@ -225,7 +225,7 @@ xlide を守るフックの拒否（`workbook-intake: <理由>`。必要なら�
 | `calculation_not_allowed` | 計算を求める呼び出し（`calculate=true` など）。xlide の計算エンジンは上限なくメモリを使いうるため |
 | `regex_not_allowed` | 正規表現の検索を求める呼び出し（`is_regex=true`）。xlide は渡された正規表現を時間の上限なしに当てるため |
 | `query_too_long` | 256 文字を超える検索の文字列（`query`）。大文字小文字を区別しない検索の手間は、本文の長さと文字列の長さの掛け算で増えるため |
-| `agent_teams_enabled` | エージェントのチームが有効（`CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS` が設定されている）。切ってから Claude Code を起動し直してください |
+| `agent_teams_enabled` | エージェントのチームが有効（`CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS` が空でない値を持つ）。切ってから Claude Code を起動し直してください |
 | `missing_file_path` | ツールに `file_path` が要る |
 | `bad_input` | フックの入力を読めない |
 | `outside_intake`・`path_not_absolute`・`intake_dir_invalid`・`not_regular_file`・`unsupported_extension`・`file_too_large` | 上の表と同じ |
