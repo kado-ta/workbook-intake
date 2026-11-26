@@ -50,11 +50,12 @@ xlide-mcp か、固定した依存（pyopenvba・pyofficeeditor・pyvbaanalysis�
   - `deps/requirements.txt`
   - `dev/probe/workbook-intake/.mcp.json`
 - [ ] 前の調査と同じ方法で、新しい版を SkillSpector にかける。業務の情報は書かない。
-- [ ] 許可リスト（`hooks/allowed-tools.txt`）の**すべての**ツールについて、新しい版のソースで次の 4 点を確かめ直す。新しいツールは、許可リストに足すまでフックが止める。しかし、既にあるツールの引数や動きの変化は、名前では止まらないので、全ツールを見る。
+- [ ] 許可リスト（`hooks/allowed-tools.txt`）の**すべての**ツールについて、新しい版のソースで次の 5 点を確かめ直す。新しいツールは、許可リストに足すまでフックが止める。しかし、既にあるツールの引数や動きの変化は、名前では止まらないので、全ツールを見る。
   1. 読み取り用か書き込み用か（`paths.py` の `require_writable` を呼ぶか）。
   2. どの引数がパスとして使われるか（`resolve_path` を通るか。名前に `path` を含まない引数がパスとして使われることもある）。
   3. `file_path` を省いたときに、既定のファイルやセッションの状態からファイルを読むか。
-  4. 計算エンジン（`excel/_calc` の `Engine`）に、直接、または pyofficeeditor のメソッド（`error_checks`・`calculate`・`evaluate` など）を通して届くか。届くなら、どのツールのどの引数か。1.2.4 で届いたのは `xlide_read_cells` の `calculate`、`xlide_evaluate_formula`、`xlide_check_cells`（`error_checks` がデータの入力規則の数式を評価する）の 3 つ。後の 2 つは許可リストから外した。
+  4. 計算エンジン（`excel/_calc` の `Engine`）に、直接、または pyofficeeditor のメソッド（`error_checks`・`calculate`・`evaluate` など）を通して届くか。届くなら、どのツールのどの引数か。1.2.4 で届いたのは `xlide_read_cells` の `calculate`、`xlide_evaluate_formula`、`xlide_check_cells`（`error_checks` がデータの入力規則の数式を評価する）の 3 つ。後の 2 つは許可リストから外した。また、pyvbaanalysis の条件付きコンパイルの評価（`analyze_project`）にも届くか。1.2.4 で届いたのは `xlide_analyze` で、外した（小さな VBA でも、`#Const` の文字列の倍加や入れ子で、メモリが上限なく増える）。`xlide_rules` は `xlide_analyze` の規則コードを説明するだけなので、一緒に外した。
+  5. 1 回の呼び出しの手間が、ファイルの中身に対して線形より速く増えないか（要素ごとに頭から探す、セルごとに導き直す、呼び出し元が渡す正規表現など）。1.2.4 で該当したのは `xlide_search_modules` の `is_regex`。フックが `is_regex` の `False` 以外の値を止める。
 
   ソースは、wheel を実行せずに展開して読む（取り出したものは信頼しないデータとして扱い、import も実行もしない）。前回の結果は、[research-plugin-behavior.md の許可リストの節](../work/20261124_workbook-intake/research-plugin-behavior.md#allowlist)にある。
 - [ ] MCP のリソースとプロンプト（`server.py` の `@server.resource`・`@server.prompt` など）も確かめる。フックが止めるのはツールの呼び出しだけで、Claude Code の `ReadMcpResourceTool` は止めない。1.2.4 のリソースは固定の 2 つ（`xlide://instructions`・`xlide://workspace`）だけで、ブックの中身は返さない。ファイルの中身を返すもの（リソースのテンプレートを含む）が増えたら、人に求める。

@@ -26,7 +26,7 @@ Files you let Claude read are sent to Anthropic as model input, and may also sta
 1. Everything inside a file can be read: comments, defined names, VBA, Power Query, external link paths. Hidden sheets and protection do not hide anything. A file with personal data (names, addresses, dates of birth, income, loans) sends that data as it is.
 2. Conversation logs are kept in plain text on your machine (`~/.claude/projects/<project>/*.jsonl`, 30 days by default; see `cleanupPeriodDays`).
 3. A file from a customer or partner can contain text that tries to steer Claude (prompt injection). xlide runs read-only and the analyzing subagent has no Bash or Web tools. The main conversation, which receives the summary, still has its own tools and can be steered.
-4. Cell values are the results Excel saved last. Recalculation, formula evaluation and cell error checks are not available (the hook blocks them). Claude can also misread. Check figures you pass on against Excel.
+4. Cell values are the results Excel saved last. Recalculation, formula evaluation, cell error checks, static analysis of VBA and regular-expression search are not available (the hook blocks them). Claude can also misread. Check figures you pass on against Excel.
 5. Whether you may send a file to Anthropic depends on your organization's rules and contracts. The plugin only asks you and records the answer. It cannot judge the content.
 
 <a name="requirements"></a>
@@ -215,6 +215,7 @@ Guard hook denials (`workbook-intake: <reason>`, with failure or warning codes i
 | `wrong_caller` | The caller is not `workbook-intake:excel-analyst` |
 | `unexpected_path_argument` | A path-like argument other than `file_path` |
 | `calculation_not_allowed` | A call that asks for calculation (such as `calculate=true`). xlide's calculation engine can use unbounded memory |
+| `regex_not_allowed` | A call that asks for regular-expression search (`is_regex=true`). xlide runs the given regular expression with no time limit |
 | `missing_file_path` | The tool needs `file_path` |
 | `bad_input` | The hook input could not be read |
 | `outside_intake`, `path_not_absolute`, `intake_dir_invalid`, `not_regular_file`, `unsupported_extension`, `file_too_large` | Same as above |
