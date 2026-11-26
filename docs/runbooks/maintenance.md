@@ -25,6 +25,20 @@
 | GitHub Actions の新しい版 | Dependabot の PR | SHA と変更を確かめて取り込む |
 | ほかの人からの Issue・PR | GitHub の通知 | 対応は約束しない（README の方針） |
 
+<a name="preflight"></a>
+
+## 新しい版を出す前の、Python の版の確かめ
+
+`.mcp.json` の `--python 3.15` が固定するのはマイナー版（3.15）だけ。uv は、自分で管理する 3.15 があればそれを、なければ PATH の `python3.15` を使う。そのため、実際に動く Python のパッチ版・expat・Unicode の版は、マシンによって変わりうる。新しい版を出す前に、プラグインと同じ `uvx` の引数で xlide の環境の python を動かして、実際の版を確かめる。
+
+```sh
+uvx --no-config --python 3.15 --from xlide-mcp==1.2.4 --with pyopenvba==6.6.0 --with pyofficeeditor==0.4.1 --with pyvbaanalysis==3.0.3 --with mcp==2.3.0 python -c 'import sys, pyexpat, unicodedata; print(sys.version.split()[0], pyexpat.EXPAT_VERSION, unicodedata.unidata_version)'
+```
+
+調査のときの値は `3.15.2`・`expat_2.9.0`・`17.0.0`。違えば、次の[版を上げる手順](#bump)と同じ確かめ（読み比べと、検査の写しの見直し）を行う。
+
+なお、検査（`scripts/check_workbook.py`）は Command Line Tools の Python 3.9.6（expat 2.2.8）で動く。これは受け入れた制限で、この確かめの対象ではない。
+
 <a name="bump"></a>
 
 ## 版を上げる手順

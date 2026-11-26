@@ -37,7 +37,7 @@ Files you let Claude read are sent to Anthropic as model input, and may also sta
 - Command Line Tools (`xcode-select --install`), for `python3`.
 - [uv](https://docs.astral.sh/uv/) (`uvx`).
 - Claude Code 2.1.295 or later, because the hooks use `onFailure`. `plugin.json` declares this in `engines`, but Claude Code reads `engines` only from 2.1.323, so older versions do not enforce it. Pinning a marketplace by commit SHA (see Install) needs 2.1.324 or later.
-- xlide runs on Python 3.15. If it is not on the machine, uv fetches it on the first start (where it cannot be fetched, the xlide tools are not visible).
+- xlide runs on Python 3.15. If it is not on the machine, uv fetches it on the first start (where it cannot be fetched, the xlide tools are not visible). Only the minor version (3.15) is pinned: uv uses a 3.15 that it manages itself, or else the `python3.15` on your PATH.
 - First run: `uvx` downloads a Python and the pinned packages, so it needs a network and takes a while.
 
 `scripts/doctor.sh` checks the requirements when the skill starts. It prints `ok <item>` or `missing <item>` for `macos`, `uvx`, `python3`, `sandbox_exec` and `intake_dir_protected`, and then `folder <path>`.
@@ -168,6 +168,7 @@ Check statuses: `pass`, `fail`, `error` (output outside the vocabulary or unexpe
 - The file can change between the check and the read. The intake folder is outside the sandbox's write range, but processes outside the sandbox (you, other apps) can still replace files. Use `denyWrite`.
 - Without the recommended settings, use outside the skill (other skills, or asking Claude directly to read the file with Bash) can still read the intake folder. `doctor.sh` runs only inside the skill.
 - `disableAllHooks` can turn off hooks from a settings file at any scope, including the repository's `.claude/settings.json` (hooks from managed settings are exempt). Plugin hooks are expected to be turned off too (inferred, not verified). When they are off, the main conversation can call xlide, and neither the input confirmation nor the check runs. Do not use the plugin in such an environment.
+- The check runs on the Command Line Tools Python 3.9.6, with its expat 2.2.8. Seatbelt stops a hijacked check from writing, using the network, or running programs, but it does not protect the verdict itself. Strict decoding of the character encoding, rejection of DTDs, and a 32 MB limit per part narrow what can reach the parser.
 - xlide expands VBA source with no size limit. A workbook with macros (the `vba_project` warning) can use a lot of memory.
 - The input confirmation relies on a person answering the AskUserQuestion screen. In an environment where another plugin's hook or an SDK host fills in the answer, an approval can be recorded without a person confirming it.
 - Tool names carry the prefix `mcp__plugin_workbook-intake_xlide__` (for example `mcp__plugin_workbook-intake_xlide__xlide_doctor`). A matcher that names only the server (`mcp__xlide__.*`) does not match them.

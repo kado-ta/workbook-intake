@@ -41,7 +41,7 @@
 - Command Line Tools（`xcode-select --install`。`python3` のため）。
 - [uv](https://docs.astral.sh/uv/)（`uvx`）。
 - Claude Code 2.1.295 以上（フックの `onFailure` のため）。`plugin.json` の `engines` で宣言していますが、Claude Code が `engines` を読むのは 2.1.323 以降なので、それより古い版では強制されません。マーケットプレイスをコミットの SHA で固定する（Install を見てください）には、2.1.324 以上が要ります。
-- xlide は Python 3.15 で動きます。手元になければ、uv が初回の起動で取得します（取得できない環境では xlide のツールが見えません）。
+- xlide は Python 3.15 で動きます。手元になければ、uv が初回の起動で取得します（取得できない環境では xlide のツールが見えません）。固定するのはマイナー版（3.15）だけです。uv が管理する 3.15 があればそれを、なければ PATH の `python3.15` を使います。
 - 初回は、`uvx` が Python と固定した版のパッケージを取得するので、通信が要り、時間がかかります。
 
 `scripts/doctor.sh` が、スキルの開始時に必要なものを確かめます。`macos`・`uvx`・`python3`・`sandbox_exec`・`intake_dir_protected` ごとに `ok <項目>` か `missing <項目>` を出し、最後に `folder <パス>` を出します。
@@ -172,6 +172,7 @@ Google スプレッドシートは直接読みません。`.xlsx` でダウン�
 - 検査のあと、読むまでにファイルが差し替えられることがあります。受け取り用フォルダは sandbox の書き込みの範囲の外ですが、sandbox の外のもの（人や、ほかのアプリ）は差し替えられます。`denyWrite` を使ってください。
 - 推奨設定がない環境では、スキルを通らない使い方（ほかのスキルや、Bash で読むよう直接頼むこと）で、受け取り用フォルダを読めます。`doctor.sh` はスキルの中でしか動きません。
 - `disableAllHooks` は、どのスコープの設定（リポジトリの `.claude/settings.json` を含む）でもフックを止められます（管理設定のフックは除く）。プラグインのフックも止まる見込みです（推測で、確かめていません）。止まると、メインの会話から xlide を呼べ、入力の確認も検査も効きません。止まっている環境では使わないでください。
+- 検査は、Command Line Tools の Python 3.9.6 と、その expat 2.2.8 で動きます。Seatbelt は、乗っ取られた検査の書き込み・通信・実行を止めますが、判定そのものは守りません。文字コードの厳密な復号、DTD の拒否、1 部品 32 MB の上限で、届く面を狭くしています。
 - VBA のソースは、xlide が上限なしに展開します。マクロのブック（`vba_project` の警告）は、メモリを多く使うことがあります。
 - 入力の確認は、AskUserQuestion の画面に人が答えることに頼ります。ほかのプラグインのフックや SDK のホストが答えを埋める環境では、人の確認なしに承認が記録されることがあります。
 - ツール名には `mcp__plugin_workbook-intake_xlide__` が付きます（例: `mcp__plugin_workbook-intake_xlide__xlide_doctor`）。サーバー名だけを書いた matcher（`mcp__xlide__.*`）には当たりません。
