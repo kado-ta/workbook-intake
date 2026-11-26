@@ -58,6 +58,13 @@ class ReadmeTest(unittest.TestCase):
             for code in codes:
                 self.assertIn("`%s`" % code, text, "%s: %s" % (name, code))
 
+    def test_readme_describes_consent_records(self):
+        for name, text in (("README.md", EN), ("README.ja.md", JA)):
+            self.assertIn("${CLAUDE_PLUGIN_DATA}/consents/", text, name)
+            self.assertIn("~/.claude/plugins/data/", text, name)
+            self.assertIn("SHA-256", text, name)
+            self.assertIn("--keep-data", text, name)
+
     def test_maintenance_links_runbook(self):
         self.assertIn(RUNBOOK, EN)
         self.assertIn(RUNBOOK, JA)
