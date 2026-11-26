@@ -459,14 +459,14 @@ class ManifestTest(unittest.TestCase):
         self.assertEqual(pre[0]["matcher"], "mcp__.*__xlide_.*")
         self.assertEqual(pre[0]["hooks"], [{
             "type": "command",
-            "command": '/bin/bash "${CLAUDE_PLUGIN_ROOT}/hooks/guard-xlide.sh"',
+            "command": '/bin/bash -p "${CLAUDE_PLUGIN_ROOT}/hooks/guard-xlide.sh"',
             "timeout": 30, "onFailure": "block"}])
         post = data["PostToolUse"]
         self.assertEqual(len(post), 1)
         self.assertEqual(post[0]["matcher"], "AskUserQuestion")
         self.assertEqual(post[0]["hooks"], [{
             "type": "command",
-            "command": '/bin/bash "${CLAUDE_PLUGIN_ROOT}/hooks/record-consent.sh"',
+            "command": '/bin/bash -p "${CLAUDE_PLUGIN_ROOT}/hooks/record-consent.sh"',
             "timeout": 30}])
 
     def test_allowlist_format(self):
