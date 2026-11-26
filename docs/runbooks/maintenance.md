@@ -70,8 +70,41 @@ xlide-mcp か、固定した依存（pyopenvba・pyofficeeditor・pyvbaanalysis�
   `<確かめたコミット>` には、ブランチ名ではなく完全な SHA を書く（複製の元のリポジトリは sandbox から書けるので、ブランチは確かめた後に動かされうる）。確かめたコミットのきれいな複製で動かす。作業ツリーのままだと、追跡していない `tests/test_*.py` や古い `__pycache__` が sandbox の外で読み込まれるため。
 
 - [ ] 実機で確かめる（設計の[完了条件](../work/20261124_workbook-intake/design.md#done)）。メインの会話から xlide を呼ぶと止まる、承認のないファイルは止まる、承認したあとは読める、警告のあるファイルは警告の確認が要る、受取用フォルダの外は止まる、書き込み用のツールは止まる、推奨設定のもとで Bash から読めない、など。
-- [ ] `.claude-plugin/plugin.json` の `version` を上げ、タグを付ける。
-- [ ] 自分の settings の、マーケットプレイスの SHA の固定を、新しいコミットに更新する。
+- [ ] `.claude-plugin/plugin.json` の `version` を上げる。Claude Code は `version` で更新を判断するので、上げずにコミットを積んでも利用者には届かない（[公式ドキュメント](https://code.claude.com/docs/en/plugins/host-marketplace.md)の "Release a new version"）。
+- [ ] PR をマージする（リポジトリは merge commit だけを許している）。
+- [ ] マージコミットに、注釈付きのタグ `v<版>`（例: `v0.2.0`）を付ける。
+  - 形式は `v<版>` にそろえる。`claude plugin tag` は使わない。このコマンドが作る `workbook-intake--v<版>` は、ほかのプラグインがこのプラグインに版の範囲で依存するときにだけ Claude Code が読む形式で、このリポジトリには当てはまらない。GitHub のタグのルールセット `release-tags` が守るのも `v*` だけ。
+  - 通常のターミナルで `main` を取り込む（sandbox の中では SSH の鍵を読めず、fetch が失敗する）。手元の `main` の先頭が GitHub の `main` と同じことを確かめてから付ける。
+
+  ```sh
+  git -C <repo> switch main && git -C <repo> pull --ff-only
+  gh api repos/kado-ta/workbook-intake/commits/main --jq .sha  # git -C <repo> rev-parse main と同じこと
+  git -C <repo> tag -a v<版> -m "workbook-intake <版>" <マージコミットの完全な SHA>
+  git -C <repo> show v<版>:.claude-plugin/plugin.json  # version が <版> であること
+  ```
+
+- [ ] タグを通常のターミナルで push する（`cc-safe-push` はブランチしか送らない）。push したタグは、ルールセット `release-tags`（更新・削除・force push を禁止、bypass なし）により、付け替えも削除もできない。push の前に誤りに気づいたら、手元のタグを消して付け直す。push の後なら、タグは直さず、版を上げて出し直す。
+
+  ```sh
+  git -C <repo> push origin v<版>
+  gh api repos/kado-ta/workbook-intake/git/ref/tags/v<版> --jq .object.sha  # git -C <repo> rev-parse v<版> と同じこと
+  ```
+
+- [ ] GitHub の Releases で、既存のタグ `v<版>` から Release を作る。本文には、変更の要点と、SHA で固定する利用者のためにコミットの完全な SHA を書く。immutable releases が有効なので、公開した時点でタグと添付ファイルは変えられなくなる（タイトルと本文は後から直せる）。
+
+  ```markdown
+  Commit: `<マージコミットの完全な SHA>`
+
+  To pin the marketplace to this release, set `ref` to the commit SHA above. See [Pin to a reviewed commit](https://github.com/kado-ta/workbook-intake#pin).
+  ```
+
+- [ ] 公開した Release が immutable になっていることを確かめる。
+
+  ```sh
+  gh api repos/kado-ta/workbook-intake/releases/tags/v<版> --jq '{tag_name, draft, immutable}'
+  ```
+
+- [ ] 自分の settings の、マーケットプレイスの SHA の固定を、タグと同じコミットに更新する。
 
 <a name="recheck"></a>
 
