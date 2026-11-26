@@ -18,7 +18,7 @@
 
 | きっかけ | 気づき方 | 対応 |
 | --- | --- | --- |
-| xlide と固定した依存の新しい版・脆弱性 | Dependabot の PR と alerts | [版を上げる手順](#bump) |
+| xlide と固定した依存の新しい版・脆弱性 | Dependabot の PR と alerts | [版を上げる手順](#bump)。**Dependabot の PR そのものはマージしない**（手順の冒頭を参照） |
 | Claude Code の更新（フック・プラグイン・MCP・権限・AskUserQuestion に関わる変更） | Claude Code の changelog。自動では検知しない | [前提を確かめ直す手順](#recheck) |
 | macOS・Command Line Tools の更新（python3 の版が変わるなど） | CI の macOS のジョブの失敗、`doctor.sh` | 全体のテストを通常のターミナルで動かす。`PYTHON_HOME` と Seatbelt を確かめる |
 | uv の更新 | 自動では検知しない | `uvx --no-config` の動きを確かめる |
@@ -45,10 +45,15 @@ uvx --no-config --python 3.15 --from xlide-mcp==1.2.4 --with pyopenvba==6.6.0 --
 
 xlide-mcp か、固定した依存（pyopenvba・pyofficeeditor・pyvbaanalysis・mcp）の版を上げるとき。xlide の Python の版（`.mcp.json` の `--python`）を上げるときも、同じ確かめ（読み比べと、検査の写しの見直し）を行う。
 
-- [ ] 版を上げる。次の 3 か所を同じ版にそろえる。
+Dependabot の pip の PR（毎週の版の更新と、脆弱性の修正版を入れる security updates）は、この手順を始める合図として扱い、PR そのものはマージしない。Dependabot が変えるのは写しの `deps/requirements.txt` だけなので、`tests/test_manifests.py` の一致のテストで CI が落ちる。PR のブランチに残りの変更を足してマージすることもしない。CI は通るようになるが、SkillSpector と許可リストの確かめ直しが抜ける（`main` のルールセットは承認を求めないので、止まらない）。この手順を自分のブランチで行い、マージした後、Dependabot の PR が開いたままなら閉じる。
+
+- [ ] 版を上げる。次の箇所を同じ版にそろえる。
   - `.mcp.json`
   - `deps/requirements.txt`
   - `dev/probe/workbook-intake/.mcp.json`
+  - `tests/test_manifests.py` の `XLIDE_ARGS`
+  - このファイルの[Python の版の確かめ](#preflight)のコマンド
+  - `README.md` の Maintenance と、`README.ja.md` のメンテナンスの節（xlide-mcp の版）
 - [ ] 前の調査と同じ方法で、新しい版を SkillSpector にかける。業務の情報は書かない。
 - [ ] 許可リスト（`hooks/allowed-tools.txt`）の**すべての**ツールについて、新しい版のソースで次の 5 点を確かめ直す。新しいツールは、許可リストに足すまでフックが止める。しかし、既にあるツールの引数や動きの変化は、名前では止まらないので、全ツールを見る。
   1. 読み取り用か書き込み用か（`paths.py` の `require_writable` を呼ぶか）。
@@ -70,8 +75,41 @@ xlide-mcp か、固定した依存（pyopenvba・pyofficeeditor・pyvbaanalysis�
   `<確かめたコミット>` には、ブランチ名ではなく完全な SHA を書く（複製の元のリポジトリは sandbox から書けるので、ブランチは確かめた後に動かされうる）。確かめたコミットのきれいな複製で動かす。作業ツリーのままだと、追跡していない `tests/test_*.py` や古い `__pycache__` が sandbox の外で読み込まれるため。
 
 - [ ] 実機で確かめる（設計の[完了条件](../work/20261124_workbook-intake/design.md#done)）。メインの会話から xlide を呼ぶと止まる、承認のないファイルは止まる、承認したあとは読める、警告のあるファイルは警告の確認が要る、受取用フォルダの外は止まる、書き込み用のツールは止まる、推奨設定のもとで Bash から読めない、など。
-- [ ] `.claude-plugin/plugin.json` の `version` を上げ、タグを付ける。
-- [ ] 自分の settings の、マーケットプレイスの SHA の固定を、新しいコミットに更新する。
+- [ ] `.claude-plugin/plugin.json` の `version` を上げる。Claude Code は `version` で更新を判断するので、上げずにコミットを積んでも利用者には届かない（[公式ドキュメント](https://code.claude.com/docs/en/plugins/host-marketplace.md)の "Release a new version"）。
+- [ ] PR をマージする（リポジトリは merge commit だけを許している）。
+- [ ] マージコミットに、注釈付きのタグ `v<版>`（例: `v0.2.0`）を付ける。
+  - 形式は `v<版>` にそろえる。`claude plugin tag` は使わない。このコマンドが作る `workbook-intake--v<版>` は、ほかのプラグインがこのプラグインに版の範囲で依存するときにだけ Claude Code が読む形式で、このリポジトリには当てはまらない。GitHub のタグのルールセット `release-tags` が守るのも `v*` だけ。
+  - 通常のターミナルで `main` を取り込む（sandbox の中では SSH の鍵を読めず、fetch が失敗する）。手元の `main` の先頭が GitHub の `main` と同じことを確かめてから付ける。
+
+  ```sh
+  git -C <repo> switch main && git -C <repo> pull --ff-only
+  gh api repos/kado-ta/workbook-intake/commits/main --jq .sha  # git -C <repo> rev-parse main と同じこと
+  git -C <repo> tag -a v<版> -m "workbook-intake <版>" <マージコミットの完全な SHA>
+  git -C <repo> show v<版>:.claude-plugin/plugin.json  # version が <版> であること
+  ```
+
+- [ ] タグを通常のターミナルで push する（`cc-safe-push` はブランチしか送らない）。push したタグは、ルールセット `release-tags`（更新・削除・force push を禁止、bypass なし）により、付け替えも削除もできない。push の前に誤りに気づいたら、手元のタグを消して付け直す。push の後なら、タグは直さず、版を上げて出し直す。
+
+  ```sh
+  git -C <repo> push origin v<版>
+  gh api repos/kado-ta/workbook-intake/git/ref/tags/v<版> --jq .object.sha  # git -C <repo> rev-parse v<版> と同じこと
+  ```
+
+- [ ] GitHub の Releases で、既存のタグ `v<版>` から Release を作る。本文には、変更の要点と、SHA で固定する利用者のためにコミットの完全な SHA を書く。immutable releases が有効なので、公開した時点でタグと添付ファイルは変えられなくなる（タイトルと本文は後から直せる）。
+
+  ```markdown
+  Commit: `<マージコミットの完全な SHA>`
+
+  To pin the marketplace to this release, set `ref` to the commit SHA above. See [Pin to a reviewed commit](https://github.com/kado-ta/workbook-intake#pin).
+  ```
+
+- [ ] 公開した Release が immutable になっていることを確かめる。
+
+  ```sh
+  gh api repos/kado-ta/workbook-intake/releases/tags/v<版> --jq '{tag_name, draft, immutable}'
+  ```
+
+- [ ] 自分の settings の、マーケットプレイスの SHA の固定を、タグと同じコミットに更新する。
 
 <a name="recheck"></a>
 
