@@ -97,6 +97,8 @@ def decide_detail(hook_input):
     for name in tool_input:
         if name != "file_path" and any(w in name.lower() for w in PATH_LIKE_WORDS):
             return "deny", "unexpected_path_argument", []
+    if tool_input.get("calculate", False) is not False:
+        return "deny", "calculation_not_allowed", []
     if "file_path" not in tool_input:
         if kind == "file":
             return "deny", "missing_file_path", []

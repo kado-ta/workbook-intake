@@ -155,6 +155,24 @@ class GuardXlideTest(unittest.TestCase):
 
     # arguments
 
+    def test_calculate_denied(self):
+        path = self.consented()
+        for value in (True, "true", 1, None):
+            self.assertDenied(call(path, extra={"calculate": value}), "calculation_not_allowed")
+
+    def test_calculate_denied_before_consent(self):
+        path = self.book()
+        self.assertDenied(call(path, extra={"calculate": True}), "calculation_not_allowed")
+
+    def test_calculate_false_passes_on(self):
+        path = self.consented()
+        self.assertEqual(gx.decide(call(path, extra={"calculate": False})), ("allow", "ok"))
+
+    def test_evaluate_formula_not_allowed(self):
+        path = self.consented()
+        self.assertDenied(call(path, tool=gx.TOOL_PREFIX + "xlide_evaluate_formula"),
+                          "tool_not_allowed")
+
     def test_extra_path_argument_denied(self):
         path = self.consented()
         for key in ("output_path", "directory", "Folder", "root", "source_file"):
@@ -475,7 +493,7 @@ class ManifestTest(unittest.TestCase):
             "project_info", "validate_project", "list_modules", "read_module",
             "list_procedures", "search_modules", "analyze", "list_references", "list_forms",
             "read_form", "list_queries", "read_query", "list_sheets", "read_cells",
-            "evaluate_formula", "check_cells", "page_setup"), "file")
+            "check_cells", "page_setup"), "file")
         expected.update({"doctor": "nofile", "rules": "nofile"})
         self.assertEqual(tools, {"xlide_" + k: v for k, v in expected.items()})
 
