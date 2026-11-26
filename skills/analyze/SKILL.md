@@ -23,7 +23,7 @@ The output also has a line `folder <path>`: the real path of the intake folder. 
 
 If no tool whose name starts with `mcp__plugin_workbook-intake_xlide__` is visible, point to README "Troubleshooting" and stop.
 
-Then check that the hook is running. From the main conversation (not from a subagent), call `mcp__plugin_workbook-intake_xlide__xlide_doctor` once, with no arguments. This is the only xlide call you make yourself. The hook must refuse it with `workbook-intake: wrong_caller`; continue to step 1 only if you see exactly that. Stop and point to README "Troubleshooting" if the call returns a result, or is refused with any other `workbook-intake:` reason. If a permission prompt appears, ask the person to decline it, then stop. A result or a prompt means the hook is not running, so the main conversation could read workbooks without the confirmation and the check.
+Then check that the hook is running. First tell the person that a permission prompt for `xlide_doctor` may appear and that they should decline it. Then, from the main conversation (not from a subagent), call `mcp__plugin_workbook-intake_xlide__xlide_doctor` once, with no arguments. This is the only xlide call you make yourself. Continue to step 1 only if the call is refused and the refusal reason is `workbook-intake: wrong_caller`. Any other outcome means the hook may not be running, so the main conversation could read workbooks without the confirmation and the check: point to README "Troubleshooting" and stop. This covers a tool result, a declined or rejected call, a refusal with any other `workbook-intake:` reason (for example `agent_teams_enabled`), and anything else.
 
 ## Step 1: the file
 
