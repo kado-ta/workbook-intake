@@ -9,6 +9,7 @@ sys.path.insert(0, os.path.dirname(os.path.realpath(__file__)))
 import intake_common as ic  # noqa: E402
 
 TOOL_PREFIX = "mcp__plugin_workbook-intake_xlide__"
+MAX_QUERY_CHARS = 256
 ANALYST_AGENT_TYPE = "workbook-intake:excel-analyst"
 MCP_SERVER_NAME = "plugin:workbook-intake:xlide"
 MCP_SERVER_SOURCE = "plugin"
@@ -86,6 +87,8 @@ def decide_detail(hook_input):
         if not isinstance(server, dict) or server.get("name") != MCP_SERVER_NAME \
                 or server.get("source") != MCP_SERVER_SOURCE:
             return "deny", "not_plugin_server", []
+    if os.environ.get("CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS"):
+        return "deny", "agent_teams_enabled", []
     kind = load_allowlist().get(tool_name[len(TOOL_PREFIX):])
     if kind is None:
         return "deny", "tool_not_allowed", []
@@ -101,6 +104,9 @@ def decide_detail(hook_input):
         return "deny", "calculation_not_allowed", []
     if tool_input.get("is_regex", False) is not False:
         return "deny", "regex_not_allowed", []
+    query = tool_input.get("query")
+    if isinstance(query, str) and len(query) > MAX_QUERY_CHARS:
+        return "deny", "query_too_long", []
     if "file_path" not in tool_input:
         if kind == "file":
             return "deny", "missing_file_path", []

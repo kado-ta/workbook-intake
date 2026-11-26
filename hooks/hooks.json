@@ -2,7 +2,7 @@
   "hooks": {
     "PreToolUse": [
       {
-        "matcher": "mcp__.*__xlide_.*",
+        "matcher": "mcp__plugin_workbook-intake_xlide__.*|mcp__.*__xlide_.*",
         "hooks": [
           {
             "type": "command",

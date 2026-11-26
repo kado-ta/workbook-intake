@@ -1,6 +1,7 @@
 import io
 import json
 import os
+import re
 import shlex
 import subprocess
 import sys
@@ -51,6 +52,7 @@ class GuardXlideTest(unittest.TestCase):
         env.start()
         self.addCleanup(env.stop)
         os.environ.pop("WORKBOOK_INTAKE_DIR", None)
+        os.environ.pop("CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS", None)
         self.patcher = mock.patch.object(ic, "run_checker", return_value=dict(PASS))
         self.checker = self.patcher.start()
         self.addCleanup(self.patcher.stop)
@@ -187,6 +189,25 @@ class GuardXlideTest(unittest.TestCase):
     def test_regex_false_passes_on(self):
         path = self.consented()
         self.assertEqual(gx.decide(call(path, extra={"is_regex": False})), ("allow", "ok"))
+
+    def test_query_too_long_denied(self):
+        path = self.book()
+        self.assertDenied(call(path, extra={"query": "a" * 257}), "query_too_long")
+
+    def test_query_at_limit_passes_on(self):
+        path = self.consented()
+        self.assertEqual(gx.decide(call(path, extra={"query": "a" * 256})), ("allow", "ok"))
+
+    def test_agent_teams_denied(self):
+        path = self.consented()
+        with mock.patch.dict(os.environ, {"CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS": "1"}):
+            self.assertDenied(call(path), "agent_teams_enabled")
+
+    def test_agent_teams_empty_passes_on(self):
+        path = self.consented()
+        self.assertEqual(gx.decide(call(path)), ("allow", "ok"))
+        with mock.patch.dict(os.environ, {"CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS": ""}):
+            self.assertEqual(gx.decide(call(path)), ("allow", "ok"))
 
     def test_analyze_not_allowed(self):
         path = self.consented()
@@ -525,11 +546,19 @@ class GuardXlideTest(unittest.TestCase):
 
 
 class ManifestTest(unittest.TestCase):
+    def test_matcher_covers_plugin_tools(self):
+        pre = json.loads((ROOT / "hooks" / "hooks.json").read_text())["hooks"]["PreToolUse"]
+        matcher = pre[0]["matcher"]
+        for name in ("mcp__plugin_workbook-intake_xlide__read_workbook", "mcp__other__xlide_doctor"):
+            self.assertIsNotNone(re.fullmatch(matcher, name), name)
+        self.assertIsNone(re.fullmatch(matcher, "mcp__other__read"))
+
     def test_hooks_json(self):
         data = json.loads((ROOT / "hooks" / "hooks.json").read_text())["hooks"]
         pre = data["PreToolUse"]
         self.assertEqual(len(pre), 1)
-        self.assertEqual(pre[0]["matcher"], "mcp__.*__xlide_.*")
+        self.assertEqual(pre[0]["matcher"],
+                         "mcp__plugin_workbook-intake_xlide__.*|mcp__.*__xlide_.*")
         self.assertEqual(pre[0]["hooks"], [{
             "type": "command",
             "command": '/bin/bash -p "${CLAUDE_PLUGIN_ROOT}/hooks/guard-xlide.sh"',
