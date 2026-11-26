@@ -445,3 +445,18 @@ QA の確かめ（メインの会話からの `xlide_doctor` は `wrong_caller`�
 | 38 | design | 流れの順（記録してから検査）と、記録の中身（セッション ID）が実装と違う | design を実装に合わせる |
 
 確かめたこと: 30（`RATIO_GRACE_BYTES = 100 * 1024`）、35（`(allow process-exec (subpath (param "PYTHON_HOME")))`）、36（スキルは理由が `workbook-intake: wrong_caller` であることを求め、ガードは後ろに `. See the README (Troubleshooting).` を付ける）、38（design の[承認の記録](design.md#consent)の文）はコードと設計で確かめた。12 は、ガードが `mcp_server` のあるときだけ見ていること（`guard_xlide.py:85`）と、Claude Code 2.1.332 のフックの入力の定義で `mcp_server` が省略できることを確かめた。22・23 は、検査が先頭のバイトで文字コードを決め、厳密に復号できない部品を XML とみなさないこと（`check_workbook.py:626-690`）を確かめた。
+
+<a name="codex-3"></a>
+
+### Codex review（3 回目、`7595005`）
+
+[Task 40〜44](plan.md#codex-fixes) の修正の後に、人が通常のターミナルで `codex review --base 805ff1a -c 'sandbox_mode="read-only"' -c skills.include_instructions=false` を実行した（2026-11-26T10:58:04Z。5 回の上限のうち 3 回目）。見せたのは、1・2 回目の後に直した差分だけ。結果は `~/.codex/sessions` の最終メッセージから読んだ。Codex の総評は「patch is incorrect」（確からしさ 0.98）。Codex は、読み取り専用の環境で一時ディレクトリを作れず、全体のテストを完走できなかった（shellcheck と、README とスキルのテスト 23 件は通った）。
+
+| 重さ | 場所 | 内容 | 確かめた結果 |
+| --- | --- | --- | --- |
+| P2（0.98） | `scripts/doctor.sh:48-51` | `ls` の標準エラーにはパスも入るので、パスに `Operation not permitted` が含まれると、`Permission denied` などでも `ok` になる | 正しい。部分一致で判定している。受け取り用フォルダの名前は人が決めるものなので、起きるのは人がその文字列を名前に含めたときだけ。直す（標準エラーの行の全体で比べる。[Task 45](plan.md#task-45)） |
+| P2（0.98） | `skills/analyze/SKILL.md:24` | Read の deny が `.xlsx` だけに効く書き方だと、`.xlsx` の確かめは通り、`.xlam` などへの deny は確かめられない | 正しい。README の規則（`Read(~/workbook-intake/**)`）と違う書き方をしたときだけ起きる。スキルは変えず、README と design に限界として書く（Task 45） |
+| P2（0.96） | `skills/analyze/SKILL.md:24` | `--disallowedTools Read` で Read をセッション全体で止めると、Read で受け取り用フォルダは読めないのに、スキルが止まる | 正しい。止まる側に倒れるので、守りの穴ではない。スキルは変えず、README の Troubleshooting に書く（Task 45） |
+| P3（0.99） | `hooks/intake_common.py:324-329` | 書き込みが途中で止まると断片が残る。改行だけが欠けると、「記録しなかった」と伝えた承認が有効になる | 正しい。[Task 42](plan.md#task-42) のレビューと同じ指摘。有効になるのは、人が実際に「確認した」を選んだ承認。直さない。design の受け入れるリスクに書く（Task 45） |
+
+採否はユーザーの判断（2026-11-26）による。
