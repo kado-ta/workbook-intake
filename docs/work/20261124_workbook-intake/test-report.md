@@ -31,6 +31,10 @@ created: 2026-11-25
 | 2026-11-26、`265e864` | Claude Code の Bash（sandbox の中） | `"$(xcode-select -p)/usr/bin/python3" -B -m unittest discover -s tests -t .` | 313 件、OK、skip 23 |
 | 2026-11-26、`265e864` | 同上 | `shellcheck hooks/*.sh scripts/*.sh dev/probe/workbook-intake/hooks/*.sh` | 指摘なし |
 | 2026-11-26、`265e864` | 同上 | `claude plugin validate . --strict` | 通過 |
+| 2026-11-26、`794058e` | 人、通常のターミナル | `WORKBOOK_INTAKE_REQUIRE_SANDBOX=1 "$(xcode-select -p)/usr/bin/python3" -B -m unittest discover -s tests -t . -v` | 328 件、すべて OK、skip なし。3 回目の `/review` の修正（[Task 20〜23](plan.md#review3-fixes)）の後 |
+| 2026-11-26、`794058e` | Claude Code の Bash（sandbox の中） | `"$(xcode-select -p)/usr/bin/python3" -B -m unittest discover -s tests -t .` | 328 件、OK、skip 23。3 回目の `/review` の修正（[Task 20〜23](plan.md#review3-fixes)）の後 |
+| 2026-11-26、`794058e` | 同上 | `shellcheck hooks/*.sh scripts/*.sh dev/probe/workbook-intake/hooks/*.sh` | 指摘なし |
+| 2026-11-26、`794058e` | 同上 | `claude plugin validate . --strict` | 通過 |
 
 `719943d` から `d093bcb` までに、Seatbelt・フック・検査のコードとそのテスト（`hooks/`、`scripts/check_workbook.*`、`tests/test_sandbox_profile.py`、`tests/test_guard_xlide.py`、`tests/test_record_consent.py`、`tests/test_check_workbook.py`）は変わっていない（`git diff --stat` で確かめた）。そのため、`d093bcb` では人による Seatbelt 付きの実行をやり直していない。`f88e6dd` では、1 回目の `/review` を受けて検査とフックを直したので（[Task 13〜15](plan.md#task-13)）、やり直した。CI（Linux と macOS）の結果は、PR を作った後に足す。
 
@@ -185,3 +189,24 @@ Seatbelt に関わる 3 つは、Claude の sandbox の中では `sandbox-exec` 
 - 見た目と書き方: テストと `.mcp.json` に引数の写しがある。`check()` が `os.path.getsize` を 3 回呼ぶ。中の zip の展開の規則が `_check_part` の写しになっている。長い import の行。
 - テストの形: plan の形のままで、規則を 1 つずつは固定していないテスト（`canonical_path` の部分、doctor の uid の規則）。変更の前から通っていたテスト。大文字小文字を区別しない APFS を前提にするテスト。
 - CI: ジョブの時間の上限と同時実行の設定がない。Dependabot の github-actions に待ち時間がない。
+
+<a name="parity-3"></a>
+
+### xlide の読み手との読み比べ（3 回目の修正の後、`794058e`）
+
+[Task 24 の Step 1](plan.md#task-24)。3 回目の `/review` で検査を外せた形ごとに、ブックを 1 つずつ作った。各ブックを、検査（Command Line Tools の python3）と、xlide の uv の環境の python 3.15.2（`xlide_mcp.cells` の `sheets()` と `read()`、pyopenvba の Power Query の読み手）で読んだ。ブックを作ったのはサブエージェントで、主担当が 2 つのスクリプトを実行し直して、同じ結果を確かめた。スクリプトとブックは `tmp/parity3/` に置き、コミットしていない。
+
+| 形 | 検査の結果 | xlide（3.15.2）が読んだもの |
+| --- | --- | --- |
+| `<sheets>` の中の `<!-->` に、非表示のシートを入れる | 合格、`strings_not_checked` | 非表示のシート `Two` |
+| 共有文字列の `<t>` の中の `<!-->` に、ゼロ幅スペースを入れる | 合格、`strings_not_checked` | ゼロ幅スペースを含む文字列（後ろの `-->` も文字として読む） |
+| 共有文字列の `<t>` の中の `<!--->` に、句を入れる | 合格、`strings_not_checked` | 句（後ろの `-->` も文字として読む） |
+| 共有文字列の部品の先頭の `<!-->` に、句を持つ偽の `<sst>` を入れる | 合格、`strings_not_checked` | 偽の `<sst>` の句。後ろの本物の `<sst>` は読まない |
+| 正しい base64 の 6 文字目の後ろに `==` を挟み、中の zip に 2 MiB の 0 を入れる | 不合格、`not_zip` | 3.15 は全体を戻し、部品を 2,097,170 バイトに展開する。3.9 は 4 バイトで止まる |
+| 同じ中の zip を、部品名 `customXml/item` + U+16AC0 + `.xml` に置く | 不合格、`compression_ratio_too_high` | 3.15 は pyopenvba の名前の規則に合い、部品を 2,097,170 バイトに展開する。3.9 では合わない |
+| メタデータの節の XML に、内部実体の DTD を入れる | 不合格、`xml_dtd` | 667 バイトの XML を、250,009 文字に展開する。例外は出ない |
+
+- どの形も、期待のとおり、検査で不合格になるか、`strings_not_checked` が出た。
+- base64 を `b64(blob[:1]) + b64(blob[1:])` と 2 つに分けた形は、3.15 でも戻した全体がずれ、pyopenvba が読めなかった（検査は `not_zip`）。xlide が展開するのは、上の表の、`==` を挟んだ形である。
+- メタデータの展開は約 375 倍で、3 回目の `/review` で見た 100 倍を超えた。expat の上限は、出力がある量（既定で 8 MiB）を超えてから効くためと見られる（推測）。
+- 2 MiB の 0 を入れた 2 つのブックは、展開の後に、pyopenvba がクエリの書式の誤りで止まる。止まる前に展開は終わっている。シートを隠したブックでは、共有文字列の関係がないので、`read()` が `ValueError` で失敗した。読み比べの結論には関わらない。
